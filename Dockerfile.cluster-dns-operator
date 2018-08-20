@@ -1,0 +1,10 @@
+FROM golang:1.10.3 AS build-env
+
+COPY . /go/src/github.com/openshift/cluster-dns-operator
+WORKDIR /go/src/github.com/openshift/cluster-dns-operator
+RUN go build github.com/openshift/cluster-dns-operator/cmd/cluster-dns-operator
+
+FROM scratch
+COPY --from=build-env /go/src/github.com/openshift/cluster-dns-operator/cluster-dns-operator /bin/cluster-dns-operator
+
+ENTRYPOINT ["/bin/cluster-dns-operator"]
