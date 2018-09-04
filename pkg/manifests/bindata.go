@@ -267,12 +267,12 @@ func AssetNames() []string {
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
 	"assets/dns/cluster-role-binding.yaml": assetsDnsClusterRoleBindingYaml,
-	"assets/dns/cluster-role.yaml": assetsDnsClusterRoleYaml,
-	"assets/dns/configmap.yaml": assetsDnsConfigmapYaml,
-	"assets/dns/daemonset.yaml": assetsDnsDaemonsetYaml,
-	"assets/dns/namespace.yaml": assetsDnsNamespaceYaml,
-	"assets/dns/service-account.yaml": assetsDnsServiceAccountYaml,
-	"assets/dns/service.yaml": assetsDnsServiceYaml,
+	"assets/dns/cluster-role.yaml":         assetsDnsClusterRoleYaml,
+	"assets/dns/configmap.yaml":            assetsDnsConfigmapYaml,
+	"assets/dns/daemonset.yaml":            assetsDnsDaemonsetYaml,
+	"assets/dns/namespace.yaml":            assetsDnsNamespaceYaml,
+	"assets/dns/service-account.yaml":      assetsDnsServiceAccountYaml,
+	"assets/dns/service.yaml":              assetsDnsServiceYaml,
 }
 
 // AssetDir returns the file names below a certain
@@ -314,16 +314,17 @@ type bintree struct {
 	Func     func() (*asset, error)
 	Children map[string]*bintree
 }
+
 var _bintree = &bintree{nil, map[string]*bintree{
 	"assets": &bintree{nil, map[string]*bintree{
 		"dns": &bintree{nil, map[string]*bintree{
 			"cluster-role-binding.yaml": &bintree{assetsDnsClusterRoleBindingYaml, map[string]*bintree{}},
-			"cluster-role.yaml": &bintree{assetsDnsClusterRoleYaml, map[string]*bintree{}},
-			"configmap.yaml": &bintree{assetsDnsConfigmapYaml, map[string]*bintree{}},
-			"daemonset.yaml": &bintree{assetsDnsDaemonsetYaml, map[string]*bintree{}},
-			"namespace.yaml": &bintree{assetsDnsNamespaceYaml, map[string]*bintree{}},
-			"service-account.yaml": &bintree{assetsDnsServiceAccountYaml, map[string]*bintree{}},
-			"service.yaml": &bintree{assetsDnsServiceYaml, map[string]*bintree{}},
+			"cluster-role.yaml":         &bintree{assetsDnsClusterRoleYaml, map[string]*bintree{}},
+			"configmap.yaml":            &bintree{assetsDnsConfigmapYaml, map[string]*bintree{}},
+			"daemonset.yaml":            &bintree{assetsDnsDaemonsetYaml, map[string]*bintree{}},
+			"namespace.yaml":            &bintree{assetsDnsNamespaceYaml, map[string]*bintree{}},
+			"service-account.yaml":      &bintree{assetsDnsServiceAccountYaml, map[string]*bintree{}},
+			"service.yaml":              &bintree{assetsDnsServiceYaml, map[string]*bintree{}},
 		}},
 	}},
 }}
@@ -374,4 +375,3 @@ func _filePath(dir, name string) string {
 	cannonicalName := strings.Replace(name, "\\", "/", -1)
 	return filepath.Join(append([]string{dir}, strings.Split(cannonicalName, "/")...)...)
 }
-
