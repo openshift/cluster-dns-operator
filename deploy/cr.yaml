@@ -1,4 +1,4 @@
 apiVersion: "dns.openshift.io/v1alpha1"
 kind: "ClusterDNS"
 metadata:
-  name: "example"
+  name: "default"
