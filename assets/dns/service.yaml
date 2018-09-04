@@ -1,0 +1,17 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: dns 
+  namespace: openshift-cluster-dns
+  labels:
+    openshift-app: dns
+spec:
+  selector:
+    openshift-app: dns
+  ports:
+  - name: dns
+    port: 53
+    protocol: UDP
+  - name: dns-tcp
+    port: 53
+    protocol: TCP

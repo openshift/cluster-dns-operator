@@ -1,0 +1,14 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+    name: cluster-dns-operator:dns
+subjects:
+- kind: ServiceAccount
+  name: dns
+  namespace: openshift-cluster-dns
+roleRef:
+  kind: ClusterRole
+  name: cluster-dns-operator:dns
+  namespace: openshift-cluster-dns
+userNames:
+- "system:serviceaccount:openshift-cluster-dns:dns"
