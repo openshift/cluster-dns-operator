@@ -1,0 +1,54 @@
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: dns
+  namespace: openshift-cluster-dns
+  labels:
+    openshift-app: dns
+spec:
+  selector:
+    matchLabels:
+      openshift-app: dns
+  template:
+    metadata:
+      labels:
+        openshift-app: dns
+    spec:
+      serviceAccountName: dns
+      containers:
+      - name: dns
+        image: "docker.io/openshift/origin-coredns:v3.11.0"
+        imagePullPolicy: IfNotPresent
+        command: [ "coredns" ]
+        args: [ "-conf", "/etc/coredns/Corefile" ]
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/coredns
+          readOnly: true
+        ports:
+        - containerPort: 5353
+          name: dns
+          protocol: UDP
+        - containerPort: 5353
+          name: dns-tcp
+          protocol: TCP
+        - containerPort: 9153
+          name: metrics
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+      dnsPolicy: Default
+      volumes:
+        - name: config-volume
+          configMap:
+            name: dns
+            items:
+            - key: Corefile
+              path: Corefile

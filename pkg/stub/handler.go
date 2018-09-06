@@ -2,67 +2,108 @@ package stub
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	"github.com/golang/glog"
+
+	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
-	"github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func NewHandler() sdk.Handler {
-	return &Handler{}
+	config, err := manifests.NewConfigFromString("")
+	if err != nil {
+		glog.V(4).Infof("Cluster DNS config could not be parsed. Using defaults.")
+		config = manifests.NewDefaultConfig()
+	}
+
+	return &Handler{
+		manifestFactory: manifests.NewFactory(config),
+	}
 }
 
 type Handler struct {
-	// Fill me
+	manifestFactory *manifests.Factory
 }
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
+	if event.Deleted {
+		return nil
+	}
 	switch o := event.Object.(type) {
-	case *v1alpha1.ClusterDNS:
-		err := sdk.Create(newbusyBoxPod(o))
-		if err != nil && !errors.IsAlreadyExists(err) {
-			logrus.Errorf("failed to create busybox pod : %v", err)
-			return err
-		}
+	case *dnsv1alpha1.ClusterDNS:
+		return h.syncDNSUpdate(o)
 	}
 	return nil
 }
 
-// newbusyBoxPod demonstrates how to create a busybox pod
-func newbusyBoxPod(cr *v1alpha1.ClusterDNS) *corev1.Pod {
-	labels := map[string]string{
-		"app": "busy-box",
+func (h *Handler) syncDNSUpdate(ci *dnsv1alpha1.ClusterDNS) error {
+	ns, err := h.manifestFactory.DNSNamespace()
+	if err != nil {
+		return fmt.Errorf("couldn't build dns namespace: %v", err)
 	}
-	return &corev1.Pod{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Pod",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "busy-box",
-			Namespace: cr.Namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(cr, schema.GroupVersionKind{
-					Group:   v1alpha1.SchemeGroupVersion.Group,
-					Version: v1alpha1.SchemeGroupVersion.Version,
-					Kind:    "ClusterDNS",
-				}),
-			},
-			Labels: labels,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
-				},
-			},
-		},
+	err = sdk.Create(ns)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("couldn't create dns namespace: %v", err)
 	}
+
+	sa, err := h.manifestFactory.DNSServiceAccount()
+	if err != nil {
+		return fmt.Errorf("couldn't build dns service account: %v", err)
+	}
+	err = sdk.Create(sa)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("couldn't create dns service account: %v", err)
+	}
+
+	cr, err := h.manifestFactory.DNSClusterRole()
+	if err != nil {
+		return fmt.Errorf("couldn't build dns cluster role: %v", err)
+	}
+	err = sdk.Create(cr)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("couldn't create dns cluster role: %v", err)
+	}
+
+	crb, err := h.manifestFactory.DNSClusterRoleBinding()
+	if err != nil {
+		return fmt.Errorf("couldn't build dns cluster role binding: %v", err)
+	}
+	err = sdk.Create(crb)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("couldn't create dns cluster role binding: %v", err)
+	}
+
+	cm, err := h.manifestFactory.DNSConfigMap()
+	if err != nil {
+		return fmt.Errorf("couldn't build dns config map: %v", err)
+	}
+	err = sdk.Create(cm)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("couldn't create dns config map: %v", err)
+	}
+
+	ds, err := h.manifestFactory.DNSDaemonSet()
+	if err != nil {
+		return fmt.Errorf("couldn't build daemonset: %v", err)
+	}
+	err = sdk.Create(ds)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create daemonset: %v", err)
+	}
+
+	service, err := h.manifestFactory.DNSService()
+	if err != nil {
+		return fmt.Errorf("couldn't build service: %v", err)
+	}
+	err = sdk.Create(service)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("failed to create service: %v", err)
+	}
+
+	return nil
 }
