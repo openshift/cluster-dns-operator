@@ -1,4 +1,6 @@
-apiVersion: "dns.openshift.io/v1alpha1"
-kind: "ClusterDNS"
+apiVersion: dns.openshift.io/v1alpha1
+kind: ClusterDNS
 metadata:
-  name: "default"
+  name: default
+spec:
+  clusterDomain: cluster.local

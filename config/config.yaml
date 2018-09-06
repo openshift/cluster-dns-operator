@@ -1,3 +1,0 @@
-apiVersion: dns.openshift.io/v1alpha1
-kind: ClusterDNS
-projectName: cluster-dns-operator

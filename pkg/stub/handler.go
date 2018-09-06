@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/golang/glog"
-
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
@@ -15,14 +13,8 @@ import (
 )
 
 func NewHandler() sdk.Handler {
-	config, err := manifests.NewConfigFromString("")
-	if err != nil {
-		glog.V(4).Infof("Cluster DNS config could not be parsed. Using defaults.")
-		config = manifests.NewDefaultConfig()
-	}
-
 	return &Handler{
-		manifestFactory: manifests.NewFactory(config),
+		manifestFactory: manifests.NewFactory(),
 	}
 }
 
@@ -41,7 +33,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	return nil
 }
 
-func (h *Handler) syncDNSUpdate(ci *dnsv1alpha1.ClusterDNS) error {
+func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 	ns, err := h.manifestFactory.DNSNamespace()
 	if err != nil {
 		return fmt.Errorf("couldn't build dns namespace: %v", err)
@@ -78,7 +70,7 @@ func (h *Handler) syncDNSUpdate(ci *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("couldn't create dns cluster role binding: %v", err)
 	}
 
-	cm, err := h.manifestFactory.DNSConfigMap()
+	cm, err := h.manifestFactory.DNSConfigMap(dns)
 	if err != nil {
 		return fmt.Errorf("couldn't build dns config map: %v", err)
 	}
@@ -96,7 +88,7 @@ func (h *Handler) syncDNSUpdate(ci *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("failed to create daemonset: %v", err)
 	}
 
-	service, err := h.manifestFactory.DNSService()
+	service, err := h.manifestFactory.DNSService(dns)
 	if err != nil {
 		return fmt.Errorf("couldn't build service: %v", err)
 	}

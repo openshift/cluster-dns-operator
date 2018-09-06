@@ -2,10 +2,19 @@ package manifests
 
 import (
 	"testing"
+
+	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 )
 
 func TestManifests(t *testing.T) {
-	f := NewFactory(NewDefaultConfig())
+	f := NewFactory()
+
+	dns := &dnsv1alpha1.ClusterDNS{
+		Spec: dnsv1alpha1.ClusterDNSSpec{
+			ClusterDomain: stringPtr("cluster.local"),
+			ClusterIP:     stringPtr("172.30.77.10"),
+		},
+	}
 
 	if _, err := f.DNSNamespace(); err != nil {
 		t.Errorf("invalid DNSNamespace: %v", err)
@@ -19,13 +28,17 @@ func TestManifests(t *testing.T) {
 	if _, err := f.DNSClusterRoleBinding(); err != nil {
 		t.Errorf("invalid DNSClusterRoleBinding: %v", err)
 	}
-	if _, err := f.DNSConfigMap(); err != nil {
+	if _, err := f.DNSConfigMap(dns); err != nil {
 		t.Errorf("invalid DNSClusterRoleBinding: %v", err)
 	}
 	if _, err := f.DNSDaemonSet(); err != nil {
 		t.Errorf("invalid DNSDaemonSet: %v", err)
 	}
-	if _, err := f.DNSService(); err != nil {
+	if _, err := f.DNSService(dns); err != nil {
 		t.Errorf("invalid DNSService: %v", err)
 	}
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
