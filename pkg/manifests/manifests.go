@@ -9,6 +9,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
+
+	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 )
 
 const (
@@ -29,13 +31,10 @@ func MustAssetReader(asset string) io.Reader {
 // files. It provides a point of control to mutate the static resources with
 // provided configuration.
 type Factory struct {
-	config *Config
 }
 
-func NewFactory(c *Config) *Factory {
-	return &Factory{
-		config: c,
-	}
+func NewFactory() *Factory {
+	return &Factory{}
 }
 
 func (f *Factory) DNSNamespace() (*corev1.Namespace, error) {
@@ -70,14 +69,14 @@ func (f *Factory) DNSClusterRoleBinding() (*rbacv1.ClusterRoleBinding, error) {
 	return crb, nil
 }
 
-func (f *Factory) DNSConfigMap() (*corev1.ConfigMap, error) {
+func (f *Factory) DNSConfigMap(dns *dnsv1alpha1.ClusterDNS) (*corev1.ConfigMap, error) {
 	cm, err := NewConfigMap(MustAssetReader(DNSConfigMap))
 	if err != nil {
 		return nil, err
 	}
 
-	if f.config.DNSClusterDomain != "" {
-		cm.Data["Corefile"] = strings.Replace(cm.Data["Corefile"], "cluster.local", f.config.DNSClusterDomain, -1)
+	if dns.Spec.ClusterDomain != nil {
+		cm.Data["Corefile"] = strings.Replace(cm.Data["Corefile"], "cluster.local", *dns.Spec.ClusterDomain, -1)
 	}
 	return cm, nil
 }
@@ -90,14 +89,14 @@ func (f *Factory) DNSDaemonSet() (*appsv1.DaemonSet, error) {
 	return ds, nil
 }
 
-func (f *Factory) DNSService() (*corev1.Service, error) {
+func (f *Factory) DNSService(dns *dnsv1alpha1.ClusterDNS) (*corev1.Service, error) {
 	s, err := NewService(MustAssetReader(DNSService))
 	if err != nil {
 		return nil, err
 	}
 
-	if f.config.DNSClusterIP != "" {
-		s.Spec.ClusterIP = f.config.DNSClusterIP
+	if dns.Spec.ClusterIP != nil {
+		s.Spec.ClusterIP = *dns.Spec.ClusterIP
 	}
 	return s, nil
 }

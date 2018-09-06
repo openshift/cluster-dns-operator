@@ -22,7 +22,9 @@ type ClusterDNS struct {
 }
 
 type ClusterDNSSpec struct {
-	// Fill me
+	ClusterIP *string `json:"clusterIP"`
+
+	ClusterDomain *string `json:"clusterDomain"`
 }
 type ClusterDNSStatus struct {
 	// Fill me
