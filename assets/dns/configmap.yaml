@@ -8,7 +8,6 @@ data:
     .:53 {
         errors
         health
-        #TODO: Set user configured DNS domain
         kubernetes cluster.local in-addr.arpa ip6.arpa {
             pods insecure
             upstream

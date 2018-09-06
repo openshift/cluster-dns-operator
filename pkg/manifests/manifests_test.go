@@ -5,7 +5,7 @@ import (
 )
 
 func TestManifests(t *testing.T) {
-	f := &Factory{}
+	f := NewFactory(NewDefaultConfig())
 
 	if _, err := f.DNSNamespace(); err != nil {
 		t.Errorf("invalid DNSNamespace: %v", err)

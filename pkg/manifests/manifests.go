@@ -3,6 +3,7 @@ package manifests
 import (
 	"bytes"
 	"io"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,10 +29,13 @@ func MustAssetReader(asset string) io.Reader {
 // files. It provides a point of control to mutate the static resources with
 // provided configuration.
 type Factory struct {
+	config *Config
 }
 
-func NewFactory() *Factory {
-	return &Factory{}
+func NewFactory(c *Config) *Factory {
+	return &Factory{
+		config: c,
+	}
 }
 
 func (f *Factory) DNSNamespace() (*corev1.Namespace, error) {
@@ -71,6 +75,10 @@ func (f *Factory) DNSConfigMap() (*corev1.ConfigMap, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if f.config.DNSClusterDomain != "" {
+		cm.Data["Corefile"] = strings.Replace(cm.Data["Corefile"], "cluster.local", f.config.DNSClusterDomain, -1)
+	}
 	return cm, nil
 }
 
@@ -86,6 +94,10 @@ func (f *Factory) DNSService() (*corev1.Service, error) {
 	s, err := NewService(MustAssetReader(DNSService))
 	if err != nil {
 		return nil, err
+	}
+
+	if f.config.DNSClusterIP != "" {
+		s.Spec.ClusterIP = f.config.DNSClusterIP
 	}
 	return s, nil
 }

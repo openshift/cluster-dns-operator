@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/golang/glog"
+
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
@@ -13,8 +15,14 @@ import (
 )
 
 func NewHandler() sdk.Handler {
+	config, err := manifests.NewConfigFromString("")
+	if err != nil {
+		glog.V(4).Infof("Cluster DNS config could not be parsed. Using defaults.")
+		config = manifests.NewDefaultConfig()
+	}
+
 	return &Handler{
-		manifestFactory: manifests.NewFactory(),
+		manifestFactory: manifests.NewFactory(config),
 	}
 }
 
