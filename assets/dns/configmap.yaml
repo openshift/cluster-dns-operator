@@ -5,7 +5,7 @@ metadata:
   namespace: openshift-cluster-dns
 data:
   Corefile: |
-    .:53 {
+    .:5353 {
         errors
         health
         kubernetes cluster.local in-addr.arpa ip6.arpa {
