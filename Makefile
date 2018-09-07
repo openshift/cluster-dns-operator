@@ -1,4 +1,4 @@
-all: build generate
+all: generate build
 
 PACKAGE=github.com/openshift/cluster-dns-operator
 MAIN_PACKAGE=$(PACKAGE)/cmd/cluster-dns-operator
