@@ -156,3 +156,19 @@ func NewNamespace(manifest io.Reader) (*corev1.Namespace, error) {
 	}
 	return &ns, nil
 }
+
+func NewDeployment(manifest io.Reader) (*appsv1.Deployment, error) {
+	o := appsv1.Deployment{}
+	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&o); err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func NewClusterDNS(manifest io.Reader) (*dnsv1alpha1.ClusterDNS, error) {
+	o := dnsv1alpha1.ClusterDNS{}
+	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&o); err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
