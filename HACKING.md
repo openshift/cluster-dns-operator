@@ -44,3 +44,15 @@ To test the default `ClusterDNS` manifest:
 ```
 $ oc create -f deploy/cr.yaml
 ```
+
+## Tests
+
+### Integration tests
+
+Integration tests are still very immature. To run them, use the GCP test cluster instructions and then run the tests with:
+
+```
+KUBECONFIG=</path/to/admin.kubeconfig> make test-integration
+```
+
+**Important**: Note that the resources and namespaces used for the test are currently fixed and the tests will clean up after themselves, including deleting the `openshift-cluster-dns` namespace. Don't run these tests in a cluster where data loss is a concern.

@@ -5,6 +5,7 @@ MAIN_PACKAGE=$(PACKAGE)/cmd/cluster-dns-operator
 
 BIN=$(lastword $(subst /, ,$(MAIN_PACKAGE)))
 BINDATA=pkg/manifests/bindata.go
+TEST_BINDATA=test/manifests/bindata.go
 
 GOBINDATA_BIN=$(GOPATH)/bin/go-bindata
 
@@ -18,6 +19,7 @@ build:
 # Using "-modtime 1" to make generate target deterministic. It sets all file time stamps to unix timestamp 1
 generate: $(GOBINDATA_BIN)
 	go-bindata -mode 420 -modtime 1 -pkg manifests -o $(BINDATA) assets/...
+	go-bindata -mode 420 -modtime 1 -pkg manifests -o $(TEST_BINDATA) test/assets/...
 
 $(GOBINDATA_BIN):
 	go get -u github.com/jteeuwen/go-bindata/...
@@ -25,8 +27,11 @@ $(GOBINDATA_BIN):
 test:
 	go test ./...
 
+test-integration:
+	go test -v -tags integration ./test/integration
+
 clean:
 	go clean
 	rm -f $(BIN)
 
-.PHONY: all build generate test clean
+.PHONY: all build generate test test-integration deps-integration clean
