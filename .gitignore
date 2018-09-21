@@ -1,8 +1,6 @@
 /cluster-dns-operator
 
-# Temporary Build Files
-tmp/_output
-tmp/_test
+tmp/
 
 
 # Created by https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
