@@ -15,8 +15,7 @@ spec:
     spec:
       containers:
         - name: cluster-dns-operator
-          image: pravisankar82/origin-cluster-dns-operator:latest
-          #image: openshift/origin-cluster-dns-operator:latest
+          image: openshift/origin-cluster-dns-operator:latest
           command:
           - cluster-dns-operator
           imagePullPolicy: IfNotPresent
