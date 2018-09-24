@@ -20,3 +20,6 @@ USER 1001
 LABEL io.k8s.display-name="OpenShift cluster-dns-operator" \
       io.k8s.description="This is a component of OpenShift Container Platform and manages the lifecycle of cluster DNS services." \
       maintainer="Dan Mace <dmace@redhat.com>"
+
+COPY manifests /manifests
+LABEL io.openshift.release.operator true
