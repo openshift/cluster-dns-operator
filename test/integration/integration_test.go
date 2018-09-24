@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -271,7 +272,7 @@ func startOperator() {
 }
 
 func createCRD() {
-	runShellCmd(fmt.Sprintf("oc apply -f ../../deploy/crd.yaml -n %s", testConfig.operatorNamespace), "create cluster dns CRD")
+	runShellCmd(fmt.Sprintf("oc apply -f ../../manifests/00_clusterdnsoperator_00_clusterdns.crd.yaml -n %s", testConfig.operatorNamespace), "create cluster dns CRD")
 }
 
 func deleteCRD() {
@@ -288,7 +289,7 @@ func runShellCmd(command, msg string) (string, string) {
 	c.Stdout = &outBuf
 	c.Stderr = &errBuf
 	if err := c.Run(); err != nil {
-		testConfig.t.Fatalf("failed to %s: %v", msg, err)
+		testConfig.t.Fatalf("failed to %s: %v\ncommand: %s\nstdout: %s\nstderr: %s", msg, err, strings.Join(append([]string{cmd[0]}, cmd[1:]...), " "), outBuf.String(), errBuf.String())
 	}
 	return outBuf.String(), errBuf.String()
 }
