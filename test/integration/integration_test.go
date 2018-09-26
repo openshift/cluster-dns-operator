@@ -272,7 +272,7 @@ func startOperator() {
 }
 
 func createCRD() {
-	runShellCmd(fmt.Sprintf("oc apply -f ../../manifests/00_clusterdnsoperator_00_clusterdns.crd.yaml -n %s", testConfig.operatorNamespace), "create cluster dns CRD")
+	runShellCmd(fmt.Sprintf("oc apply -f ../../manifests/00-custom-resource-definition.yaml -n %s", testConfig.operatorNamespace), "create cluster dns CRD")
 }
 
 func deleteCRD() {

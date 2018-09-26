@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
@@ -21,6 +22,13 @@ const (
 	DNSConfigMap          = "assets/dns/configmap.yaml"
 	DNSDaemonSet          = "assets/dns/daemonset.yaml"
 	DNSService            = "assets/dns/service.yaml"
+
+	OperatorCustomResourceDefinition = "manifests/00-custom-resource-definition.yaml"
+	OperatorNamespace                = "manifests/00-namespace.yaml"
+	OperatorClusterRole              = "manifests/cluster-role.yaml"
+	OperatorClusterRoleBinding       = "manifests/cluster-role-binding.yaml"
+	OperatorServiceAccount           = "manifests/service-account.yaml"
+	OperatorDeployment               = "manifests/deployment.yaml"
 )
 
 func MustAssetReader(asset string) io.Reader {
@@ -35,6 +43,54 @@ type Factory struct {
 
 func NewFactory() *Factory {
 	return &Factory{}
+}
+
+func (f *Factory) OperatorCustomResourceDefinition() (*apiextensionsv1beta1.CustomResourceDefinition, error) {
+	crd, err := NewCustomResourceDefinition(MustAssetReader(OperatorCustomResourceDefinition))
+	if err != nil {
+		return nil, err
+	}
+	return crd, nil
+}
+
+func (f *Factory) OperatorNamespace() (*corev1.Namespace, error) {
+	ns, err := NewNamespace(MustAssetReader(OperatorNamespace))
+	if err != nil {
+		return nil, err
+	}
+	return ns, nil
+}
+
+func (f *Factory) OperatorServiceAccount() (*corev1.ServiceAccount, error) {
+	sa, err := NewServiceAccount(MustAssetReader(OperatorServiceAccount))
+	if err != nil {
+		return nil, err
+	}
+	return sa, nil
+}
+
+func (f *Factory) OperatorClusterRole() (*rbacv1.ClusterRole, error) {
+	cr, err := NewClusterRole(MustAssetReader(OperatorClusterRole))
+	if err != nil {
+		return nil, err
+	}
+	return cr, nil
+}
+
+func (f *Factory) OperatorClusterRoleBinding() (*rbacv1.ClusterRoleBinding, error) {
+	crb, err := NewClusterRoleBinding(MustAssetReader(OperatorClusterRoleBinding))
+	if err != nil {
+		return nil, err
+	}
+	return crb, nil
+}
+
+func (f *Factory) OperatorDeployment() (*appsv1.Deployment, error) {
+	d, err := NewDeployment(MustAssetReader(OperatorDeployment))
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 func (f *Factory) DNSNamespace() (*corev1.Namespace, error) {
@@ -171,4 +227,12 @@ func NewClusterDNS(manifest io.Reader) (*dnsv1alpha1.ClusterDNS, error) {
 		return nil, err
 	}
 	return &o, nil
+}
+
+func NewCustomResourceDefinition(manifest io.Reader) (*apiextensionsv1beta1.CustomResourceDefinition, error) {
+	crd := apiextensionsv1beta1.CustomResourceDefinition{}
+	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&crd); err != nil {
+		return nil, err
+	}
+	return &crd, nil
 }
