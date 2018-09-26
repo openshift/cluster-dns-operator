@@ -1,11 +1,10 @@
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: cluster-dns-operator:dns
+  name: cluster-dns:dns
 rules:
 - apiGroups:
   - ""
-  attributeRestrictions: null
   resources:
   - endpoints
   - services
