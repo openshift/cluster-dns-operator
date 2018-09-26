@@ -22,6 +22,28 @@ rules:
   verbs:
   - list
   - watch
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  - rbac.authorization.k8s.io
+  resources:
+  - namespaces
+  - pods
+  - endpoints
+  - services
+  - serviceaccounts
+  - configmaps
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - create
+  - list
+  - watch
 
 ---
 
