@@ -16,6 +16,24 @@ func TestManifests(t *testing.T) {
 		},
 	}
 
+	if _, err := f.OperatorNamespace(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.OperatorCustomResourceDefinition(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.OperatorClusterRole(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.OperatorClusterRoleBinding(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.OperatorDeployment(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.OperatorServiceAccount(); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := f.DNSNamespace(); err != nil {
 		t.Errorf("invalid DNSNamespace: %v", err)
 	}
