@@ -34,6 +34,9 @@ func TestManifests(t *testing.T) {
 	if _, err := f.OperatorServiceAccount(); err != nil {
 		t.Fatal(err)
 	}
+	if assetData := f.OperatorAssetContent(); len(assetData) == 0 {
+		t.Fatal("expected some valid operator asset content")
+	}
 	if _, err := f.DNSNamespace(); err != nil {
 		t.Errorf("invalid DNSNamespace: %v", err)
 	}
