@@ -35,4 +35,4 @@ clean:
 	go clean
 	rm -f $(BIN)
 
-.PHONY: all build generate test test-integration deps-integration clean
+.PHONY: all build generate test test-integration clean
