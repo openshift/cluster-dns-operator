@@ -79,7 +79,7 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("couldn't create dns config map: %v", err)
 	}
 
-	ds, err := h.manifestFactory.DNSDaemonSet()
+	ds, err := h.manifestFactory.DNSDaemonSet(dns)
 	if err != nil {
 		return fmt.Errorf("couldn't build daemonset: %v", err)
 	}

@@ -1,7 +1,7 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: dns 
+  # Name is set at runtime
   namespace: openshift-cluster-dns
   labels:
     openshift-app: dns

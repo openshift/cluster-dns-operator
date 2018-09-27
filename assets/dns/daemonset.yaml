@@ -1,7 +1,7 @@
 kind: DaemonSet
 apiVersion: apps/v1
 metadata:
-  name: dns
+  # Name is set at runtime
   namespace: openshift-cluster-dns
   labels:
     openshift-app: dns
@@ -48,7 +48,7 @@ spec:
       volumes:
         - name: config-volume
           configMap:
-            name: dns
+            # Name is set at runtime
             items:
             - key: Corefile
               path: Corefile
