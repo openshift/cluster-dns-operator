@@ -236,3 +236,14 @@ func NewCustomResourceDefinition(manifest io.Reader) (*apiextensionsv1beta1.Cust
 	}
 	return &crd, nil
 }
+
+func (f *Factory) OperatorAssetContent() map[string][]byte {
+	return map[string][]byte{
+		OperatorCustomResourceDefinition: MustAsset(OperatorCustomResourceDefinition),
+		OperatorNamespace:                MustAsset(OperatorNamespace),
+		OperatorServiceAccount:           MustAsset(OperatorServiceAccount),
+		OperatorClusterRole:              MustAsset(OperatorClusterRole),
+		OperatorClusterRoleBinding:       MustAsset(OperatorClusterRoleBinding),
+		OperatorDeployment:               MustAsset(OperatorDeployment),
+	}
+}
