@@ -23,12 +23,12 @@ const (
 	DNSDaemonSet          = "assets/dns/daemonset.yaml"
 	DNSService            = "assets/dns/service.yaml"
 
+	OperatorClusterRole              = "manifests/00-cluster-role.yaml"
 	OperatorCustomResourceDefinition = "manifests/00-custom-resource-definition.yaml"
 	OperatorNamespace                = "manifests/00-namespace.yaml"
-	OperatorClusterRole              = "manifests/cluster-role.yaml"
-	OperatorClusterRoleBinding       = "manifests/cluster-role-binding.yaml"
-	OperatorServiceAccount           = "manifests/service-account.yaml"
-	OperatorDeployment               = "manifests/deployment.yaml"
+	OperatorClusterRoleBinding       = "manifests/01-cluster-role-binding.yaml"
+	OperatorServiceAccount           = "manifests/01-service-account.yaml"
+	OperatorDeployment               = "manifests/02-deployment.yaml"
 )
 
 func MustAssetReader(asset string) io.Reader {
