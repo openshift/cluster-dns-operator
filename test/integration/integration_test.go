@@ -264,7 +264,7 @@ func NewTestConfig(t *testing.T) *TestConfig {
 func startOperator() {
 	resource := "dns.openshift.io/v1alpha1"
 	kind := "ClusterDNS"
-	resyncPeriod := 5
+	resyncPeriod := 10 * time.Minute
 	testConfig.t.Logf("Watching %s, %s, %s, %d", resource, kind, testConfig.operatorNamespace, resyncPeriod)
 	sdk.Watch(resource, kind, testConfig.operatorNamespace, resyncPeriod)
 	sdk.Handle(stub.NewHandler())
