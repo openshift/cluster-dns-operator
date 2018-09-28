@@ -19,6 +19,7 @@ spec:
           command:
           - cluster-dns-operator
           imagePullPolicy: IfNotPresent
+          terminationGracePeriodSeconds: 2
           env:
             - name: WATCH_NAMESPACE
               valueFrom:

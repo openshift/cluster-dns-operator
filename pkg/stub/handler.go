@@ -10,6 +10,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
 func NewHandler() sdk.Handler {
@@ -23,14 +24,40 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
-	if event.Deleted {
-		return nil
-	}
 	switch o := event.Object.(type) {
 	case *dnsv1alpha1.ClusterDNS:
-		return h.syncDNSUpdate(o)
+		if event.Deleted {
+			return h.deleteDNS(o)
+		} else {
+			return h.syncDNSUpdate(o)
+		}
 	}
 	return nil
+}
+
+func (h *Handler) deleteDNS(dns *dnsv1alpha1.ClusterDNS) error {
+	var errs []error
+	s, err := h.manifestFactory.DNSService(dns)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("failed to build service for deletion, ClusterDNS: %q, %v", dns.Name, err))
+	} else if err = sdk.Delete(s); err != nil {
+		errs = append(errs, fmt.Errorf("failed to delete service, ClusterDNS %q: %v", dns.Name, err))
+	}
+
+	ds, err := h.manifestFactory.DNSDaemonSet(dns)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("failed to build daemonset for deletion, ClusterDNS: %q, %v", dns.Name, err))
+	} else if err = sdk.Delete(ds); err != nil {
+		errs = append(errs, fmt.Errorf("failed to delete daemonset, ClusterDNS %q: %v", dns.Name, err))
+	}
+
+	cm, err := h.manifestFactory.DNSConfigMap(dns)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("failed to build configmap for deletion, ClusterDNS: %q, %v", dns.Name, err))
+	} else if err = sdk.Delete(cm); err != nil {
+		errs = append(errs, fmt.Errorf("failed to delete configmap, ClusterDNS %q: %v", dns.Name, err))
+	}
+	return kerrors.NewAggregate(errs)
 }
 
 func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
