@@ -2,6 +2,7 @@ package manifests
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 
@@ -130,6 +131,7 @@ func (f *Factory) DNSConfigMap(dns *dnsv1alpha1.ClusterDNS) (*corev1.ConfigMap, 
 	if err != nil {
 		return nil, err
 	}
+	cm.Name = "dns-" + dns.Name
 
 	if dns.Spec.ClusterDomain != nil {
 		cm.Data["Corefile"] = strings.Replace(cm.Data["Corefile"], "cluster.local", *dns.Spec.ClusterDomain, -1)
@@ -137,10 +139,33 @@ func (f *Factory) DNSConfigMap(dns *dnsv1alpha1.ClusterDNS) (*corev1.ConfigMap, 
 	return cm, nil
 }
 
-func (f *Factory) DNSDaemonSet() (*appsv1.DaemonSet, error) {
+func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS) (*appsv1.DaemonSet, error) {
 	ds, err := NewDaemonSet(MustAssetReader(DNSDaemonSet))
 	if err != nil {
 		return nil, err
+	}
+	ds.Name = "dns-" + dns.Name
+
+	if ds.Spec.Template.Labels == nil {
+		ds.Spec.Template.Labels = map[string]string{}
+	}
+	ds.Spec.Template.Labels["dns"] = ds.Name
+
+	if ds.Spec.Selector.MatchLabels == nil {
+		ds.Spec.Selector.MatchLabels = map[string]string{}
+	}
+	ds.Spec.Selector.MatchLabels["dns"] = ds.Name
+
+	coreFileVolumeFound := false
+	for i, _ := range ds.Spec.Template.Spec.Volumes {
+		if ds.Spec.Template.Spec.Volumes[i].Name == "config-volume" {
+			ds.Spec.Template.Spec.Volumes[i].ConfigMap.Name = ds.Name
+			coreFileVolumeFound = true
+			break
+		}
+	}
+	if !coreFileVolumeFound {
+		return nil, fmt.Errorf("volume 'config-volume' not found")
 	}
 	return ds, nil
 }
@@ -150,6 +175,17 @@ func (f *Factory) DNSService(dns *dnsv1alpha1.ClusterDNS) (*corev1.Service, erro
 	if err != nil {
 		return nil, err
 	}
+	s.Name = "dns-" + dns.Name
+
+	if s.Labels == nil {
+		s.Labels = map[string]string{}
+	}
+	s.Labels["dns"] = s.Name
+
+	if s.Spec.Selector == nil {
+		s.Spec.Selector = map[string]string{}
+	}
+	s.Spec.Selector["dns"] = s.Name
 
 	if dns.Spec.ClusterIP != nil {
 		s.Spec.ClusterIP = *dns.Spec.ClusterIP

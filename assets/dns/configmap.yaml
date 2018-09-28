@@ -1,7 +1,7 @@
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: dns
+  # Name is set at runtime
   namespace: openshift-cluster-dns
 data:
   Corefile: |
