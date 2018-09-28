@@ -20,6 +20,12 @@
   revision = "de5bf2ad457846296e2031421a34e2568e304e35"
 
 [[projects]]
+  name = "github.com/apparentlymart/go-cidr"
+  packages = ["cidr"]
+  revision = "b1115bf8e14a60131a196f908223e4506b0ddc35"
+  version = "v1.0.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
@@ -583,6 +589,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e57f9be0697155b269b4c6ee5e96e7b5dc227c2946c74d371e8423a713fce276"
+  inputs-digest = "29ec95049e056eeef0a8c6cd07515998a3095eee3a540633598faad0b2e02600"
   solver-name = "gps-cdcl"
   solver-version = 1
