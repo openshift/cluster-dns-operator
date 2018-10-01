@@ -32,5 +32,6 @@ rules:
   - clusterrolebindings
   verbs:
   - create
+  - get
   - list
   - watch
