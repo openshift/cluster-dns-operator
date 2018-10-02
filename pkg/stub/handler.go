@@ -61,15 +61,6 @@ func (h *Handler) deleteDNS(dns *dnsv1alpha1.ClusterDNS) error {
 }
 
 func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
-	ns, err := h.manifestFactory.DNSNamespace()
-	if err != nil {
-		return fmt.Errorf("couldn't build dns namespace: %v", err)
-	}
-	err = sdk.Create(ns)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns namespace: %v", err)
-	}
-
 	sa, err := h.manifestFactory.DNSServiceAccount()
 	if err != nil {
 		return fmt.Errorf("couldn't build dns service account: %v", err)
