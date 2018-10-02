@@ -14,7 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/util/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func NewHandler() sdk.Handler {
@@ -40,28 +40,14 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 }
 
 func (h *Handler) deleteDNS(dns *dnsv1alpha1.ClusterDNS) error {
-	var errs []error
-	s, err := h.manifestFactory.DNSService(dns)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("failed to build service for deletion, ClusterDNS: %q, %v", dns.Name, err))
-	} else if err = sdk.Delete(s); err != nil {
-		errs = append(errs, fmt.Errorf("failed to delete service, ClusterDNS %q: %v", dns.Name, err))
-	}
-
+	// DNS specific configmap and service has owner reference to daemonset.
+	// So deletion of daemonset will trigger garbage collection of corresponding
+	// configmap and service resources.
 	ds, err := h.manifestFactory.DNSDaemonSet(dns)
 	if err != nil {
-		errs = append(errs, fmt.Errorf("failed to build daemonset for deletion, ClusterDNS: %q, %v", dns.Name, err))
-	} else if err = sdk.Delete(ds); err != nil {
-		errs = append(errs, fmt.Errorf("failed to delete daemonset, ClusterDNS %q: %v", dns.Name, err))
+		return fmt.Errorf("failed to build daemonset for deletion, ClusterDNS: %q, %v", dns.Name, err)
 	}
-
-	cm, err := h.manifestFactory.DNSConfigMap(dns)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("failed to build configmap for deletion, ClusterDNS: %q, %v", dns.Name, err))
-	} else if err = sdk.Delete(cm); err != nil {
-		errs = append(errs, fmt.Errorf("failed to delete configmap, ClusterDNS %q: %v", dns.Name, err))
-	}
-	return kerrors.NewAggregate(errs)
+	return sdk.Delete(ds)
 }
 
 func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
@@ -111,28 +97,42 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("couldn't create dns cluster role binding: %v", err)
 	}
 
-	cm, err := h.manifestFactory.DNSConfigMap(dns)
-	if err != nil {
-		return fmt.Errorf("couldn't build dns config map: %v", err)
-	}
-	err = sdk.Create(cm)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns config map: %v", err)
-	}
-
 	ds, err := h.manifestFactory.DNSDaemonSet(dns)
 	if err != nil {
 		return fmt.Errorf("couldn't build daemonset: %v", err)
 	}
 	err = sdk.Create(ds)
-	if err != nil && !errors.IsAlreadyExists(err) {
+	if errors.IsAlreadyExists(err) {
+		if err = sdk.Get(ds); err != nil {
+			return fmt.Errorf("failed to fetch daemonset %s, %v", ds.Name, err)
+		}
+	} else if err != nil {
 		return fmt.Errorf("failed to create daemonset: %v", err)
+	}
+	trueVar := true
+	dsRef := metav1.OwnerReference{
+		APIVersion: ds.APIVersion,
+		Kind:       ds.Kind,
+		Name:       ds.Name,
+		UID:        ds.UID,
+		Controller: &trueVar,
+	}
+
+	cm, err := h.manifestFactory.DNSConfigMap(dns)
+	if err != nil {
+		return fmt.Errorf("couldn't build dns config map: %v", err)
+	}
+	cm.SetOwnerReferences([]metav1.OwnerReference{dsRef})
+	err = sdk.Create(cm)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("couldn't create dns config map: %v", err)
 	}
 
 	service, err := h.manifestFactory.DNSService(dns)
 	if err != nil {
 		return fmt.Errorf("couldn't build service: %v", err)
 	}
+	service.SetOwnerReferences([]metav1.OwnerReference{dsRef})
 	err = sdk.Create(service)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("failed to create service: %v", err)
