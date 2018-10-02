@@ -23,13 +23,6 @@ const (
 	DNSConfigMap          = "assets/dns/configmap.yaml"
 	DNSDaemonSet          = "assets/dns/daemonset.yaml"
 	DNSService            = "assets/dns/service.yaml"
-
-	OperatorClusterRole              = "manifests/00-cluster-role.yaml"
-	OperatorCustomResourceDefinition = "manifests/00-custom-resource-definition.yaml"
-	OperatorNamespace                = "manifests/00-namespace.yaml"
-	OperatorClusterRoleBinding       = "manifests/01-cluster-role-binding.yaml"
-	OperatorServiceAccount           = "manifests/01-service-account.yaml"
-	OperatorDeployment               = "manifests/02-deployment.yaml"
 )
 
 func MustAssetReader(asset string) io.Reader {
@@ -44,54 +37,6 @@ type Factory struct {
 
 func NewFactory() *Factory {
 	return &Factory{}
-}
-
-func (f *Factory) OperatorCustomResourceDefinition() (*apiextensionsv1beta1.CustomResourceDefinition, error) {
-	crd, err := NewCustomResourceDefinition(MustAssetReader(OperatorCustomResourceDefinition))
-	if err != nil {
-		return nil, err
-	}
-	return crd, nil
-}
-
-func (f *Factory) OperatorNamespace() (*corev1.Namespace, error) {
-	ns, err := NewNamespace(MustAssetReader(OperatorNamespace))
-	if err != nil {
-		return nil, err
-	}
-	return ns, nil
-}
-
-func (f *Factory) OperatorServiceAccount() (*corev1.ServiceAccount, error) {
-	sa, err := NewServiceAccount(MustAssetReader(OperatorServiceAccount))
-	if err != nil {
-		return nil, err
-	}
-	return sa, nil
-}
-
-func (f *Factory) OperatorClusterRole() (*rbacv1.ClusterRole, error) {
-	cr, err := NewClusterRole(MustAssetReader(OperatorClusterRole))
-	if err != nil {
-		return nil, err
-	}
-	return cr, nil
-}
-
-func (f *Factory) OperatorClusterRoleBinding() (*rbacv1.ClusterRoleBinding, error) {
-	crb, err := NewClusterRoleBinding(MustAssetReader(OperatorClusterRoleBinding))
-	if err != nil {
-		return nil, err
-	}
-	return crb, nil
-}
-
-func (f *Factory) OperatorDeployment() (*appsv1.Deployment, error) {
-	d, err := NewDeployment(MustAssetReader(OperatorDeployment))
-	if err != nil {
-		return nil, err
-	}
-	return d, nil
 }
 
 func (f *Factory) DNSNamespace() (*corev1.Namespace, error) {
@@ -271,15 +216,4 @@ func NewCustomResourceDefinition(manifest io.Reader) (*apiextensionsv1beta1.Cust
 		return nil, err
 	}
 	return &crd, nil
-}
-
-func (f *Factory) OperatorAssetContent() map[string][]byte {
-	return map[string][]byte{
-		OperatorCustomResourceDefinition: MustAsset(OperatorCustomResourceDefinition),
-		OperatorNamespace:                MustAsset(OperatorNamespace),
-		OperatorServiceAccount:           MustAsset(OperatorServiceAccount),
-		OperatorClusterRole:              MustAsset(OperatorClusterRole),
-		OperatorClusterRoleBinding:       MustAsset(OperatorClusterRoleBinding),
-		OperatorDeployment:               MustAsset(OperatorDeployment),
-	}
 }
