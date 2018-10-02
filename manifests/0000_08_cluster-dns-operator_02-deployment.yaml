@@ -13,6 +13,8 @@ spec:
       labels:
         name: cluster-dns-operator
     spec:
+      dnsPolicy: Default
+      restartPolicy: Always
       containers:
         - name: cluster-dns-operator
           image: openshift/origin-cluster-dns-operator:latest
