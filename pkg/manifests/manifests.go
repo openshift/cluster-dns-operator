@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	DNSNamespace          = "assets/dns/namespace.yaml"
 	DNSServiceAccount     = "assets/dns/service-account.yaml"
 	DNSClusterRole        = "assets/dns/cluster-role.yaml"
 	DNSClusterRoleBinding = "assets/dns/cluster-role-binding.yaml"
@@ -25,12 +26,10 @@ const (
 
 	OperatorClusterRole              = "manifests/00-cluster-role.yaml"
 	OperatorCustomResourceDefinition = "manifests/00-custom-resource-definition.yaml"
-	OperatorNamespace                = "manifests/00-operator-namespace.yaml"
+	OperatorNamespace                = "manifests/00-namespace.yaml"
 	OperatorClusterRoleBinding       = "manifests/01-cluster-role-binding.yaml"
 	OperatorServiceAccount           = "manifests/01-service-account.yaml"
 	OperatorDeployment               = "manifests/02-deployment.yaml"
-
-	DNSNamespace = "manifests/00-dns-namespace.yaml"
 )
 
 func MustAssetReader(asset string) io.Reader {
@@ -282,7 +281,5 @@ func (f *Factory) OperatorAssetContent() map[string][]byte {
 		OperatorClusterRole:              MustAsset(OperatorClusterRole),
 		OperatorClusterRoleBinding:       MustAsset(OperatorClusterRoleBinding),
 		OperatorDeployment:               MustAsset(OperatorDeployment),
-
-		DNSNamespace: MustAsset(DNSNamespace),
 	}
 }

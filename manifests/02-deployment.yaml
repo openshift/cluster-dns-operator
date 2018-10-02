@@ -18,6 +18,7 @@ spec:
           image: openshift/origin-cluster-dns-operator:latest
           command:
           - cluster-dns-operator
+          imagePullPolicy: IfNotPresent
           terminationGracePeriodSeconds: 2
           env:
             - name: WATCH_NAMESPACE
@@ -27,5 +28,3 @@ spec:
             - name: OPERATOR_NAME
               value: "cluster-dns-operator"
       serviceAccountName: cluster-dns-operator
-      dnsPolicy: Default
-      restartPolicy: Always
