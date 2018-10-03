@@ -102,7 +102,7 @@ func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS) (*appsv1.DaemonSet, 
 	ds.Spec.Selector.MatchLabels["dns"] = ds.Name
 
 	coreFileVolumeFound := false
-	for i, _ := range ds.Spec.Template.Spec.Volumes {
+	for i := range ds.Spec.Template.Spec.Volumes {
 		if ds.Spec.Template.Spec.Volumes[i].Name == "config-volume" {
 			ds.Spec.Template.Spec.Volumes[i].ConfigMap.Name = ds.Name
 			coreFileVolumeFound = true
