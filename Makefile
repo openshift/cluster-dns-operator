@@ -5,7 +5,6 @@ MAIN_PACKAGE=$(PACKAGE)/cmd/cluster-dns-operator
 
 BIN=$(lastword $(subst /, ,$(MAIN_PACKAGE)))
 BINDATA=pkg/manifests/bindata.go
-TEST_BINDATA=test/manifests/bindata.go
 
 GOFMT_CHECK=$(shell find . -not \( \( -wholename './.*' -o -wholename '*/vendor/*' -o -wholename './pkg/assets/bindata.go' -o -wholename '././test/manifests/bindata.go' -o -wholename './pkg/manifests/bindata.go' -o -wholename './test/manifests/bindata.go' \) -prune \) -name '*.go' | sort -u | xargs gofmt -s -l)
 
@@ -24,13 +23,12 @@ build:
 
 # Using "-modtime 1" to make generate target deterministic. It sets all file time stamps to unix timestamp 1
 generate: $(GOBINDATA_BIN)
-	go-bindata -mode 420 -modtime 1 -pkg manifests -o $(BINDATA) manifests/... assets/...
-	go-bindata -mode 420 -modtime 1 -pkg manifests -o $(TEST_BINDATA) test/assets/...
+	go-bindata -mode 420 -modtime 1 -pkg manifests -o $(BINDATA) assets/...
 
 $(GOBINDATA_BIN):
 	go get -u github.com/jteeuwen/go-bindata/...
 
-test:	verify
+test: verify
 	go test ./...
 
 test-integration:
