@@ -21,18 +21,6 @@ func TestManifests(t *testing.T) {
 		},
 	}
 
-	if _, err := f.DNSNamespace(); err != nil {
-		t.Errorf("invalid DNSNamespace: %v", err)
-	}
-	if _, err := f.DNSServiceAccount(); err != nil {
-		t.Errorf("invalid DNSServiceAccount: %v", err)
-	}
-	if _, err := f.DNSClusterRole(); err != nil {
-		t.Errorf("invalid DNSClusterRole: %v", err)
-	}
-	if _, err := f.DNSClusterRoleBinding(); err != nil {
-		t.Errorf("invalid DNSClusterRoleBinding: %v", err)
-	}
 	if _, err := f.DNSConfigMap(dns); err != nil {
 		t.Errorf("invalid DNSClusterRoleBinding: %v", err)
 	}

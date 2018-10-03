@@ -75,41 +75,6 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 			dns.Spec.ClusterIP = &ipaddr
 		}
 	}
-	ns, err := h.manifestFactory.DNSNamespace()
-	if err != nil {
-		return fmt.Errorf("couldn't build dns namespace: %v", err)
-	}
-	err = sdk.Create(ns)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns namespace: %v", err)
-	}
-
-	sa, err := h.manifestFactory.DNSServiceAccount()
-	if err != nil {
-		return fmt.Errorf("couldn't build dns service account: %v", err)
-	}
-	err = sdk.Create(sa)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns service account: %v", err)
-	}
-
-	cr, err := h.manifestFactory.DNSClusterRole()
-	if err != nil {
-		return fmt.Errorf("couldn't build dns cluster role: %v", err)
-	}
-	err = sdk.Create(cr)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns cluster role: %v", err)
-	}
-
-	crb, err := h.manifestFactory.DNSClusterRoleBinding()
-	if err != nil {
-		return fmt.Errorf("couldn't build dns cluster role binding: %v", err)
-	}
-	err = sdk.Create(crb)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns cluster role binding: %v", err)
-	}
 
 	cm, err := h.manifestFactory.DNSConfigMap(dns)
 	if err != nil {
