@@ -52,3 +52,6 @@ spec:
             items:
             - key: Corefile
               path: Corefile
+      tolerations:
+      # tolerate all taints so that DNS is always present on all nodes
+      - operator: Exists
