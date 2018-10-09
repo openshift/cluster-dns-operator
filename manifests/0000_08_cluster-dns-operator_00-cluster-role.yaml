@@ -17,7 +17,7 @@ rules:
   resources:
   - daemonsets
   verbs:
-  - create
+  - "*"
 - apiGroups:
   - ""
   - rbac.authorization.k8s.io
