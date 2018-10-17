@@ -69,16 +69,18 @@ $ CLUSTER_NAME=your-cluster-name make test-integration
 
 ### End-to-end tests
 
-The OpenShift/Kubernetes DNS e2e tests must pass against a cluster using cluster-dns-operator.
+The [OpenShift/Kubernetes DNS e2e tests](https://github.com/openshift/origin) must pass against a cluster using cluster-dns-operator.
 
 To run all of them, try:
 
 ```
+# From a clone of https://github.com/openshift/origin...
 $ FOCUS='DNS' SKIP='\[Disabled:.+\]|\[Disruptive\]|\[Skipped\]|\[Slow\]|\[Flaky\]|\[local\]|\[Local\]' TEST_ONLY=1 test/extended/conformance.sh
 ```
 
 To run the bare minimum smoke test, try:
 
 ```
+# From a clone of https://github.com/openshift/origin...
 $ FOCUS='should provide DNS for the cluster' SKIP='\[Disabled:.+\]|\[Disruptive\]|\[Skipped\]|\[Slow\]|\[Flaky\]|\[local\]|\[Local\]' TEST_ONLY=1 test/extended/conformance.sh
 ```
