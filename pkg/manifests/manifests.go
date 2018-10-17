@@ -13,9 +13,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	"github.com/openshift/cluster-dns-operator/pkg/util"
 )
 
 const (
+	ClusterDNSDefaultCR = "assets/cluster-dns-cr.yaml"
+
 	DNSNamespace          = "assets/dns/namespace.yaml"
 	DNSServiceAccount     = "assets/dns/service-account.yaml"
 	DNSClusterRole        = "assets/dns/cluster-role.yaml"
@@ -37,6 +40,19 @@ type Factory struct {
 
 func NewFactory() *Factory {
 	return &Factory{}
+}
+
+func (f *Factory) ClusterDNSDefaultCR(cm *corev1.ConfigMap) (*dnsv1alpha1.ClusterDNS, error) {
+	cr, err := NewClusterDNS(MustAssetReader(ClusterDNSDefaultCR))
+	if err != nil {
+		return nil, err
+	}
+	clusterIP, err := util.GetDefaultClusterDNSIP(cm)
+	if err != nil {
+		return nil, err
+	}
+	cr.Spec.ClusterIP = &clusterIP
+	return cr, nil
 }
 
 func (f *Factory) DNSNamespace() (*corev1.Namespace, error) {
