@@ -1,8 +1,8 @@
 # Cluster role for the operator itself.
 kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: cluster-dns-operator
+  name: cluster-dns-operator:operator
   namespace: openshift-cluster-dns-operator
 rules:
 - apiGroups:
@@ -12,26 +12,47 @@ rules:
   verbs:
   - list
   - watch
+
 - apiGroups:
   - apps
+  - extensions
   resources:
   - daemonsets
   verbs:
   - "*"
+
 - apiGroups:
   - ""
-  - rbac.authorization.k8s.io
   resources:
   - namespaces
-  - pods
-  - endpoints
   - services
   - serviceaccounts
   - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - delete
+
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
   - clusterroles
   - clusterrolebindings
   verbs:
   - create
-  - get
+  - list
+  - watch
+
+# Mirrored from assets/dns/cluster-role.yaml
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  - services
+  - pods
+  - namespaces
+  verbs:
   - list
   - watch
