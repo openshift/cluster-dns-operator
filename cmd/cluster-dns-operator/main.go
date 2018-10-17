@@ -34,6 +34,11 @@ func main() {
 	resyncPeriod := 10 * time.Minute
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
-	sdk.Handle(stub.NewHandler())
+
+	handler := stub.NewHandler()
+	if err := handler.EnsureDefaultClusterDNS(); err != nil {
+		logrus.Fatalf("Failed to ensure default cluster dns: %v", err)
+	}
+	sdk.Handle(handler)
 	sdk.Run(context.TODO())
 }

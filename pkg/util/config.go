@@ -2,81 +2,69 @@ package util
 
 import (
 	"fmt"
-	"net"
+	"strings"
 
-	"github.com/apparentlymart/go-cidr/cidr"
 	"github.com/ghodss/yaml"
 
-	kapicore "k8s.io/api/core/v1"
+	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
+
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
-	// INSTALLER_CONFIG_NAMESPACE is the namespace containing the installer config.
-	INSTALLER_CONFIG_NAMESPACE = "kube-system"
-
-	// CLUSTER_CONFIG_RESOURCE is the resource containing the installer config.
-	CLUSTER_CONFIG_RESOURCE = "cluster-config-v1"
+	// installerConfigNamespace is the namespace containing the installer config.
+	installerConfigNamespace = "kube-system"
+	// clusterConfigResource is the resource containing the installer config.
+	clusterConfigResource = "cluster-config-v1"
 )
 
-// installerClusterDNSIP
-func installerClusterDNSIP(cm *kapicore.ConfigMap) (string, error) {
+func GetInstallerConfigMap() (*corev1.ConfigMap, error) {
+	client := k8sclient.GetKubeClient()
+	resourceClient := client.CoreV1().ConfigMaps(installerConfigNamespace)
+
+	cm, err := resourceClient.Get(clusterConfigResource, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("getting %s resource: %v", clusterConfigResource, err)
+	}
+	return cm, nil
+}
+
+func GetDefaultClusterDNSIP(cm *corev1.ConfigMap) (string, error) {
 	if cm == nil {
 		return "", fmt.Errorf("invalid installer config")
 	}
 
-	ic, ok := cm.Data["install-config"]
+	kc, ok := cm.Data["kco-config"]
 	if !ok {
-		return "", fmt.Errorf("missing installer config")
+		return "", fmt.Errorf("missing kco-config in configmap")
 	}
 
-	installConfigMap := make(map[string]interface{})
-	if err := yaml.Unmarshal([]byte(ic), &installConfigMap); err != nil {
-		return "", fmt.Errorf("unmarshall error: %v", err)
+	kcoConfigMap := make(map[string]interface{})
+	if err := yaml.Unmarshal([]byte(kc), &kcoConfigMap); err != nil {
+		return "", fmt.Errorf("kco-config unmarshall error: %v", err)
 	}
 
-	networking, ok := installConfigMap["networking"]
+	dns, ok := kcoConfigMap["dnsConfig"]
 	if !ok {
-		return "", fmt.Errorf("missing installer networking config")
+		return "", fmt.Errorf("missing dnsConfig in kco-config")
 	}
-
-	networkingConfig, ok := networking.(map[string]interface{})
+	dnsConfig, ok := dns.(map[string]interface{})
 	if !ok {
-		return "", fmt.Errorf("invalid installer networking config")
+		return "", fmt.Errorf("invalid dnsConfig in kco-config")
 	}
 
-	serviceCIDR, ok := networkingConfig["serviceCIDR"]
+	clusterIP, ok := dnsConfig["clusterIP"]
 	if !ok {
-		return "", fmt.Errorf("missing networking service CIDR")
+		return "", fmt.Errorf("missing cluster IP in dnsConfig")
 	}
-
-	s, ok := serviceCIDR.(string)
+	dnsClusterIP, ok := clusterIP.(string)
 	if !ok {
-		return "", fmt.Errorf("invalid networking service CIDR")
+		return "", fmt.Errorf("invalid cluster IP in dnsConfig")
+	}
+	if len(strings.TrimSpace(dnsClusterIP)) == 0 {
+		return "", fmt.Errorf("empty cluster IP in dnsConfig")
 	}
 
-	_, ipnet, err := net.ParseCIDR(s)
-	if err != nil {
-		return "", fmt.Errorf("invalid networking service CIDR info")
-	}
-
-	ip, err := cidr.Host(ipnet, 10)
-	if err != nil {
-		return "", err
-	}
-
-	return ip.String(), nil
-}
-
-// ClusterDNSIP returns the cluster dns ip from the installer config.
-func ClusterDNSIP(client kubernetes.Interface) (string, error) {
-	resourceClient := client.CoreV1().ConfigMaps(INSTALLER_CONFIG_NAMESPACE)
-
-	obj, err := resourceClient.Get(CLUSTER_CONFIG_RESOURCE, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("getting %s resource: %v", CLUSTER_CONFIG_RESOURCE, err)
-	}
-
-	return installerClusterDNSIP(obj)
+	return dnsClusterIP, nil
 }

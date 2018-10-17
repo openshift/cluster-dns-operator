@@ -8,7 +8,6 @@ import (
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	"github.com/openshift/cluster-dns-operator/pkg/util"
 
-	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 
 	"github.com/sirupsen/logrus"
@@ -17,7 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func NewHandler() sdk.Handler {
+func NewHandler() *Handler {
 	return &Handler{
 		manifestFactory: manifests.NewFactory(),
 	}
@@ -39,6 +38,70 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	return nil
 }
 
+// EnsureDefaultClusterDNS ensures that a default ClusterDNS exists.
+func (h *Handler) EnsureDefaultClusterDNS() error {
+	cm, err := util.GetInstallerConfigMap()
+	if err != nil {
+		return err
+	}
+	cd, err := h.manifestFactory.ClusterDNSDefaultCR(cm)
+	if err != nil {
+		return err
+	}
+
+	changed, ncd, err := checkClusterDNS(cd)
+	if err != nil {
+		return err
+	}
+	if changed {
+		err = sdk.Update(ncd)
+		if err != nil {
+			return fmt.Errorf("updating default cluster dns %s/%s: %v", cd.Namespace, cd.Name, err)
+		}
+		logrus.Infof("updated default cluster dns %s/%s", cd.Namespace, cd.Name)
+	} else if ncd == nil {
+		err = sdk.Create(cd)
+		if err != nil {
+			return fmt.Errorf("creating default cluster dns %s/%s: %v", cd.Namespace, cd.Name, err)
+		}
+		logrus.Infof("created default cluster dns %s/%s", cd.Namespace, cd.Name)
+	}
+	return nil
+}
+
+func checkClusterDNS(cd *dnsv1alpha1.ClusterDNS) (bool, *dnsv1alpha1.ClusterDNS, error) {
+	oldcd := &dnsv1alpha1.ClusterDNS{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       cd.Kind,
+			APIVersion: cd.APIVersion,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cd.Name,
+			Namespace: cd.Namespace,
+		},
+	}
+	err := sdk.Get(oldcd)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return false, nil, fmt.Errorf("failed to fetch existing default cluster dns %s/%s, %v", cd.Namespace, cd.Name, err)
+		}
+		return false, nil, nil
+	}
+
+	if cd.Spec.ClusterIP == nil {
+		return false, nil, fmt.Errorf("invalid cluster IP for default cluster dns %s/%s", cd.Namespace, cd.Name)
+	}
+	if oldcd.Spec.ClusterIP == nil {
+		oldcd.Spec.ClusterIP = new(string)
+	}
+
+	if *oldcd.Spec.ClusterIP != *cd.Spec.ClusterIP {
+		*oldcd.Spec.ClusterIP = *cd.Spec.ClusterIP
+		return true, oldcd, nil
+	}
+	return false, oldcd, nil
+}
+
 func (h *Handler) deleteDNS(dns *dnsv1alpha1.ClusterDNS) error {
 	// DNS specific configmap and service has owner reference to daemonset.
 	// So deletion of daemonset will trigger garbage collection of corresponding
@@ -51,16 +114,6 @@ func (h *Handler) deleteDNS(dns *dnsv1alpha1.ClusterDNS) error {
 }
 
 func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
-	if dns.Spec.ClusterIP == nil {
-		// Check for default cluster ip.
-		ipaddr, err := util.ClusterDNSIP(k8sclient.GetKubeClient())
-		if err != nil {
-			logrus.Errorf("Getting cluster dns ip: %v", err)
-		} else {
-			logrus.Infof("Using default cluster dns ip address %s", ipaddr)
-			dns.Spec.ClusterIP = &ipaddr
-		}
-	}
 	ns, err := h.manifestFactory.DNSNamespace()
 	if err != nil {
 		return fmt.Errorf("couldn't build dns namespace: %v", err)
