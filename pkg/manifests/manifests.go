@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -14,6 +15,8 @@ import (
 
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/util"
+
+	"github.com/apparentlymart/go-cidr/cidr"
 )
 
 const (
@@ -42,16 +45,31 @@ func NewFactory() *Factory {
 	return &Factory{}
 }
 
-func (f *Factory) ClusterDNSDefaultCR(cm *corev1.ConfigMap) (*dnsv1alpha1.ClusterDNS, error) {
+// ClusterDNSDefaultCR builds a default cluster DNS with a cluster IP set to the
+// 10th IP from the service CIDR range defined in the install config within the
+// cluster config.
+func (f *Factory) ClusterDNSDefaultCR(ic *util.InstallConfig) (*dnsv1alpha1.ClusterDNS, error) {
+	if ic == nil {
+		return nil, fmt.Errorf("missing installconfig")
+	}
+
 	cr, err := NewClusterDNS(MustAssetReader(ClusterDNSDefaultCR))
 	if err != nil {
 		return nil, err
 	}
-	clusterIP, err := util.GetDefaultClusterDNSIP(cm)
+
+	_, serviceCIDR, err := net.ParseCIDR(ic.Networking.ServiceCIDR)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid serviceCIDR %q: %v", ic.Networking.ServiceCIDR, err)
 	}
-	cr.Spec.ClusterIP = &clusterIP
+
+	dnsClusterIP, err := cidr.Host(serviceCIDR, 10)
+	if err != nil {
+		return nil, fmt.Errorf("invalid serviceCIDR %v: %v", serviceCIDR, err)
+	}
+
+	ip := dnsClusterIP.String()
+	cr.Spec.ClusterIP = &ip
 	return cr, nil
 }
 

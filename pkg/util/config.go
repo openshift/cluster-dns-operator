@@ -2,69 +2,51 @@ package util
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ghodss/yaml"
 
-	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
-	// installerConfigNamespace is the namespace containing the installer config.
-	installerConfigNamespace = "kube-system"
-	// clusterConfigResource is the resource containing the installer config.
-	clusterConfigResource = "cluster-config-v1"
+	// ClusterConfigNamespace is the namespace containing the cluster config.
+	ClusterConfigNamespace = "kube-system"
+	// ClusterConfigName is the name of the cluster config configmap.
+	ClusterConfigName = "cluster-config-v1"
+	// InstallConfigKey is the key in the cluster config configmap containing a
+	// serialized InstallConfig.
+	InstallConfigKey = "install-config"
 )
 
-func GetInstallerConfigMap() (*corev1.ConfigMap, error) {
-	client := k8sclient.GetKubeClient()
-	resourceClient := client.CoreV1().ConfigMaps(installerConfigNamespace)
-
-	cm, err := resourceClient.Get(clusterConfigResource, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("getting %s resource: %v", clusterConfigResource, err)
-	}
-	return cm, nil
+type InstallConfig struct {
+	Networking NetworkingConfig `json:"networking"`
 }
 
-func GetDefaultClusterDNSIP(cm *corev1.ConfigMap) (string, error) {
-	if cm == nil {
-		return "", fmt.Errorf("invalid installer config")
+type NetworkingConfig struct {
+	ServiceCIDR string `json:"serviceCIDR"`
+}
+
+// UnmarshalInstallConfig builds an install config from the cluster config.
+func UnmarshalInstallConfig(clusterConfig *corev1.ConfigMap) (*InstallConfig, error) {
+	icJson, ok := clusterConfig.Data[InstallConfigKey]
+	if !ok {
+		return nil, fmt.Errorf("missing %q in configmap", InstallConfigKey)
+	}
+	var ic InstallConfig
+	if err := yaml.Unmarshal([]byte(icJson), &ic); err != nil {
+		return nil, fmt.Errorf("invalid InstallConfig: %v\njson:\n%s", err, icJson)
+	}
+	return &ic, nil
+}
+
+// GetInstallConfig looks up the install config in the cluster.
+func GetInstallConfig(client kubernetes.Interface) (*InstallConfig, error) {
+	cm, err := client.CoreV1().ConfigMaps(ClusterConfigNamespace).Get(ClusterConfigName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("couldn't get clusterconfig %s/%s: %v", ClusterConfigNamespace, ClusterConfigName, err)
 	}
 
-	kc, ok := cm.Data["kco-config"]
-	if !ok {
-		return "", fmt.Errorf("missing kco-config in configmap")
-	}
-
-	kcoConfigMap := make(map[string]interface{})
-	if err := yaml.Unmarshal([]byte(kc), &kcoConfigMap); err != nil {
-		return "", fmt.Errorf("kco-config unmarshall error: %v", err)
-	}
-
-	dns, ok := kcoConfigMap["dnsConfig"]
-	if !ok {
-		return "", fmt.Errorf("missing dnsConfig in kco-config")
-	}
-	dnsConfig, ok := dns.(map[string]interface{})
-	if !ok {
-		return "", fmt.Errorf("invalid dnsConfig in kco-config")
-	}
-
-	clusterIP, ok := dnsConfig["clusterIP"]
-	if !ok {
-		return "", fmt.Errorf("missing cluster IP in dnsConfig")
-	}
-	dnsClusterIP, ok := clusterIP.(string)
-	if !ok {
-		return "", fmt.Errorf("invalid cluster IP in dnsConfig")
-	}
-	if len(strings.TrimSpace(dnsClusterIP)) == 0 {
-		return "", fmt.Errorf("empty cluster IP in dnsConfig")
-	}
-
-	return dnsClusterIP, nil
+	return UnmarshalInstallConfig(cm)
 }
