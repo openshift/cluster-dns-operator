@@ -25,7 +25,6 @@ build:
 # Using "-modtime 1" to make generate target deterministic. It sets all file time stamps to unix timestamp 1
 generate: $(GOBINDATA_BIN)
 	go-bindata -mode 420 -modtime 1 -pkg manifests -o $(BINDATA) manifests/... assets/...
-	go-bindata -mode 420 -modtime 1 -pkg manifests -o $(TEST_BINDATA) test/assets/...
 
 $(GOBINDATA_BIN):
 	go get -u github.com/jteeuwen/go-bindata/...
@@ -33,8 +32,11 @@ $(GOBINDATA_BIN):
 test:	verify
 	go test ./...
 
+release-local:
+	MANIFESTS=$(shell mktemp -d) hack/release-local.sh
+
 test-integration:
-	go test -v -tags integration ./test/integration
+	hack/test-integration.sh
 
 verify:	verify-gofmt
 
@@ -63,4 +65,4 @@ clean:
 	go clean
 	rm -f $(BIN)
 
-.PHONY: all build generate verify verify-gofmt test test-integration clean
+.PHONY: all build generate verify verify-gofmt test test-integration clean release-local

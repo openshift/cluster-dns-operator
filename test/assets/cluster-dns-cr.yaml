@@ -1,6 +1,0 @@
-apiVersion: dns.openshift.io/v1alpha1
-kind: ClusterDNS
-metadata:
-  name: test-default
-spec:
-  clusterDomain: test-cluster.local

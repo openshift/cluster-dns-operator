@@ -49,10 +49,38 @@ $ oc create -f deploy/cr.yaml
 
 ### Integration tests
 
-Integration tests are still very immature. To run them, use the GCP test cluster instructions and then run the tests with:
+Integration tests are still very immature. To run them, start with an OpenShift 4.0 cluster and then run the following,
+substituting for your own details where appropriate. This assumes `KUBECONFIG` is set.
 
 ```
-KUBECONFIG=</path/to/admin.kubeconfig> make test-integration
+# 1. Uninstall any existing cluster-version-operator and cluster-dns-operator.
+$ hack/uninstall.sh
+
+# 2. Build and push a new cluster-dns-operator image.
+$ REPO=docker.io/username/origin-cluster-dns-operator make release-local
+
+# 3. Run `oc apply` as instructed to install the locally-built operator.
+
+# 4. Run integration tests against the cluster.
+$ CLUSTER_NAME=your-cluster-name make test-integration
 ```
 
-**Important**: Note that the resources and namespaces used for the test are currently fixed and the tests will clean up after themselves, including deleting the `openshift-cluster-dns` namespace. Don't run these tests in a cluster where data loss is a concern.
+**Important**: Don't run these tests in a cluster where data loss is a concern.
+
+### End-to-end tests
+
+The [OpenShift/Kubernetes DNS e2e tests](https://github.com/openshift/origin) must pass against a cluster using cluster-dns-operator.
+
+To run all of them, try:
+
+```
+# From a clone of https://github.com/openshift/origin...
+$ FOCUS='DNS' SKIP='\[Disabled:.+\]|\[Disruptive\]|\[Skipped\]|\[Slow\]|\[Flaky\]|\[local\]|\[Local\]' TEST_ONLY=1 test/extended/conformance.sh
+```
+
+To run the bare minimum smoke test, try:
+
+```
+# From a clone of https://github.com/openshift/origin...
+$ FOCUS='should provide DNS for the cluster' SKIP='\[Disabled:.+\]|\[Disruptive\]|\[Skipped\]|\[Slow\]|\[Flaky\]|\[local\]|\[Local\]' TEST_ONLY=1 test/extended/conformance.sh
+```
