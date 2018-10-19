@@ -12,11 +12,6 @@ import (
 func TestManifests(t *testing.T) {
 	f := NewFactory()
 
-	cm := util.ConfigTestDefaultConfigMap()
-	if _, err := f.ClusterDNSDefaultCR(cm); err != nil {
-		t.Errorf("invalid ClusterDNSDefaultCR: %v", err)
-	}
-
 	dns := &dnsv1alpha1.ClusterDNS{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "default",
@@ -50,20 +45,19 @@ func TestManifests(t *testing.T) {
 	}
 }
 
-func TestDefaultClusterDNS(t *testing.T) {
-	f := &Factory{}
-	for _, tc := range util.ConfigTestScenarios() {
-		_, err := f.ClusterDNSDefaultCR(tc.ConfigMap)
-		if tc.ErrorExpectation {
-			if err == nil {
-				t.Errorf("test case %s expected an error, got none", tc.Name)
-			}
-		} else if err != nil {
-			t.Errorf("test case %s did not expect an error, got %v", tc.Name, err)
-		}
+func TestDefaultCluserDNS(t *testing.T) {
+	ic := &util.InstallConfig{
+		Networking: util.NetworkingConfig{
+			ServiceCIDR: "10.3.0.0/16",
+		},
+	}
+	def, err := NewFactory().ClusterDNSDefaultCR(ic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := "10.3.0.10", *def.Spec.ClusterIP; e != a {
+		t.Errorf("expected default clusterdns clusterIP=%s, got %s", e, a)
 	}
 }
 
-func stringPtr(s string) *string {
-	return &s
-}
+func stringPtr(s string) *string { return &s }

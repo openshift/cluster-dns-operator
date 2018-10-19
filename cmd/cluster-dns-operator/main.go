@@ -5,13 +5,18 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	stub "github.com/openshift/cluster-dns-operator/pkg/stub"
+	"github.com/openshift/cluster-dns-operator/pkg/util"
+
+	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	sdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	k8sutil "github.com/operator-framework/operator-sdk/pkg/util/k8sutil"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 
-	"github.com/sirupsen/logrus"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+
+	"github.com/sirupsen/logrus"
 )
 
 func printVersion() {
@@ -35,9 +40,21 @@ func main() {
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
 
-	handler := stub.NewHandler()
+	kubeClient := k8sclient.GetKubeClient()
+
+	ic, err := util.GetInstallConfig(kubeClient)
+	if err != nil {
+		logrus.Fatalf("could't get installconfig: %v", err)
+	}
+
+	handler := &stub.Handler{
+		InstallConfig:   ic,
+		Namespace:       namespace,
+		ManifestFactory: manifests.NewFactory(),
+	}
+
 	if err := handler.EnsureDefaultClusterDNS(); err != nil {
-		logrus.Fatalf("Failed to ensure default cluster dns: %v", err)
+		logrus.Fatalf("failed to ensure default clusterdns: %v", err)
 	}
 	sdk.Handle(handler)
 	sdk.Run(context.TODO())

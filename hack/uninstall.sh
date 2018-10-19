@@ -10,8 +10,9 @@ oc scale -n kube-system --replicas 0 deployments/kube-dns
 oc delete -n kube-system services/kube-dns
 
 # Uninstall cluster-dns-operator
-oc delete --force --grace-period 0 -n openshift-cluster-dns-operator clusterdnses/default
 oc delete namespaces/openshift-cluster-dns-operator
+oc patch -n openshift-dns-operator clusterdnses/default --patch '{"metadata":{"finalizers": []}}' --type=merge
+oc delete --force --grace-period 0 -n openshift-cluster-dns-operator clusterdnses/default
 oc delete namespaces/openshift-cluster-dns
 oc delete clusterroles/cluster-dns-operator:operator
 oc delete clusterroles/cluster-dns:dns

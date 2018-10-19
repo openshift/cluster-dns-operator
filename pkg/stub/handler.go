@@ -7,6 +7,7 @@ import (
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	"github.com/openshift/cluster-dns-operator/pkg/util"
+	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 
@@ -14,107 +15,107 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
-func NewHandler() *Handler {
-	return &Handler{
-		manifestFactory: manifests.NewFactory(),
-	}
-}
+const (
+	// ClusterDNSFinalizer is applied to all ClusterDNS resources before they are
+	// considered for processing; this ensures the operator has a chance to handle
+	// all states.
+	// TODO: Make this generic and not tied to the "default" clusterdns.
+	ClusterDNSFinalizer = "dns.openshift.io/default-cluster-dns"
+)
 
 type Handler struct {
-	manifestFactory *manifests.Factory
+	InstallConfig   *util.InstallConfig
+	ManifestFactory *manifests.Factory
+	Namespace       string
 }
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
+	// TODO: This should be adding an item to a rate limited work queue, but for
+	// now correctness is more important than performance.
 	switch o := event.Object.(type) {
 	case *dnsv1alpha1.ClusterDNS:
-		if event.Deleted {
-			return h.deleteDNS(o)
-		} else {
-			return h.syncDNSUpdate(o)
-		}
+		logrus.Infof("reconciling for update to clusterdns %q", o.Name)
 	}
-	return nil
+	return h.reconcile()
 }
 
-// EnsureDefaultClusterDNS ensures that a default ClusterDNS exists.
+// EnsureDefaultClusterDNS ensures that the default ClusterDNS exists.
+// TODO: overwrite existing persisted things like clusterIP.
 func (h *Handler) EnsureDefaultClusterDNS() error {
-	cm, err := util.GetInstallerConfigMap()
+	desired, err := h.ManifestFactory.ClusterDNSDefaultCR(h.InstallConfig)
 	if err != nil {
 		return err
 	}
-	cd, err := h.manifestFactory.ClusterDNSDefaultCR(cm)
-	if err != nil {
+	err = sdk.Create(desired)
+	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
-	}
-
-	changed, ncd, err := checkClusterDNS(cd)
-	if err != nil {
-		return err
-	}
-	if changed {
-		err = sdk.Update(ncd)
-		if err != nil {
-			return fmt.Errorf("updating default cluster dns %s/%s: %v", cd.Namespace, cd.Name, err)
-		}
-		logrus.Infof("updated default cluster dns %s/%s", cd.Namespace, cd.Name)
-	} else if ncd == nil {
-		err = sdk.Create(cd)
-		if err != nil {
-			return fmt.Errorf("creating default cluster dns %s/%s: %v", cd.Namespace, cd.Name, err)
-		}
-		logrus.Infof("created default cluster dns %s/%s", cd.Namespace, cd.Name)
 	}
 	return nil
 }
 
-func checkClusterDNS(cd *dnsv1alpha1.ClusterDNS) (bool, *dnsv1alpha1.ClusterDNS, error) {
-	oldcd := &dnsv1alpha1.ClusterDNS{
+// Reconcile performs a full reconciliation loop for DNS, including
+// generalized setup and handling of all clusterdns resources in the
+// operator namespace.
+func (h *Handler) reconcile() error {
+	// Ensure we have all the necessary scaffolding on which to place DNS
+	// instances.
+	err := h.ensureDNSNamespace()
+	if err != nil {
+		return err
+	}
+
+	// Find all clusterdnses.
+	dnses := &dnsv1alpha1.ClusterDNSList{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       cd.Kind,
-			APIVersion: cd.APIVersion,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cd.Name,
-			Namespace: cd.Namespace,
+			Kind:       "ClusterDNS",
+			APIVersion: "dns.openshift.io/v1alpha1",
 		},
 	}
-	err := sdk.Get(oldcd)
+	err = sdk.List(h.Namespace, dnses, sdk.WithListOptions(&metav1.ListOptions{}))
 	if err != nil {
-		if !errors.IsNotFound(err) {
-			return false, nil, fmt.Errorf("failed to fetch existing default cluster dns %s/%s, %v", cd.Namespace, cd.Name, err)
+		return fmt.Errorf("failed to list clusterdnses: %v", err)
+	}
+
+	// Reconcile all the clusterdnses.
+	errors := []error{}
+	for _, dns := range dnses.Items {
+		// Handle deleted dns.
+		// TODO: Assert/ensure that the dns has a finalizer so we can reliably detect
+		// deletion.
+		if dns.DeletionTimestamp != nil {
+			// Destroy any coredns instance associated with the dns.
+			err := h.ensureDNSDeleted(&dns)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("couldn't delete clusterdns %q: %v", dns.Name, err))
+				continue
+			}
+			// Clean up the finalizer to allow the clusterdns to be deleted.
+			if slice.ContainsString(dns.Finalizers, ClusterDNSFinalizer) {
+				dns.Finalizers = slice.RemoveString(dns.Finalizers, ClusterDNSFinalizer)
+				err = sdk.Update(&dns)
+				if err != nil {
+					errors = append(errors, fmt.Errorf("couldn't remove finalizer from clusterdns %q: %v", dns.Name, err))
+				}
+			}
+			continue
 		}
-		return false, nil, nil
-	}
 
-	if cd.Spec.ClusterIP == nil {
-		return false, nil, fmt.Errorf("invalid cluster IP for default cluster dns %s/%s", cd.Namespace, cd.Name)
+		// Handle active DNS.
+		err := h.ensureCoreDNSForClusterDNS(&dns)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("couldn't ensure clusterdns %q: %v", dns.Name, err))
+		}
 	}
-	if oldcd.Spec.ClusterIP == nil {
-		oldcd.Spec.ClusterIP = new(string)
-	}
-
-	if *oldcd.Spec.ClusterIP != *cd.Spec.ClusterIP {
-		*oldcd.Spec.ClusterIP = *cd.Spec.ClusterIP
-		return true, oldcd, nil
-	}
-	return false, oldcd, nil
+	return utilerrors.NewAggregate(errors)
 }
 
-func (h *Handler) deleteDNS(dns *dnsv1alpha1.ClusterDNS) error {
-	// DNS specific configmap and service has owner reference to daemonset.
-	// So deletion of daemonset will trigger garbage collection of corresponding
-	// configmap and service resources.
-	ds, err := h.manifestFactory.DNSDaemonSet(dns)
-	if err != nil {
-		return fmt.Errorf("failed to build daemonset for deletion, ClusterDNS: %q, %v", dns.Name, err)
-	}
-	return sdk.Delete(ds)
-}
-
-func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
-	ns, err := h.manifestFactory.DNSNamespace()
+// ensureDNSNamespace ensures all the necessary scaffolding exists for
+// CoreDNS generally, including a namespace and all RBAC setup.
+func (h *Handler) ensureDNSNamespace() error {
+	ns, err := h.ManifestFactory.DNSNamespace()
 	if err != nil {
 		return fmt.Errorf("couldn't build dns namespace: %v", err)
 	}
@@ -123,7 +124,7 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("couldn't create dns namespace: %v", err)
 	}
 
-	sa, err := h.manifestFactory.DNSServiceAccount()
+	sa, err := h.ManifestFactory.DNSServiceAccount()
 	if err != nil {
 		return fmt.Errorf("couldn't build dns service account: %v", err)
 	}
@@ -132,7 +133,7 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("couldn't create dns service account: %v", err)
 	}
 
-	cr, err := h.manifestFactory.DNSClusterRole()
+	cr, err := h.ManifestFactory.DNSClusterRole()
 	if err != nil {
 		return fmt.Errorf("couldn't build dns cluster role: %v", err)
 	}
@@ -141,7 +142,7 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("couldn't create dns cluster role: %v", err)
 	}
 
-	crb, err := h.manifestFactory.DNSClusterRoleBinding()
+	crb, err := h.ManifestFactory.DNSClusterRoleBinding()
 	if err != nil {
 		return fmt.Errorf("couldn't build dns cluster role binding: %v", err)
 	}
@@ -150,7 +151,13 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("couldn't create dns cluster role binding: %v", err)
 	}
 
-	ds, err := h.manifestFactory.DNSDaemonSet(dns)
+	return nil
+}
+
+// ensureCoreDNSForClusterDNS ensures all necessary CoreDNS resources exist for
+// a given clusterdns.
+func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error {
+	ds, err := h.ManifestFactory.DNSDaemonSet(dns)
 	if err != nil {
 		return fmt.Errorf("couldn't build daemonset: %v", err)
 	}
@@ -171,7 +178,7 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		Controller: &trueVar,
 	}
 
-	cm, err := h.manifestFactory.DNSConfigMap(dns)
+	cm, err := h.ManifestFactory.DNSConfigMap(dns)
 	if err != nil {
 		return fmt.Errorf("couldn't build dns config map: %v", err)
 	}
@@ -181,7 +188,7 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("couldn't create dns config map: %v", err)
 	}
 
-	service, err := h.manifestFactory.DNSService(dns)
+	service, err := h.ManifestFactory.DNSService(dns)
 	if err != nil {
 		return fmt.Errorf("couldn't build service: %v", err)
 	}
@@ -191,5 +198,22 @@ func (h *Handler) syncDNSUpdate(dns *dnsv1alpha1.ClusterDNS) error {
 		return fmt.Errorf("failed to create service: %v", err)
 	}
 
+	return nil
+}
+
+// ensureDNSDeleted ensures that any CoreDNS resources associated with the
+// clusterdns are deleted.
+func (h *Handler) ensureDNSDeleted(dns *dnsv1alpha1.ClusterDNS) error {
+	// DNS specific configmap and service has owner reference to daemonset.
+	// So deletion of daemonset will trigger garbage collection of corresponding
+	// configmap and service resources.
+	ds, err := h.ManifestFactory.DNSDaemonSet(dns)
+	if err != nil {
+		return fmt.Errorf("failed to build daemonset for deletion, ClusterDNS: %q, %v", dns.Name, err)
+	}
+	err = sdk.Delete(ds)
+	if !errors.IsNotFound(err) {
+		return err
+	}
 	return nil
 }

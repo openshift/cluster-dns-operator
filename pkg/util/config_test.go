@@ -2,22 +2,25 @@ package util
 
 import (
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
-func TestGetDefaultClusterDNSIP(t *testing.T) {
-	for _, tc := range ConfigTestScenarios() {
-		clusterIP, err := GetDefaultClusterDNSIP(tc.ConfigMap)
-		t.Logf("test case: %s", tc.Name)
-		if tc.ErrorExpectation {
-			t.Logf("    expected error: %v", err)
-			if err == nil {
-				t.Errorf("test case %s expected an error, got none", tc.Name)
-			}
-		} else {
-			t.Logf("    dns cluster IP: %s", clusterIP)
-			if err != nil {
-				t.Errorf("test case %s did not expect an error, got %v", tc.Name, err)
-			}
-		}
+const (
+	validInstallConfig = `
+networking:
+  podCIDR: "10.2.0.0/16"
+  serviceCIDR: "10.3.0.0/16"
+  type: flannel
+`
+)
+
+func TestUnmarshalInstallConfig(t *testing.T) {
+	cm := &corev1.ConfigMap{}
+	cm.Data = map[string]string{"install-config": validInstallConfig}
+
+	_, err := UnmarshalInstallConfig(cm)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
