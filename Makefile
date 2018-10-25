@@ -6,7 +6,6 @@ MAIN_PACKAGE=$(PACKAGE)/cmd/cluster-dns-operator
 
 BIN=$(lastword $(subst /, ,$(MAIN_PACKAGE)))
 
-DOCKERFILE=images/cluster-dns-operator/Dockerfile
 IMAGE_TAG=openshift/origin-cluster-dns-operator
 
 ENVVAR=GOOS=linux GOARCH=amd64 CGO_ENABLED=0
@@ -42,10 +41,10 @@ verify:
 local-image:
 ifdef USE_BUILDAH
 	@echo "  - Building with buildah ... "
-	buildah bud -t $(IMAGE_TAG) -f $(DOCKERFILE) .
+	buildah bud -t $(IMAGE_TAG) .
 else
 	@echo "  - Building with docker ... "
-	docker build -t $(IMAGE_TAG) -f $(DOCKERFILE) .
+	docker build -t $(IMAGE_TAG) .
 endif
 
 .PHONY: clean
