@@ -23,7 +23,7 @@ if [[ "${TEMP_COMMIT}" == "true" ]]; then
   git reset --soft HEAD~1
 fi
 
-cp -R manifests/ $MANIFESTS
+cp -R manifests/* $MANIFESTS
 cat manifests/0000_08_cluster-dns-operator_02-deployment.yaml | sed "s~openshift/origin-cluster-dns-operator:latest~$REPO:$REV~" > "$MANIFESTS/0000_08_cluster-dns-operator_02-deployment.yaml"
 
 echo "Pushed $REPO:$REV"
