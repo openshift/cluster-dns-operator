@@ -30,3 +30,5 @@ spec:
             - name: OPERATOR_NAME
               value: "cluster-dns-operator"
       serviceAccountName: cluster-dns-operator
+      tolerations:
+      - operator: Exists # dns operator should be schedulable always.
