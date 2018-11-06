@@ -16,14 +16,19 @@ if [[ "${TEMP_COMMIT}" == "true" ]]; then
 fi
 
 REV=$(git rev-parse --short HEAD)
-docker build -t $REPO:$REV .
-docker push $REPO:$REV
+if [[ -z "${DOCKER+1}" ]] && command -v buildah >& /dev/null; then
+  buildah bud -t $REPO:$REV .
+  buildah push $REPO:$REV docker://$REPO:$REV
+else
+  docker build -t $REPO:$REV .
+  docker push $REPO:$REV
+fi
 
 if [[ "${TEMP_COMMIT}" == "true" ]]; then
   git reset --soft HEAD~1
 fi
 
-cp -R manifests/ $MANIFESTS
+cp -R manifests/* $MANIFESTS
 cat manifests/0000_08_cluster-dns-operator_02-deployment.yaml | sed "s~openshift/origin-cluster-dns-operator:latest~$REPO:$REV~" > "$MANIFESTS/0000_08_cluster-dns-operator_02-deployment.yaml"
 
 echo "Pushed $REPO:$REV"
