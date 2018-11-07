@@ -39,6 +39,9 @@ func main() {
 	resyncPeriod := 10 * time.Minute
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
+	// TODO Use a named constant for the application's namespace or get the
+	// namespace from config.
+	sdk.Watch("apps/v1", "DaemonSet", "openshift-cluster-dns", resyncPeriod)
 
 	kubeClient := k8sclient.GetKubeClient()
 
