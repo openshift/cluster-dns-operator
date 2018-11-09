@@ -194,10 +194,15 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 	if err != nil {
 		return fmt.Errorf("couldn't build service: %v", err)
 	}
-	service.SetOwnerReferences([]metav1.OwnerReference{dsRef})
-	err = sdk.Create(service)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create service: %v", err)
+	err = sdk.Get(service)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to fetch service %s, %v", service.Name, err)
+		}
+		service.SetOwnerReferences([]metav1.OwnerReference{dsRef})
+		if err = sdk.Create(service); err != nil {
+			return fmt.Errorf("failed to create service: %v", err)
+		}
 	}
 
 	return nil
