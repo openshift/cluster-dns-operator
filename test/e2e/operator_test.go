@@ -19,7 +19,7 @@ func TestOperatorAvailable(t *testing.T) {
 	co := &osv1.ClusterOperator{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterOperator",
-			APIVersion: "operatorstatus.openshift.io/v1",
+			APIVersion: osv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "openshift-dns",
