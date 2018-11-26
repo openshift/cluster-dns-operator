@@ -3,6 +3,10 @@ apiVersion: image.openshift.io/v1
 spec:
   tags:
   - name: cluster-dns-operator
-    from: 
+    from:
       kind: "DockerImage"
       name: "openshift/origin-cluster-dns-operator:latest"
+  - name: coredns
+    from:
+      kind: "DockerImage"
+      name: "openshift/origin-coredns:v4.0"

@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	"github.com/openshift/cluster-dns-operator/pkg/util"
 
 	"github.com/apparentlymart/go-cidr/cidr"
@@ -39,10 +40,11 @@ func MustAssetReader(asset string) io.Reader {
 // files. It provides a point of control to mutate the static resources with
 // provided configuration.
 type Factory struct {
+	config operator.Config
 }
 
-func NewFactory() *Factory {
-	return &Factory{}
+func NewFactory(config operator.Config) *Factory {
+	return &Factory{config: config}
 }
 
 // ClusterDNSDefaultCR builds a default cluster DNS with a cluster IP set to the
@@ -146,6 +148,9 @@ func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS) (*appsv1.DaemonSet, 
 	if !coreFileVolumeFound {
 		return nil, fmt.Errorf("volume 'config-volume' not found")
 	}
+
+	ds.Spec.Template.Spec.Containers[0].Image = f.config.CoreDNSImage
+
 	return ds, nil
 }
 
