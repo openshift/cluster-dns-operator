@@ -11,7 +11,11 @@ import (
 )
 
 func TestManifests(t *testing.T) {
-	f := NewFactory(operator.Config{CoreDNSImage: "quay.io/openshift/coredns:test"})
+	config := operator.Config{
+		CoreDNSImage: "quay.io/openshift/coredns:test",
+	}
+
+	f := NewFactory(config)
 
 	dns := &dnsv1alpha1.ClusterDNS{
 		ObjectMeta: metav1.ObjectMeta{
@@ -38,15 +42,20 @@ func TestManifests(t *testing.T) {
 	if _, err := f.DNSConfigMap(dns); err != nil {
 		t.Errorf("invalid DNSClusterRoleBinding: %v", err)
 	}
-	if _, err := f.DNSDaemonSet(dns); err != nil {
+	if ds, err := f.DNSDaemonSet(dns); err != nil {
 		t.Errorf("invalid DNSDaemonSet: %v", err)
+	} else {
+		// Validate the daemonset
+		if e, a := config.CoreDNSImage, ds.Spec.Template.Spec.Containers[0].Image; e != a {
+			t.Errorf("expected daemonset image %q, got %q", e, a)
+		}
 	}
 	if _, err := f.DNSService(dns); err != nil {
 		t.Errorf("invalid DNSService: %v", err)
 	}
 }
 
-func TestDefaultCluserDNS(t *testing.T) {
+func TestDefaultClusterDNS(t *testing.T) {
 	ic := &util.InstallConfig{
 		Networking: util.NetworkingConfig{
 			ServiceCIDR: "10.3.0.0/16",
