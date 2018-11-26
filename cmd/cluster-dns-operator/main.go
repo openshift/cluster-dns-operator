@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"os"
 	"runtime"
 	"time"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
+	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	stub "github.com/openshift/cluster-dns-operator/pkg/stub"
 	"github.com/openshift/cluster-dns-operator/pkg/util"
 
@@ -50,10 +52,19 @@ func main() {
 		logrus.Fatalf("could't get installconfig: %v", err)
 	}
 
+	coreDNSImage := os.Getenv("IMAGE")
+	if len(coreDNSImage) == 0 {
+		logrus.Fatalf("IMAGE environment variable is required")
+	}
+
+	operatorConfig := operator.Config{
+		CoreDNSImage: coreDNSImage,
+	}
+
 	handler := &stub.Handler{
 		InstallConfig:   ic,
 		Namespace:       namespace,
-		ManifestFactory: manifests.NewFactory(),
+		ManifestFactory: manifests.NewFactory(operatorConfig),
 	}
 
 	if err := handler.EnsureDefaultClusterDNS(); err != nil {

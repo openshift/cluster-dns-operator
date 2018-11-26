@@ -17,7 +17,7 @@ spec:
       serviceAccountName: dns
       containers:
       - name: dns
-        image: "docker.io/openshift/origin-coredns:v3.11.0"
+        # image is set at runtime
         imagePullPolicy: IfNotPresent
         command: [ "coredns" ]
         args: [ "-conf", "/etc/coredns/Corefile" ]

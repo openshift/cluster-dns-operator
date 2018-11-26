@@ -29,6 +29,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: OPERATOR_NAME
               value: "cluster-dns-operator"
+            - name: IMAGE
+              value: openshift/origin-coredns:v4.0
       serviceAccountName: cluster-dns-operator
       tolerations:
       - operator: Exists # dns operator should be schedulable always.
