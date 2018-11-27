@@ -1,0 +1,55 @@
+# Node resolver for internal registry
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: cluster-dns-node-resolver
+  namespace: openshift-cluster-dns-operator
+  labels:
+    openshift-app: dns-node-resolver
+spec:
+  selector:
+    matchLabels:
+      openshift-app: dns-node-resolver
+  template:
+    metadata:
+      labels:
+        openshift-app: dns-node-resolver
+    spec:
+      dnsPolicy: ClusterFirst
+      tolerations:
+      # tolerate all taints so that DNS node resolver is always present on all nodes
+      - operator: Exists
+      serviceAccountName: default
+      volumes:
+       - name: hosts-file
+         hostPath:
+           path: /etc/hosts
+           type: File
+      containers:
+      - name: dns-node-resolver
+        image: "openshift/origin-cli:v4.0"
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: hosts-file
+          mountPath: /etc/hosts
+        command:
+        - /bin/bash
+        - -c
+        - |
+          #!/bin/bash
+          set -euo pipefail
+
+          # TODO: Is there one global registry or multiple registries for dev, test and external users?
+          REGISTRY_SERVICE="docker-registry.default.svc"
+          OPENSHIFT_MARKER="openshift-generated-node-resolver"
+          HOSTS_FILE="/etc/hosts"
+          TEMP_FILE="/etc/hosts.tmp"
+
+          while true; do
+            ( grep -v "${OPENSHIFT_MARKER}" "${HOSTS_FILE}"; getent -s dns hosts "${REGISTRY_SERVICE}" | sed 's/$/ # '"${OPENSHIFT_MARKER}"'/' ) > "${TEMP_FILE}" && \
+            cp "${TEMP_FILE}" "${HOSTS_FILE}"
+            sleep 60
+          done
+
