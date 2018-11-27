@@ -2,12 +2,7 @@
 set -uo pipefail
 
 # Disable the CVO
-oc patch -n openshift-cluster-version daemonsets/cluster-version-operator --patch '{"spec": {"template": {"spec": {"nodeSelector": {"node-role.kubernetes.io/fake": ""}}}}}'
-
-# Uninstall kube-dns
-oc scale -n kube-system --replicas 0 deployments/kube-core-operator
-oc scale -n kube-system --replicas 0 deployments/kube-dns
-oc delete -n kube-system services/kube-dns
+oc scale --replicas 0 -n openshift-cluster-version deployments/cluster-version-operator
 
 # Uninstall cluster-dns-operator
 oc delete namespaces/openshift-cluster-dns-operator

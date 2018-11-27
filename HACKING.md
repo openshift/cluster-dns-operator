@@ -1,86 +1,48 @@
 # Cluster DNS Operator Hacking
 
+## Building
 
-## Local development
+To build the operator, run:
 
-It's possible (and useful) to develop the operator locally targeting a remote cluster.
+```
+$ make build
+```
+
+## Developing
 
 ### Prerequisites
 
-* An OpenShift cluster with at least a master, and compute node. 
+* An [OpenShift cluster](https://github.com/openshift/installer)
 * An admin-scoped `KUBECONFIG` for the cluster.
-* The [operator-sdk](https://github.com/operator-framework/operator-sdk).
 
-#### GCP test clusters
-
-One reliable and hands-free way to create a suitable test cluster and `KUBECONFIG` in GCP is to use the [openshift/release](https://github.com/openshift/release/tree/master/cluster/test-deploy) tooling.
-
-### Building
-
-To build the operator during development, use the standard Go toolchain:
+Uninstall the existing operator and all its managed components:
 
 ```
-$ go build ./...
+$ hack/uninstall.sh
 ```
 
-### Running
-
-To run the operator, first deploy the custom resource definitions:
+Build a new image and custom manifests:
 
 ```
-$ oc create -f deploy/crd.yaml
+$ REPO=docker.io/you/origin-cluster-dns-operator make release-local
 ```
 
-Then, use the operator-sdk to launch the operator:
+Follow the instructions to install the operator, e.g.:
 
 ```
-$ operator-sdk up local namespace default --kubeconfig=$KUBECONFIG
-```
-
-If you're using the `openshift/release` tooling, `KUBECONFIG` will be something like `$RELEASE_REPO/cluster/test-deploy/gcp-dev/admin.kubeconfig`.
-
-To test the default `ClusterDNS` manifest:
-
-```
-$ oc create -f deploy/cr.yaml
+$ oc apply -f /tmp/manifests/path
 ```
 
 ## Tests
 
-### Integration tests
-
-Integration tests are still very immature. To run them, start with an OpenShift 4.0 cluster and then run the following,
-substituting for your own details where appropriate. This assumes `KUBECONFIG` is set.
+Run unit tests:
 
 ```
-# 1. Uninstall any existing cluster-version-operator and cluster-dns-operator.
-$ hack/uninstall.sh
-
-# 2. Build and push a new cluster-dns-operator image.
-$ REPO=docker.io/username/origin-cluster-dns-operator make release-local
-
-# 3. Run `oc apply` as instructed to install the locally-built operator.
-
-# 4. Run integration tests against the cluster.
-$ CLUSTER_NAME=your-cluster-name make test-integration
+$ make test
 ```
 
-**Important**: Don't run these tests in a cluster where data loss is a concern.
-
-### End-to-end tests
-
-The [OpenShift/Kubernetes DNS e2e tests](https://github.com/openshift/origin) must pass against a cluster using cluster-dns-operator.
-
-To run all of them, try:
+Assuming `KUBECONFIG` is set, run end-to-end tests:
 
 ```
-# From a clone of https://github.com/openshift/origin...
-$ FOCUS='DNS' SKIP='\[Disabled:.+\]|\[Disruptive\]|\[Skipped\]|\[Slow\]|\[Flaky\]|\[local\]|\[Local\]' TEST_ONLY=1 test/extended/conformance.sh
-```
-
-To run the bare minimum smoke test, try:
-
-```
-# From a clone of https://github.com/openshift/origin...
-$ FOCUS='should provide DNS for the cluster' SKIP='\[Disabled:.+\]|\[Disruptive\]|\[Skipped\]|\[Slow\]|\[Flaky\]|\[local\]|\[Local\]' TEST_ONLY=1 test/extended/conformance.sh
+$ make test-e2e
 ```
