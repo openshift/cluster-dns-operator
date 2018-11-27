@@ -5,7 +5,7 @@ Cluster DNS Operator deploys and manages [CoreDNS](https://coredns.io) to provid
 The operator tries to be useful out of the box by creating a working default deployment based on the cluster's configuration.
 
 * The default cluster domain is `cluster.local`.
-* Configuration of the CoreDNS [Corefile](https://coredns.io/manual/toc/#configuration) or [kubernetes plugin](https://coredns.io/plugins/kubernetes/) are not yet supported.
+* Configuration of the CoreDNS [Corefile](https://coredns.io/manual/toc/#configuration) or [kubernetes plugin](https://coredns.io/plugins/kubernetes/) is not yet supported.
 
 ## How it works
 
