@@ -18,9 +18,9 @@ spec:
       containers:
         - name: cluster-dns-operator
           image: openshift/origin-cluster-dns-operator:latest
+          imagePullPolicy: IfNotPresent
           command:
           - cluster-dns-operator
-          imagePullPolicy: IfNotPresent
           terminationGracePeriodSeconds: 2
           env:
             - name: WATCH_NAMESPACE
@@ -31,6 +31,8 @@ spec:
               value: "cluster-dns-operator"
             - name: IMAGE
               value: openshift/origin-coredns:v4.0
+            - name: OPENSHIFT_CLI_IMAGE
+              value: openshift/origin-cli:v4.0
       serviceAccountName: cluster-dns-operator
       tolerations:
       - operator: Exists # dns operator should be schedulable always.

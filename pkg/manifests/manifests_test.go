@@ -12,7 +12,8 @@ import (
 
 func TestManifests(t *testing.T) {
 	config := operator.Config{
-		CoreDNSImage: "quay.io/openshift/coredns:test",
+		CoreDNSImage:      "quay.io/openshift/coredns:test",
+		OpenshiftCLIImage: "openshift/origin-cli:test",
 	}
 
 	f := NewFactory(config)
@@ -46,8 +47,39 @@ func TestManifests(t *testing.T) {
 		t.Errorf("invalid DNSDaemonSet: %v", err)
 	} else {
 		// Validate the daemonset
-		if e, a := config.CoreDNSImage, ds.Spec.Template.Spec.Containers[0].Image; e != a {
-			t.Errorf("expected daemonset image %q, got %q", e, a)
+		if len(ds.Spec.Template.Spec.Containers) != 2 {
+			t.Errorf("expected number of daemonset containers 2, got %d", len(ds.Spec.Template.Spec.Containers))
+		}
+		for _, c := range ds.Spec.Template.Spec.Containers {
+			switch c.Name {
+			case "dns":
+				if e, a := config.CoreDNSImage, c.Image; e != a {
+					t.Errorf("expected daemonset dns image %q, got %q", e, a)
+				}
+			case "dns-node-resolver":
+				if e, a := config.OpenshiftCLIImage, c.Image; e != a {
+					t.Errorf("expected daemonset dns node resolver image %q, got %q", e, a)
+				}
+
+				envs := map[string]string{}
+				for _, e := range c.Env {
+					envs[e.Name] = e.Value
+				}
+				nameserver, ok := envs["NAMESERVER"]
+				if !ok {
+					t.Errorf("NAMESERVER env for dns node resolver image not found")
+				} else if *dns.Spec.ClusterIP != nameserver {
+					t.Errorf("expected NAMESERVER env for dns node resolver image %q, got %q", *dns.Spec.ClusterIP, nameserver)
+				}
+				clusterDomain, ok := envs["CLUSTER_DOMAIN"]
+				if !ok {
+					t.Errorf("CLUSTER_DOMAIN env for dns node resolver image not found")
+				} else if *dns.Spec.ClusterDomain != clusterDomain {
+					t.Errorf("expected CLUSTER_DOMAIN env for dns node resolver image %q, got %q", *dns.Spec.ClusterDomain, clusterDomain)
+				}
+			default:
+				t.Errorf("unexpected daemonset container %q", c.Name)
+			}
 		}
 	}
 	if _, err := f.DNSService(dns); err != nil {
@@ -61,7 +93,12 @@ func TestDefaultClusterDNS(t *testing.T) {
 			ServiceCIDR: "10.3.0.0/16",
 		},
 	}
-	def, err := NewFactory(operator.Config{CoreDNSImage: "quay.io/openshift/coredns:test"}).ClusterDNSDefaultCR(ic)
+	config := operator.Config{
+		CoreDNSImage:      "quay.io/openshift/coredns:test",
+		OpenshiftCLIImage: "openshift/origin-cli:test",
+	}
+
+	def, err := NewFactory(config).ClusterDNSDefaultCR(ic)
 	if err != nil {
 		t.Fatal(err)
 	}

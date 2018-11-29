@@ -149,8 +149,30 @@ func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS) (*appsv1.DaemonSet, 
 		return nil, fmt.Errorf("volume 'config-volume' not found")
 	}
 
-	ds.Spec.Template.Spec.Containers[0].Image = f.config.CoreDNSImage
-
+	for i, c := range ds.Spec.Template.Spec.Containers {
+		switch c.Name {
+		case "dns":
+			ds.Spec.Template.Spec.Containers[i].Image = f.config.CoreDNSImage
+		case "dns-node-resolver":
+			ds.Spec.Template.Spec.Containers[i].Image = f.config.OpenshiftCLIImage
+			if dns.Spec.ClusterIP != nil && dns.Spec.ClusterDomain != nil {
+				if c.Env == nil {
+					c.Env = []corev1.EnvVar{}
+				}
+				envs := []corev1.EnvVar{
+					{
+						Name:  "NAMESERVER",
+						Value: *dns.Spec.ClusterIP,
+					},
+					{
+						Name:  "CLUSTER_DOMAIN",
+						Value: *dns.Spec.ClusterDomain,
+					},
+				}
+				ds.Spec.Template.Spec.Containers[i].Env = append(ds.Spec.Template.Spec.Containers[i].Env, envs...)
+			}
+		}
+	}
 	return ds, nil
 }
 

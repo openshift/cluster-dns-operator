@@ -56,9 +56,14 @@ func main() {
 	if len(coreDNSImage) == 0 {
 		logrus.Fatalf("IMAGE environment variable is required")
 	}
+	cliImage := os.Getenv("OPENSHIFT_CLI_IMAGE")
+	if len(cliImage) == 0 {
+		logrus.Fatalf("OPENSHIFT_CLI_IMAGE environment variable is required")
+	}
 
 	operatorConfig := operator.Config{
-		CoreDNSImage: coreDNSImage,
+		CoreDNSImage:      coreDNSImage,
+		OpenshiftCLIImage: cliImage,
 	}
 
 	handler := &stub.Handler{
