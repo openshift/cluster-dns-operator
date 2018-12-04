@@ -55,7 +55,9 @@ spec:
         # env NAMESERVER and CLUSTER_DOMAIN are set at runtime
         env:
         - name: SERVICES
-          # comma or space separated list of services
+          # Comma or space separated list of services
+          # NOTE: For now, ensure these are relative names; for each relative name,
+          # an alias with the CLUSTER_DOMAIN suffix will also be added.
           value: "image-registry.openshift-image-registry.svc"
         command:
         - /bin/bash
@@ -68,7 +70,7 @@ spec:
           HOSTS_FILE="/etc/hosts"
           TEMP_FILE="/etc/hosts.tmp"
 
-          IFS=', ' read -r -a services <<< "${SERVICES:-'image-registry.openshift-image-registry.svc'}"
+          IFS=', ' read -r -a services <<< "${SERVICES}"
 
           # Make a temporary file with the old hosts file's attributes.
           cp -f --attributes-only "${HOSTS_FILE}" "${TEMP_FILE}"
@@ -94,7 +96,7 @@ spec:
               # Append resolver entries for services
               for svc in "${!svc_ips[@]}"; do
                 for ip in ${svc_ips[${svc}]}; do
-                  echo "${ip} ${svc} # ${OPENSHIFT_MARKER}" >> "${TEMP_FILE}"
+                  echo "${ip} ${svc} ${svc}.${CLUSTER_DOMAIN} # ${OPENSHIFT_MARKER}" >> "${TEMP_FILE}"
                 done
               done
 
