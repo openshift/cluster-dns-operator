@@ -56,7 +56,7 @@ spec:
         env:
         - name: SERVICES
           # comma or space separated list of services
-          value: "docker-registry.default.svc"
+          value: "image-registry.openshift-image-registry.svc"
         command:
         - /bin/bash
         - -c
@@ -68,7 +68,7 @@ spec:
           HOSTS_FILE="/etc/hosts"
           TEMP_FILE="/etc/hosts.tmp"
 
-          IFS=', ' read -r -a services <<< "${SERVICES:-"docker-registry.default.svc"}"
+          IFS=', ' read -r -a services <<< "${SERVICES:-'image-registry.openshift-image-registry.svc'}"
 
           # Make a temporary file with the old hosts file's attributes.
           cp -f --attributes-only "${HOSTS_FILE}" "${TEMP_FILE}"
