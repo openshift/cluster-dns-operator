@@ -259,7 +259,7 @@
     "nfs",
     "xfs"
   ]
-  revision = "aa55a523dc0a8297edf51bb75e8eec13eb3be45d"
+  revision = "1dc9a6cbc91aacc3e8b2d63db4d2e957a5394ac4"
 
 [[projects]]
   name = "github.com/sirupsen/logrus"
@@ -350,7 +350,7 @@
     "internal/fastwalk",
     "internal/gopathwalk"
   ]
-  revision = "e5f3ab76ea4b26ebea349e4994ee72d38250c9b0"
+  revision = "3832e276fb482db22223edf38dc9166e795131e0"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -608,6 +608,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ad9639e426324ffee35abdc70466d8f694cc9f9a0a337091dbaecbc906c2f6c7"
+  inputs-digest = "cc8712e674007b35694f672e17b5a817c264f0f96534f25ecf0a9e84f5ce21af"
   solver-name = "gps-cdcl"
   solver-version = 1
