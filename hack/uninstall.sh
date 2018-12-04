@@ -6,7 +6,7 @@ oc scale --replicas 0 -n openshift-cluster-version deployments/cluster-version-o
 
 # Uninstall cluster-dns-operator
 oc delete namespaces/openshift-cluster-dns-operator
-oc patch -n openshift-dns-operator clusterdnses/default --patch '{"metadata":{"finalizers": []}}' --type=merge
+oc patch -n openshift-cluster-dns-operator clusterdnses/default --patch '{"metadata":{"finalizers": []}}' --type=merge
 oc delete --force --grace-period 0 -n openshift-cluster-dns-operator clusterdnses/default
 oc delete namespaces/openshift-cluster-dns
 oc delete clusterroles/cluster-dns-operator:operator
