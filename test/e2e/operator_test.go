@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/openshift/api/config/v1"
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
-	osv1 "github.com/openshift/cluster-version-operator/pkg/apis/operatorstatus.openshift.io/v1"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 
@@ -16,14 +16,13 @@ import (
 )
 
 func TestOperatorAvailable(t *testing.T) {
-	co := &osv1.ClusterOperator{
+	co := &configv1.ClusterOperator{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterOperator",
-			APIVersion: "operatorstatus.openshift.io/v1",
+			APIVersion: "config.openshift.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "openshift-dns",
-			Namespace: "openshift-dns-operator",
+			Name: "openshift-dns-operator",
 		},
 	}
 	err := wait.PollImmediate(1*time.Second, 10*time.Minute, func() (bool, error) {
@@ -32,8 +31,8 @@ func TestOperatorAvailable(t *testing.T) {
 		}
 
 		for _, cond := range co.Status.Conditions {
-			if cond.Type == osv1.OperatorAvailable &&
-				cond.Status == osv1.ConditionTrue {
+			if cond.Type == configv1.OperatorAvailable &&
+				cond.Status == configv1.ConditionTrue {
 				return true, nil
 			}
 		}

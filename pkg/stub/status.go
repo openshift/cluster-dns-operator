@@ -6,10 +6,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	configv1 "github.com/openshift/api/config/v1"
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/util/clusteroperator"
 	operatorversion "github.com/openshift/cluster-dns-operator/version"
-	osv1 "github.com/openshift/cluster-version-operator/pkg/apis/operatorstatus.openshift.io/v1"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -24,22 +24,20 @@ import (
 // syncOperatorStatus computes the operator's current status and therefrom
 // creates or updates the ClusterOperator resource for the operator.
 func (h *Handler) syncOperatorStatus() {
-	co := &osv1.ClusterOperator{
+	co := &configv1.ClusterOperator{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterOperator",
-			APIVersion: "operatorstatus.openshift.io/v1",
+			APIVersion: "config.openshift.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: h.Namespace,
-			// TODO Use a named constant or get name from config.
-			Name: "openshift-dns",
+			Name: "openshift-dns-operator",
 		},
 	}
 	err := sdk.Get(co)
 	isNotFound := errors.IsNotFound(err)
 	if err != nil && !isNotFound {
-		logrus.Errorf("syncOperatorStatus: error getting ClusterOperator %s/%s: %v",
-			co.Namespace, co.Name, err)
+		logrus.Errorf("syncOperatorStatus: error getting ClusterOperator %s: %v",
+			co.Name, err)
 
 		return
 	}
@@ -59,11 +57,11 @@ func (h *Handler) syncOperatorStatus() {
 		co.Status.Version = operatorversion.Version
 
 		if err := sdk.Create(co); err != nil {
-			logrus.Errorf("syncOperatorStatus: failed to create ClusterOperator %s/%s: %v",
-				co.Namespace, co.Name, err)
+			logrus.Errorf("syncOperatorStatus: failed to create ClusterOperator %s: %v",
+				co.Name, err)
 		} else {
-			logrus.Infof("syncOperatorStatus: created ClusterOperator %s/%s (UID %v)",
-				co.Namespace, co.Name, co.UID)
+			logrus.Infof("syncOperatorStatus: created ClusterOperator %s (UID %v)",
+				co.Name, co.UID)
 		}
 	}
 
@@ -87,8 +85,8 @@ func (h *Handler) syncOperatorStatus() {
 	}
 
 	if _, err := resourceClient.UpdateStatus(unstructObj); err != nil {
-		logrus.Errorf("syncOperatorStatus: UpdateStatus on %s/%s: %v",
-			co.Namespace, co.Name, err)
+		logrus.Errorf("syncOperatorStatus: UpdateStatus on %s: %v",
+			co.Name, err)
 	}
 }
 
@@ -140,31 +138,31 @@ func (h *Handler) getOperatorState() (*corev1.Namespace, []dnsv1alpha1.ClusterDN
 }
 
 // computeStatusConditions computes the operator's current state.
-func computeStatusConditions(conditions []osv1.ClusterOperatorStatusCondition, ns *corev1.Namespace, dnses []dnsv1alpha1.ClusterDNS, daemonsets []appsv1.DaemonSet) []osv1.ClusterOperatorStatusCondition {
-	failingCondition := &osv1.ClusterOperatorStatusCondition{
-		Type:   osv1.OperatorFailing,
-		Status: osv1.ConditionUnknown,
+func computeStatusConditions(conditions []configv1.ClusterOperatorStatusCondition, ns *corev1.Namespace, dnses []dnsv1alpha1.ClusterDNS, daemonsets []appsv1.DaemonSet) []configv1.ClusterOperatorStatusCondition {
+	failingCondition := &configv1.ClusterOperatorStatusCondition{
+		Type:   configv1.OperatorFailing,
+		Status: configv1.ConditionUnknown,
 	}
 	if ns == nil {
-		failingCondition.Status = osv1.ConditionTrue
+		failingCondition.Status = configv1.ConditionTrue
 		failingCondition.Reason = "NoNamespace"
 		failingCondition.Message = "DNS namespace does not exist"
 	} else {
-		failingCondition.Status = osv1.ConditionFalse
+		failingCondition.Status = configv1.ConditionFalse
 	}
 	conditions = clusteroperator.SetStatusCondition(conditions,
 		failingCondition)
 
-	progressingCondition := &osv1.ClusterOperatorStatusCondition{
-		Type:   osv1.OperatorProgressing,
-		Status: osv1.ConditionUnknown,
+	progressingCondition := &configv1.ClusterOperatorStatusCondition{
+		Type:   configv1.OperatorProgressing,
+		Status: configv1.ConditionUnknown,
 	}
 	numClusterDNSes := len(dnses)
 	numDaemonsets := len(daemonsets)
 	if numClusterDNSes == numDaemonsets {
-		progressingCondition.Status = osv1.ConditionFalse
+		progressingCondition.Status = configv1.ConditionFalse
 	} else {
-		progressingCondition.Status = osv1.ConditionTrue
+		progressingCondition.Status = configv1.ConditionTrue
 		progressingCondition.Reason = "Reconciling"
 		progressingCondition.Message = fmt.Sprintf(
 			"have %d DaemonSets, want %d",
@@ -173,9 +171,9 @@ func computeStatusConditions(conditions []osv1.ClusterOperatorStatusCondition, n
 	conditions = clusteroperator.SetStatusCondition(conditions,
 		progressingCondition)
 
-	availableCondition := &osv1.ClusterOperatorStatusCondition{
-		Type:   osv1.OperatorAvailable,
-		Status: osv1.ConditionUnknown,
+	availableCondition := &configv1.ClusterOperatorStatusCondition{
+		Type:   configv1.OperatorAvailable,
+		Status: configv1.ConditionUnknown,
 	}
 	dsAvailable := map[string]bool{}
 	for _, ds := range daemonsets {
@@ -196,9 +194,9 @@ func computeStatusConditions(conditions []osv1.ClusterOperatorStatusCondition, n
 		}
 	}
 	if len(unavailable) == 0 {
-		availableCondition.Status = osv1.ConditionTrue
+		availableCondition.Status = configv1.ConditionTrue
 	} else {
-		availableCondition.Status = osv1.ConditionFalse
+		availableCondition.Status = configv1.ConditionFalse
 		availableCondition.Reason = "DaemonSetNotAvailable"
 		availableCondition.Message = strings.Join(unavailable, "\n")
 	}
