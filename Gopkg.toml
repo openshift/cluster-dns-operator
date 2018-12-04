@@ -29,9 +29,11 @@ required = [
 
 [[constraint]]
   name = "github.com/operator-framework/operator-sdk"
-  # The version rule is used for a specific release and the master branch for in between releases.
-  branch = "master"
-  # version = "=v0.0.6"
+  version = "v0.0.6"
+
+[[constraint]]
+  name = "github.com/openshift/api"
+  revision = "83b2fe56301417028bd52e56edd75768e2ea051c"
 
 [[constraint]]
   name = "github.com/kevinburke/go-bindata"
@@ -60,7 +62,3 @@ required = [
 [[override]]
   name = "sigs.k8s.io/controller-runtime"
   version = "v0.1.3"
-
-[[constraint]]
-  name = "github.com/openshift/cluster-version-operator"
-  revision = "fe673cb712fa5e27001488fc088ac91bb553353d"
