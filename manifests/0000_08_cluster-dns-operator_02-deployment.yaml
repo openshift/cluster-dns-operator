@@ -15,6 +15,7 @@ spec:
     spec:
       dnsPolicy: Default
       restartPolicy: Always
+      priorityClassName: system-cluster-critical
       containers:
         - name: cluster-dns-operator
           image: openshift/origin-cluster-dns-operator:latest
