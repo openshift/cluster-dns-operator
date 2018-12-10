@@ -15,6 +15,7 @@ spec:
         openshift-app: dns
     spec:
       serviceAccountName: dns
+      priorityClassName: system-node-critical
       containers:
       - name: dns
         # image is set at runtime
