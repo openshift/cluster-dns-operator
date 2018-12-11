@@ -1,23 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cluster-dns-operator
-  namespace: openshift-cluster-dns-operator
+  name: dns-operator
+  namespace: openshift-dns-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: cluster-dns-operator
+      name: dns-operator
   template:
     metadata:
       labels:
-        name: cluster-dns-operator
+        name: dns-operator
     spec:
       dnsPolicy: Default
       restartPolicy: Always
       priorityClassName: system-cluster-critical
+      serviceAccountName: dns-operator
       containers:
-        - name: cluster-dns-operator
+        - name: dns-operator
           image: openshift/origin-cluster-dns-operator:latest
           imagePullPolicy: IfNotPresent
           command:
@@ -28,12 +29,9 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: OPERATOR_NAME
-              value: "cluster-dns-operator"
             - name: IMAGE
               value: openshift/origin-coredns:v4.0
             - name: OPENSHIFT_CLI_IMAGE
               value: openshift/origin-cli:v4.0
-      serviceAccountName: cluster-dns-operator
       tolerations:
       - operator: Exists # dns operator should be schedulable always.

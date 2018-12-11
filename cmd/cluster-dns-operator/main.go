@@ -43,7 +43,7 @@ func main() {
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
 	// TODO Use a named constant for the application's namespace or get the
 	// namespace from config.
-	sdk.Watch("apps/v1", "DaemonSet", "openshift-cluster-dns", resyncPeriod)
+	sdk.Watch("apps/v1", "DaemonSet", "openshift-dns", resyncPeriod)
 
 	kubeClient := k8sclient.GetKubeClient()
 
