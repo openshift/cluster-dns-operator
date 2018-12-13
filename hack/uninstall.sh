@@ -5,10 +5,11 @@ set -uo pipefail
 oc scale --replicas 0 -n openshift-cluster-version deployments/cluster-version-operator
 
 # Uninstall openshift-dns-operator
-oc patch -n openshift-dns-operator clusterdnses/default --patch '{"metadata":{"finalizers": []}}' --type=merge
-oc delete --force --grace-period 0 -n openshift-dns-operator clusterdnses/default
+oc patch clusterdnses/default --patch '{"metadata":{"finalizers": []}}' --type=merge
+oc delete --force --grace-period 0 clusterdnses/default
 oc delete namespaces/openshift-dns-operator
 oc delete namespaces/openshift-dns
+oc delete clusteroperator openshift-dns-operator
 oc delete clusterroles/openshift-dns-operator
 oc delete clusterroles/openshift-dns
 oc delete clusterrolebindings/openshift-dns-operator
