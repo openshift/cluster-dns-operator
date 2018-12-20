@@ -3,7 +3,7 @@ apiVersion: dns.openshift.io/v1alpha1
 kind: ClusterDNS
 metadata:
   name: default
-  namespace: openshift-cluster-dns-operator 
+  namespace: openshift-dns-operator
   # Ensure that only the operator can delete the default cluster dns object.
   finalizers:
   - dns.openshift.io/default-cluster-dns

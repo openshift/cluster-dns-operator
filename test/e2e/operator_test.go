@@ -23,7 +23,7 @@ func TestOperatorAvailable(t *testing.T) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "openshift-dns",
-			Namespace: "openshift-cluster-dns-operator",
+			Namespace: "openshift-dns-operator",
 		},
 	}
 	err := wait.PollImmediate(1*time.Second, 10*time.Minute, func() (bool, error) {
@@ -53,7 +53,7 @@ func TestDefaultClusterDNSExists(t *testing.T) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "default",
-			Namespace: "openshift-cluster-dns-operator",
+			Namespace: "openshift-dns-operator",
 		},
 	}
 	err := wait.PollImmediate(1*time.Second, 10*time.Minute, func() (bool, error) {
