@@ -45,7 +45,7 @@ rules:
   - watch
 
 - apiGroups:
-  - operatorstatus.openshift.io
+  - config.openshift.io
   resources:
   - clusteroperators
   verbs:
@@ -53,7 +53,7 @@ rules:
   - get
 
 - apiGroups:
-  - operatorstatus.openshift.io
+  - config.openshift.io
   resources:
   - clusteroperators/status
   verbs:
