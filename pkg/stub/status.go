@@ -114,7 +114,7 @@ func (h *Handler) getOperatorState() (*corev1.Namespace, []dnsv1alpha1.ClusterDN
 			APIVersion: "dns.openshift.io/v1alpha1",
 		},
 	}
-	err = sdk.List(h.Namespace, dnsList,
+	err = sdk.List(corev1.NamespaceAll, dnsList,
 		sdk.WithListOptions(&metav1.ListOptions{}))
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf(

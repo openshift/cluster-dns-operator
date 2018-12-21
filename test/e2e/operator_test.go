@@ -51,8 +51,7 @@ func TestDefaultClusterDNSExists(t *testing.T) {
 			APIVersion: "dns.openshift.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "default",
-			Namespace: "openshift-dns-operator",
+			Name: "default",
 		},
 	}
 	err := wait.PollImmediate(1*time.Second, 10*time.Minute, func() (bool, error) {

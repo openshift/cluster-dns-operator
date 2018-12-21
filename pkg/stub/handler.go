@@ -13,6 +13,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -29,7 +30,6 @@ const (
 type Handler struct {
 	InstallConfig   *util.InstallConfig
 	ManifestFactory *manifests.Factory
-	Namespace       string
 }
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
@@ -76,7 +76,7 @@ func (h *Handler) reconcile() error {
 			APIVersion: "dns.openshift.io/v1alpha1",
 		},
 	}
-	err = sdk.List(h.Namespace, dnses, sdk.WithListOptions(&metav1.ListOptions{}))
+	err = sdk.List(corev1.NamespaceAll, dnses, sdk.WithListOptions(&metav1.ListOptions{}))
 	if err != nil {
 		return fmt.Errorf("failed to list clusterdnses: %v", err)
 	}

@@ -6,12 +6,6 @@ metadata:
   namespace: openshift-dns-operator
 rules:
 - apiGroups:
-  - dns.openshift.io
-  resources:
-  - "*"
-  verbs:
-  - "*"
-- apiGroups:
   - ""
   resources:
   - pods

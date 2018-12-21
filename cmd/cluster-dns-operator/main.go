@@ -13,9 +13,9 @@ import (
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	sdk "github.com/operator-framework/operator-sdk/pkg/sdk"
-	k8sutil "github.com/operator-framework/operator-sdk/pkg/util/k8sutil"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 
+	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 
 	"github.com/sirupsen/logrus"
@@ -34,13 +34,9 @@ func main() {
 
 	resource := "dns.openshift.io/v1alpha1"
 	kind := "ClusterDNS"
-	namespace, err := k8sutil.GetWatchNamespace()
-	if err != nil {
-		logrus.Fatalf("failed to get watch namespace: %v", err)
-	}
 	resyncPeriod := 10 * time.Minute
-	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
-	sdk.Watch(resource, kind, namespace, resyncPeriod)
+	logrus.Infof("Watching %s, %s, %d", resource, kind, resyncPeriod)
+	sdk.Watch(resource, kind, corev1.NamespaceAll, resyncPeriod)
 	// TODO Use a named constant for the application's namespace or get the
 	// namespace from config.
 	sdk.Watch("apps/v1", "DaemonSet", "openshift-dns", resyncPeriod)
@@ -68,7 +64,6 @@ func main() {
 
 	handler := &stub.Handler{
 		InstallConfig:   ic,
-		Namespace:       namespace,
 		ManifestFactory: manifests.NewFactory(operatorConfig),
 	}
 

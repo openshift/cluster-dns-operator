@@ -9,8 +9,7 @@ rules:
   resources:
   - clusterdnses
   verbs:
-  - list
-  - watch
+  - "*"
 
 - apiGroups:
   - apps

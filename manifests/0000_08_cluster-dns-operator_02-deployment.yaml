@@ -20,15 +20,10 @@ spec:
       containers:
         - name: dns-operator
           image: openshift/origin-cluster-dns-operator:latest
-          imagePullPolicy: IfNotPresent
           command:
           - cluster-dns-operator
           terminationGracePeriodSeconds: 2
           env:
-            - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
             - name: IMAGE
               value: openshift/origin-coredns:v4.0
             - name: OPENSHIFT_CLI_IMAGE
