@@ -110,6 +110,8 @@ spec:
             unset svc_ips
           done
       dnsPolicy: Default
+      nodeSelector:
+        beta.kubernetes.io/os: linux      
       volumes:
        - name: config-volume
          configMap:
