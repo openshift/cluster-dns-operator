@@ -67,6 +67,8 @@ spec:
           #!/bin/bash
           set -uo pipefail
 
+          trap 'kill $(jobs -p); exit 0' TERM
+
           OPENSHIFT_MARKER="openshift-generated-node-resolver"
           HOSTS_FILE="/etc/hosts"
           TEMP_FILE="/etc/hosts.tmp"
@@ -106,7 +108,7 @@ spec:
               cmp "${TEMP_FILE}" "${HOSTS_FILE}" || cp -f "${TEMP_FILE}" "${HOSTS_FILE}"
               # TEMP_FILE is not removed to avoid file create/delete and attributes copy churn
             fi
-            sleep 60
+            sleep 60 & wait
             unset svc_ips
           done
       dnsPolicy: Default
