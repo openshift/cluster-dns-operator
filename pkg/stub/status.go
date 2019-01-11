@@ -52,10 +52,9 @@ func (h *Handler) syncOperatorStatus() {
 	oldConditions := co.Status.Conditions
 	co.Status.Conditions = computeStatusConditions(oldConditions, ns,
 		dnses, daemonsets)
+	co.Status.Version = operatorversion.Version
 
 	if isNotFound {
-		co.Status.Version = operatorversion.Version
-
 		if err := sdk.Create(co); err != nil {
 			logrus.Errorf("syncOperatorStatus: failed to create ClusterOperator %s: %v",
 				co.Name, err)
