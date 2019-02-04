@@ -63,3 +63,57 @@ func ConditionsEqual(oldConditions, newConditions []configv1.ClusterOperatorStat
 
 	return true
 }
+
+// ObjectReferencesEqual returns true if and only if the provided slices of
+// object references are equal.
+func ObjectReferencesEqual(oldObjectReferences, newObjectReferences []configv1.ObjectReference) bool {
+	if len(newObjectReferences) != len(oldObjectReferences) {
+		return false
+	}
+
+	for _, refA := range oldObjectReferences {
+		foundMatchingRef := false
+
+		for _, refB := range newObjectReferences {
+			if refA.Name == refB.Name &&
+				refA.Namespace == refB.Namespace &&
+				refA.Resource == refB.Resource &&
+				refA.Group == refB.Group {
+				foundMatchingRef = true
+				break
+			}
+		}
+
+		if !foundMatchingRef {
+			return false
+		}
+	}
+
+	return true
+}
+
+// VersionsEqual returns true if and only if the provided slices of operand
+// versions are equal.
+func VersionsEqual(oldVersions, newVersions []configv1.OperandVersion) bool {
+	if len(newVersions) != len(oldVersions) {
+		return false
+	}
+
+	for _, versionA := range oldVersions {
+		foundMatchingVersion := false
+
+		for _, versionB := range newVersions {
+			if versionA.Name == versionB.Name &&
+				versionA.Version == versionB.Version {
+				foundMatchingVersion = true
+				break
+			}
+		}
+
+		if !foundMatchingVersion {
+			return false
+		}
+	}
+
+	return true
+}

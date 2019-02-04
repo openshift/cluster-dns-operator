@@ -6,6 +6,7 @@ import (
 
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
+	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	"github.com/openshift/cluster-dns-operator/pkg/util"
 	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
 
@@ -29,6 +30,7 @@ const (
 
 type Handler struct {
 	InstallConfig   *util.InstallConfig
+	Config          operator.Config
 	ManifestFactory *manifests.Factory
 }
 
