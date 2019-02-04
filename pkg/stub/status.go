@@ -9,7 +9,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/util/clusteroperator"
-	operatorversion "github.com/openshift/cluster-dns-operator/version"
+	"github.com/openshift/cluster-dns-operator/version"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -56,7 +56,26 @@ func (h *Handler) syncOperatorStatus() {
 	oldConditions := co.Status.Conditions
 	co.Status.Conditions = computeStatusConditions(oldConditions, ns,
 		dnses, daemonsets)
-	co.Status.Version = operatorversion.Version
+	co.Status.RelatedObjects = []configv1.ObjectReference{
+		{
+			Resource: "namespaces",
+			Name:     "openshift-dns-operator",
+		},
+		{
+			Resource: "namespaces",
+			Name:     "openshift-dns",
+		},
+	}
+	co.Status.Versions = []configv1.OperandVersion{
+		{
+			Name:    "operator",
+			Version: version.OperatorVersion,
+		},
+		{
+			Name:    version.DNSOperandName,
+			Version: version.DNSOperandVersion,
+		},
+	}
 
 	if isNotFound {
 		if err := sdk.Create(co); err != nil {

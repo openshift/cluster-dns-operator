@@ -1,5 +1,8 @@
 package version
 
 var (
-	Version = "0.0.1"
+	OperatorVersion = "v0.0.1"
+
+	DNSOperandName    = "dns"
+	DNSOperandVersion = "v0.0.1"
 )
