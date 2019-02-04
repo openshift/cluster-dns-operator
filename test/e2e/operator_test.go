@@ -22,7 +22,7 @@ func TestOperatorAvailable(t *testing.T) {
 			APIVersion: "config.openshift.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "openshift-dns-operator",
+			Name: "dns",
 		},
 	}
 	err := wait.PollImmediate(1*time.Second, 10*time.Minute, func() (bool, error) {

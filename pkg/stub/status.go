@@ -30,7 +30,7 @@ func (h *Handler) syncOperatorStatus() {
 			APIVersion: "config.openshift.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "openshift-dns-operator",
+			Name: "dns",
 		},
 	}
 	err := sdk.Get(co)
