@@ -33,7 +33,7 @@ required = [
 
 [[constraint]]
   name = "github.com/openshift/api"
-  revision = "83b2fe56301417028bd52e56edd75768e2ea051c"
+  revision = "31ed61683850951801cddda5b075fcb24a500532"
 
 [[constraint]]
   name = "github.com/kevinburke/go-bindata"
