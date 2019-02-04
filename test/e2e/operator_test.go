@@ -8,6 +8,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	dnshandler "github.com/openshift/cluster-dns-operator/pkg/stub"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 
@@ -22,7 +23,7 @@ func TestOperatorAvailable(t *testing.T) {
 			APIVersion: "config.openshift.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "openshift-dns-operator",
+			Name: dnshandler.DNSClusterOperatorName,
 		},
 	}
 	err := wait.PollImmediate(1*time.Second, 10*time.Minute, func() (bool, error) {

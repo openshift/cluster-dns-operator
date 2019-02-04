@@ -21,6 +21,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	DNSClusterOperatorName = "dns"
+)
+
 // syncOperatorStatus computes the operator's current status and therefrom
 // creates or updates the ClusterOperator resource for the operator.
 func (h *Handler) syncOperatorStatus() {
@@ -30,7 +34,7 @@ func (h *Handler) syncOperatorStatus() {
 			APIVersion: "config.openshift.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "openshift-dns-operator",
+			Name: DNSClusterOperatorName,
 		},
 	}
 	err := sdk.Get(co)
