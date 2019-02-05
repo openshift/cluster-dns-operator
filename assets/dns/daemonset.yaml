@@ -45,6 +45,12 @@ spec:
           timeoutSeconds: 5
           successThreshold: 1
           failureThreshold: 5
+        resources:
+          limits:
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 70Mi
       - name: dns-node-resolver
         # image is set at runtime
         imagePullPolicy: IfNotPresent
@@ -111,6 +117,9 @@ spec:
             sleep 60 & wait
             unset svc_ips
           done
+        resources:
+          requests:
+            cpu: 10m
       dnsPolicy: Default
       nodeSelector:
         beta.kubernetes.io/os: linux      
