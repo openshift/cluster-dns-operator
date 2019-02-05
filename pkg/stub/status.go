@@ -30,7 +30,7 @@ func (h *Handler) syncOperatorStatus() {
 			APIVersion: "config.openshift.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "openshift-dns-operator",
+			Name: "dns",
 		},
 	}
 	err := sdk.Get(co)
@@ -52,7 +52,30 @@ func (h *Handler) syncOperatorStatus() {
 	oldConditions := co.Status.Conditions
 	co.Status.Conditions = computeStatusConditions(oldConditions, ns,
 		dnses, daemonsets)
-	co.Status.Version = operatorversion.Version
+
+	oldRelatedObjects := co.Status.RelatedObjects
+	co.Status.RelatedObjects = []configv1.ObjectReference{
+		{
+			Resource: "namespaces",
+			Name:     "openshift-dns-operator",
+		},
+		{
+			Resource: "namespaces",
+			Name:     ns.Name,
+		},
+	}
+
+	oldVersions := co.Status.Versions
+	co.Status.Versions = []configv1.OperandVersion{
+		{
+			Name:    "operator",
+			Version: operatorversion.Version,
+		},
+		{
+			Name:    "coredns",
+			Version: h.Config.CoreDNSImage,
+		},
+	}
 
 	if isNotFound {
 		if err := sdk.Create(co); err != nil {
@@ -64,7 +87,9 @@ func (h *Handler) syncOperatorStatus() {
 		}
 	}
 
-	if clusteroperator.ConditionsEqual(oldConditions, co.Status.Conditions) {
+	if clusteroperator.ConditionsEqual(oldConditions, co.Status.Conditions) &&
+		clusteroperator.ObjectReferencesEqual(oldRelatedObjects, co.Status.RelatedObjects) &&
+		clusteroperator.VersionsEqual(oldVersions, co.Status.Versions) {
 		return
 	}
 

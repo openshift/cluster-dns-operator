@@ -65,6 +65,7 @@ func main() {
 	handler := &stub.Handler{
 		InstallConfig:   ic,
 		ManifestFactory: manifests.NewFactory(operatorConfig),
+		Config:          operatorConfig,
 	}
 
 	if err := handler.EnsureDefaultClusterDNS(); err != nil {
