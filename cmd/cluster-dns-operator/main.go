@@ -9,9 +9,7 @@ import (
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	stub "github.com/openshift/cluster-dns-operator/pkg/stub"
-	"github.com/openshift/cluster-dns-operator/pkg/util"
 
-	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	sdk "github.com/operator-framework/operator-sdk/pkg/sdk"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 
@@ -41,13 +39,6 @@ func main() {
 	// namespace from config.
 	sdk.Watch("apps/v1", "DaemonSet", "openshift-dns", resyncPeriod)
 
-	kubeClient := k8sclient.GetKubeClient()
-
-	ic, err := util.GetInstallConfig(kubeClient)
-	if err != nil {
-		logrus.Fatalf("could't get installconfig: %v", err)
-	}
-
 	coreDNSImage := os.Getenv("IMAGE")
 	if len(coreDNSImage) == 0 {
 		logrus.Fatalf("IMAGE environment variable is required")
@@ -63,7 +54,6 @@ func main() {
 	}
 
 	handler := &stub.Handler{
-		InstallConfig:   ic,
 		ManifestFactory: manifests.NewFactory(operatorConfig),
 		Config:          operatorConfig,
 	}

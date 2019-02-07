@@ -47,6 +47,7 @@ rules:
   - config.openshift.io
   resources:
   - clusteroperators
+  - networks
   verbs:
   - create
   - get

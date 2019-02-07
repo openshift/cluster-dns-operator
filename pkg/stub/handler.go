@@ -7,7 +7,6 @@ import (
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
-	"github.com/openshift/cluster-dns-operator/pkg/util"
 	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -15,6 +14,9 @@ import (
 	"github.com/sirupsen/logrus"
 
 	corev1 "k8s.io/api/core/v1"
+
+	configv1 "github.com/openshift/api/config/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -29,7 +31,6 @@ const (
 )
 
 type Handler struct {
-	InstallConfig   *util.InstallConfig
 	Config          operator.Config
 	ManifestFactory *manifests.Factory
 }
@@ -49,7 +50,20 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 // EnsureDefaultClusterDNS ensures that the default ClusterDNS exists.
 // TODO: overwrite existing persisted things like clusterIP.
 func (h *Handler) EnsureDefaultClusterDNS() error {
-	desired, err := h.ManifestFactory.ClusterDNSDefaultCR(h.InstallConfig)
+	networkConfig := &configv1.Network{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Network",
+			APIVersion: "config.openshift.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+		},
+	}
+	err := sdk.Get(networkConfig)
+	if err != nil {
+		return fmt.Errorf("failed to get network 'cluster': %v", err)
+	}
+	desired, err := h.ManifestFactory.ClusterDNSDefaultCR(networkConfig)
 	if err != nil {
 		return err
 	}
