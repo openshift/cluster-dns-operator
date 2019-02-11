@@ -5,9 +5,10 @@ import (
 
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
-	"github.com/openshift/cluster-dns-operator/pkg/util"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	configv1 "github.com/openshift/api/config/v1"
 )
 
 func TestManifests(t *testing.T) {
@@ -88,17 +89,18 @@ func TestManifests(t *testing.T) {
 }
 
 func TestDefaultClusterDNS(t *testing.T) {
-	ic := &util.InstallConfig{
-		Networking: util.NetworkingConfig{
-			ServiceCIDR: "10.3.0.0/16",
+	networkConfig := &configv1.Network{
+		Status: configv1.NetworkStatus{
+			ServiceNetwork: []string{"10.3.0.0/16"},
 		},
 	}
+
 	config := operator.Config{
 		CoreDNSImage:      "quay.io/openshift/coredns:test",
 		OpenshiftCLIImage: "openshift/origin-cli:test",
 	}
 
-	def, err := NewFactory(config).ClusterDNSDefaultCR(ic)
+	def, err := NewFactory(config).ClusterDNSDefaultCR(networkConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
