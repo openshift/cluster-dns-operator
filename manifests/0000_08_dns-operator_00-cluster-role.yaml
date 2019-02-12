@@ -33,18 +33,26 @@ rules:
   - services
   - serviceaccounts
   - configmaps
+  - endpoints
+  - pods
+  verbs:
+  - "*"
+
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
   verbs:
   - create
   - get
-  - list
-  - watch
-  - delete
 
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - clusterroles
   - clusterrolebindings
+  - roles
+  - rolebindings
   verbs:
   - create
   - get
@@ -66,15 +74,3 @@ rules:
   - clusteroperators/status
   verbs:
   - update
-
-# Mirrored from assets/dns/cluster-role.yaml
-- apiGroups:
-  - ""
-  resources:
-  - endpoints
-  - services
-  - pods
-  - namespaces
-  verbs:
-  - list
-  - watch

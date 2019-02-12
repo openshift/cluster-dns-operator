@@ -12,4 +12,9 @@ func TestManifests(t *testing.T) {
 	DNSDaemonSet()
 	DNSConfigMap()
 	DNSService()
+
+	MetricsClusterRole()
+	MetricsClusterRoleBinding()
+	MetricsRole()
+	MetricsRoleBinding()
 }

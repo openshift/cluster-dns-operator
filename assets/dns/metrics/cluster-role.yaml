@@ -1,0 +1,12 @@
+# Cluster roles needed by prometheus to scrape DNS metrics endpoint
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dns-monitoring
+rules:
+- apiGroups:
+  - operator.openshift.io
+  resources:
+  - dnses
+  verbs:
+  - get
