@@ -12,6 +12,13 @@ rules:
   - "*"
 
 - apiGroups:
+  - dns.openshift.io
+  resources:
+  - clusterdnses/status
+  verbs:
+  - update
+
+- apiGroups:
   - apps
   - extensions
   resources:

@@ -11,3 +11,5 @@ spec:
     singular: clusterdns
   scope: Cluster
   version: v1alpha1
+  subresources:
+    status: {}

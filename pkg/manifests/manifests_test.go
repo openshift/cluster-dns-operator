@@ -7,8 +7,6 @@ import (
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	configv1 "github.com/openshift/api/config/v1"
 )
 
 func TestManifests(t *testing.T) {
@@ -18,17 +16,17 @@ func TestManifests(t *testing.T) {
 	}
 
 	f := NewFactory(config)
-
+	clusterDomain := "cluster.local"
+	clusterIP := "172.30.77.10"
 	dns := &dnsv1alpha1.ClusterDNS{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "default",
 		},
-		Spec: dnsv1alpha1.ClusterDNSSpec{
-			ClusterDomain: stringPtr("cluster.local"),
-			ClusterIP:     stringPtr("172.30.77.10"),
-		},
 	}
 
+	if _, err := f.ClusterDNSDefaultCR(); err != nil {
+		t.Errorf("invalid ClusterDNSDefaultCR: %v", err)
+	}
 	if _, err := f.DNSNamespace(); err != nil {
 		t.Errorf("invalid DNSNamespace: %v", err)
 	}
@@ -41,10 +39,10 @@ func TestManifests(t *testing.T) {
 	if _, err := f.DNSClusterRoleBinding(); err != nil {
 		t.Errorf("invalid DNSClusterRoleBinding: %v", err)
 	}
-	if _, err := f.DNSConfigMap(dns); err != nil {
+	if _, err := f.DNSConfigMap(dns, clusterDomain); err != nil {
 		t.Errorf("invalid DNSClusterRoleBinding: %v", err)
 	}
-	if ds, err := f.DNSDaemonSet(dns); err != nil {
+	if ds, err := f.DNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
 		t.Errorf("invalid DNSDaemonSet: %v", err)
 	} else {
 		// Validate the daemonset
@@ -69,44 +67,21 @@ func TestManifests(t *testing.T) {
 				nameserver, ok := envs["NAMESERVER"]
 				if !ok {
 					t.Errorf("NAMESERVER env for dns node resolver image not found")
-				} else if *dns.Spec.ClusterIP != nameserver {
-					t.Errorf("expected NAMESERVER env for dns node resolver image %q, got %q", *dns.Spec.ClusterIP, nameserver)
+				} else if clusterIP != nameserver {
+					t.Errorf("expected NAMESERVER env for dns node resolver image %q, got %q", clusterIP, nameserver)
 				}
-				clusterDomain, ok := envs["CLUSTER_DOMAIN"]
+				domain, ok := envs["CLUSTER_DOMAIN"]
 				if !ok {
 					t.Errorf("CLUSTER_DOMAIN env for dns node resolver image not found")
-				} else if *dns.Spec.ClusterDomain != clusterDomain {
-					t.Errorf("expected CLUSTER_DOMAIN env for dns node resolver image %q, got %q", *dns.Spec.ClusterDomain, clusterDomain)
+				} else if clusterDomain != domain {
+					t.Errorf("expected CLUSTER_DOMAIN env for dns node resolver image %q, got %q", clusterDomain, domain)
 				}
 			default:
 				t.Errorf("unexpected daemonset container %q", c.Name)
 			}
 		}
 	}
-	if _, err := f.DNSService(dns); err != nil {
+	if _, err := f.DNSService(dns, clusterIP); err != nil {
 		t.Errorf("invalid DNSService: %v", err)
 	}
 }
-
-func TestDefaultClusterDNS(t *testing.T) {
-	networkConfig := &configv1.Network{
-		Status: configv1.NetworkStatus{
-			ServiceNetwork: []string{"10.3.0.0/16"},
-		},
-	}
-
-	config := operator.Config{
-		CoreDNSImage:      "quay.io/openshift/coredns:test",
-		OpenshiftCLIImage: "openshift/origin-cli:test",
-	}
-
-	def, err := NewFactory(config).ClusterDNSDefaultCR(networkConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if e, a := "10.3.0.10", *def.Spec.ClusterIP; e != a {
-		t.Errorf("expected default clusterdns clusterIP=%s, got %s", e, a)
-	}
-}
-
-func stringPtr(s string) *string { return &s }

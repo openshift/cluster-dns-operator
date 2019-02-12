@@ -6,6 +6,3 @@ metadata:
   # Ensure that only the operator can delete the default cluster dns object.
   finalizers:
   - dns.openshift.io/default-cluster-dns
-spec:
-  # ClusterIP is applied at runtime using the installer config.
-  clusterDomain: cluster.local

@@ -6,6 +6,7 @@ import (
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// ClusterDNSList contains a list of ClusterDNS
 type ClusterDNSList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata"`
@@ -14,6 +15,8 @@ type ClusterDNSList struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
+// ClusterDNS is the Schema for the clusterdnses API
+// +k8s:openapi-gen=true
 type ClusterDNS struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
@@ -22,10 +25,12 @@ type ClusterDNS struct {
 }
 
 type ClusterDNSSpec struct {
-	ClusterIP *string `json:"clusterIP"`
-
-	ClusterDomain *string `json:"clusterDomain"`
 }
+
+// ClusterDNSStatus defines the observed state of ClusterDNS
 type ClusterDNSStatus struct {
-	// Fill me
+	// ClusterIP is the service IP reserved for cluster DNS service
+	ClusterIP string `json:"clusterIP"`
+	// ClusterDomain is the internal domain used in the cluster
+	ClusterDomain string `json:"clusterDomain"`
 }
