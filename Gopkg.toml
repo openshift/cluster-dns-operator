@@ -28,6 +28,10 @@ required = [
   unused-packages = false
 
 [[constraint]]
+  name = "github.com/coreos/go-semver"
+  version = "=v0.2.0"
+
+[[constraint]]
   name = "github.com/operator-framework/operator-sdk"
   version = "v0.0.6"
 
