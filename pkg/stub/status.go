@@ -9,7 +9,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/util/clusteroperator"
-	operatorversion "github.com/openshift/cluster-dns-operator/version"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -19,6 +18,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/coreos/go-semver/semver"
 )
 
 // syncOperatorStatus computes the operator's current status and therefrom
@@ -65,16 +66,16 @@ func (h *Handler) syncOperatorStatus() {
 		},
 	}
 
+	versionMap, err := getVersionMap()
+	if err != nil {
+		logrus.Errorf("syncOperatorStatus: getVersionMap: %v", err)
+		return
+	}
+
 	oldVersions := co.Status.Versions
-	co.Status.Versions = []configv1.OperandVersion{
-		{
-			Name:    "operator",
-			Version: operatorversion.Version,
-		},
-		{
-			Name:    "coredns",
-			Version: h.Config.CoreDNSImage,
-		},
+	if co.Status.Versions, err = computeStatusVersions(h.Config.OperatorImageVersion, daemonsets, versionMap); err != nil {
+		logrus.Errorf("syncOperatorStatus: computeStatusVersions: %v", err)
+		return
 	}
 
 	if isNotFound {
@@ -228,4 +229,110 @@ func computeStatusConditions(conditions []configv1.ClusterOperatorStatusConditio
 		availableCondition)
 
 	return conditions
+}
+
+// getVersionMap returns the version map for operator and operands.
+func getVersionMap() (map[string]string, error) {
+	versionMapping := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "version-mapping",
+			Namespace: "openshift-dns-operator",
+		},
+	}
+	if err := sdk.Get(versionMapping); err != nil {
+		return nil, fmt.Errorf("getVersionMap: error getting configmap %s/%s: %v", versionMapping.Namespace, versionMapping.Name, err)
+	}
+
+	versionMap := map[string]string{}
+	for version, image := range versionMapping.Data {
+		versionMap[image] = version
+	}
+	return versionMap, nil
+}
+
+// computeStatusVersions computes the operator's and operands' current available
+// versions.
+func computeStatusVersions(operatorVersion string, daemonsets []appsv1.DaemonSet, versionMap map[string]string) ([]configv1.OperandVersion, error) {
+	// Find the oldest available version of each operand.  If some but not
+	// all instances of an operand have a newer version, this indicates that
+	// the operator is trying to roll out, but has not finished rolling out,
+	// the new version.  Versions should reflect the currently available
+	// version of each operand even if the operator is trying to roll out a
+	// newer version.
+	var (
+		coreDNSSemVer  *semver.Version
+		coreDNSVersion string
+
+		openshiftCLISemVer  *semver.Version
+		openshiftCLIVersion string
+	)
+	for _, ds := range daemonsets {
+		if ds.Status.NumberAvailable == 0 {
+			continue
+		}
+
+		coreDNSPullspec := ds.Spec.Template.Spec.Containers[0].Image
+		if sv, v, err := getSemVerForPullspec(coreDNSPullspec, versionMap); err != nil {
+			return []configv1.OperandVersion{}, fmt.Errorf("failed to get CoreDNS version for daemonset %s/%s: %v", ds.Namespace, ds.Name, err)
+		} else if coreDNSSemVer == nil || sv.LessThan(*coreDNSSemVer) {
+			coreDNSSemVer, coreDNSVersion = sv, v
+		}
+
+		osCLIPullspec := ds.Spec.Template.Spec.Containers[1].Image
+		if sv, v, err := getSemVerForPullspec(osCLIPullspec, versionMap); err != nil {
+			return []configv1.OperandVersion{}, fmt.Errorf("failed to get OpenShift client version for daemonset %s/%s: %v", ds.Namespace, ds.Name, err)
+		} else if openshiftCLISemVer == nil || sv.LessThan(*openshiftCLISemVer) {
+			openshiftCLISemVer, openshiftCLIVersion = sv, v
+		}
+	}
+
+	versions := []configv1.OperandVersion{}
+	if operatorVersion != "" {
+		version := configv1.OperandVersion{
+			Name:    "operator",
+			Version: operatorVersion,
+		}
+		versions = append(versions, version)
+	}
+	if coreDNSVersion != "" {
+		version := configv1.OperandVersion{
+			Name:    "coredns",
+			Version: coreDNSVersion,
+		}
+		versions = append(versions, version)
+	}
+	if openshiftCLIVersion != "" {
+		version := configv1.OperandVersion{
+			Name:    "node-resolver",
+			Version: openshiftCLIVersion,
+		}
+		versions = append(versions, version)
+	}
+	return versions, nil
+
+}
+
+// getSemVerForPullspec gets the version string and semantic version of the given
+// pullspec using the provided version map.
+func getSemVerForPullspec(pullspec string, versionMap map[string]string) (*semver.Version, string, error) {
+	version, ok := versionMap[pullspec]
+	if !ok {
+		return nil, "", fmt.Errorf("failed to look up pullspec %q", pullspec)
+	}
+
+	dottedTri := version
+	if i := strings.Index(dottedTri, "_"); i >= 0 {
+		dottedTri = dottedTri[:i]
+	}
+
+	sv, err := semver.NewVersion(dottedTri)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to parse semver %q extracted from version %q for pullspec %q: %v", dottedTri, version, pullspec, err)
+	}
+
+	return sv, version, nil
 }

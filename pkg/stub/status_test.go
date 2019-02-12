@@ -6,6 +6,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	"github.com/openshift/cluster-dns-operator/pkg/util/clusteroperator"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -125,6 +126,165 @@ func TestComputeStatusConditions(t *testing.T) {
 		if !gotExpected {
 			t.Fatalf("%q: expected %#v, got %#v", tc.description,
 				expected, new)
+		}
+	}
+}
+
+func TestComputeStatusVersions(t *testing.T) {
+	type testInput struct {
+		operatorVersion string
+
+		daemonsets []appsv1.DaemonSet
+	}
+	type testOutput struct {
+		versions []configv1.OperandVersion
+	}
+	ds := func(numAvailable int, coreDNSVersion, openshiftCLIVersion string) appsv1.DaemonSet {
+		return appsv1.DaemonSet{
+			Spec: appsv1.DaemonSetSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Image: coreDNSVersion,
+							},
+							{
+								Image: openshiftCLIVersion,
+							},
+						},
+					},
+				},
+			},
+			Status: appsv1.DaemonSetStatus{
+				NumberAvailable: int32(numAvailable),
+			},
+		}
+	}
+	versionMap := map[string]string{
+		"ps1": "0.0.0_version_coredns",
+		"ps2": "0.0.1_version_coredns",
+		"ps3": "0.0.0_version_origin-cli",
+		"ps4": "0.0.10_version_origin-cli",
+	}
+	testCases := []struct {
+		description string
+		inputs      testInput
+		output      testOutput
+	}{
+		{
+			description: "nothing",
+			inputs: testInput{
+				operatorVersion: "",
+				daemonsets:      []appsv1.DaemonSet{},
+			},
+			output: testOutput{[]configv1.OperandVersion{}},
+		},
+		{
+			description: "no daemonsets",
+			inputs: testInput{
+				operatorVersion: "operatorversion",
+				daemonsets:      []appsv1.DaemonSet{},
+			},
+			output: testOutput{[]configv1.OperandVersion{
+				{Name: "operator", Version: "operatorversion"},
+			}},
+		},
+		{
+			description: "1 unavailable",
+			inputs: testInput{
+				operatorVersion: "operatorversion",
+				daemonsets: []appsv1.DaemonSet{
+					ds(0, "ps1", "ps3"),
+				}},
+			output: testOutput{[]configv1.OperandVersion{
+				{Name: "operator", Version: "operatorversion"},
+			}},
+		},
+		{
+			description: "1 available",
+			inputs: testInput{
+				operatorVersion: "operatorversion",
+				daemonsets: []appsv1.DaemonSet{
+					ds(1, "ps1", "ps3"),
+				},
+			},
+			output: testOutput{[]configv1.OperandVersion{
+				{Name: "operator", Version: "operatorversion"},
+				{Name: "coredns", Version: versionMap["ps1"]},
+				{Name: "node-resolver", Version: versionMap["ps3"]},
+			}},
+		},
+		{
+			description: "1 available, 1 updating",
+			inputs: testInput{
+				operatorVersion: "operatorversion",
+				daemonsets: []appsv1.DaemonSet{
+					ds(1, "ps1", "ps3"),
+					ds(0, "ps2", "ps4"),
+				},
+			},
+			output: testOutput{[]configv1.OperandVersion{
+				{Name: "operator", Version: "operatorversion"},
+				{Name: "coredns", Version: versionMap["ps1"]},
+				{Name: "node-resolver", Version: versionMap["ps3"]},
+			}},
+		},
+		{
+			description: "1 available, 1 updated",
+			inputs: testInput{
+				operatorVersion: "operatorversion",
+				daemonsets: []appsv1.DaemonSet{
+					ds(1, "ps1", "ps3"),
+					ds(1, "ps2", "ps4"),
+				},
+			},
+			output: testOutput{[]configv1.OperandVersion{
+				{Name: "operator", Version: "operatorversion"},
+				{Name: "coredns", Version: versionMap["ps1"]},
+				{Name: "node-resolver", Version: versionMap["ps3"]},
+			}},
+		},
+		{
+			description: "1 unavailable, 2 updated",
+			inputs: testInput{
+				operatorVersion: "operatorversion",
+				daemonsets: []appsv1.DaemonSet{
+					ds(0, "ps1", "ps3"),
+					ds(1, "ps2", "ps4"),
+					ds(1, "ps2", "ps4"),
+				},
+			},
+			output: testOutput{[]configv1.OperandVersion{
+				{Name: "operator", Version: "operatorversion"},
+				{Name: "coredns", Version: versionMap["ps2"]},
+				{Name: "node-resolver", Version: versionMap["ps4"]},
+			}},
+		},
+		{
+			description: "2 available and updated",
+			inputs: testInput{
+				operatorVersion: "operatorversion",
+				daemonsets: []appsv1.DaemonSet{
+					ds(1, "ps2", "ps4"),
+					ds(1, "ps2", "ps4"),
+				},
+			},
+			output: testOutput{[]configv1.OperandVersion{
+				{Name: "operator", Version: "operatorversion"},
+				{Name: "coredns", Version: versionMap["ps2"]},
+				{Name: "node-resolver", Version: versionMap["ps4"]},
+			}},
+		},
+	}
+
+	for _, tc := range testCases {
+		versions, err := computeStatusVersions(tc.inputs.operatorVersion, tc.inputs.daemonsets, versionMap)
+		if err != nil {
+			t.Errorf("%q: unexpected error: %v", tc.description, err)
+			continue
+		}
+		if !clusteroperator.VersionsEqual(versions, tc.output.versions) {
+			t.Errorf("%q: expected %#v, got %#v", tc.description, tc.output.versions, versions)
 		}
 	}
 }

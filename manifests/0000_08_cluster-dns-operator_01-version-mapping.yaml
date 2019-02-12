@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: openshift-dns-operator
+  name: version-mapping
+data:
+  "0.0.0_version_coredns": "openshift/origin-coredns:v4.0"
+  "0.0.0_version_origin-cli": "openshift/origin-cli:v4.0"
+  "0.0.0_version_cluster-dns-operator": "openshift/origin-cluster-dns-operator:latest"

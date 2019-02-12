@@ -7,4 +7,6 @@ type Config struct {
 	CoreDNSImage string
 	// OpenshiftCLIImage is the openshift client image to manage.
 	OpenshiftCLIImage string
+	// OperatorImageVersion is the operator image version.
+	OperatorImageVersion string
 }
