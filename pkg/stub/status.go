@@ -34,11 +34,14 @@ func (h *Handler) syncOperatorStatus() {
 			Name: "dns",
 		},
 	}
-	err := sdk.Get(co)
-	isNotFound := errors.IsNotFound(err)
-	if err != nil && !isNotFound {
-		logrus.Errorf("syncOperatorStatus: failed to get ClusterOperator %q: %v", co.Name, err)
-		return
+
+	mustCreate := false
+	if err := sdk.Get(co); err != nil {
+		if !errors.IsNotFound(err) {
+			logrus.Errorf("syncOperatorStatus: failed to get ClusterOperator %q: %v", co.Name, err)
+			return
+		}
+		mustCreate = true
 	}
 
 	ns, dnses, daemonsets, err := h.getOperatorState()
@@ -74,7 +77,7 @@ func (h *Handler) syncOperatorStatus() {
 		return
 	}
 
-	if isNotFound {
+	if mustCreate {
 		if err := sdk.Create(co); err != nil {
 			logrus.Errorf("syncOperatorStatus: failed to create ClusterOperator %q: %v", co.Name, err)
 		} else {
