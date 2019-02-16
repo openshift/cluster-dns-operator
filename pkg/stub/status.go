@@ -24,7 +24,7 @@ import (
 
 // syncOperatorStatus computes the operator's current status and therefrom
 // creates or updates the ClusterOperator resource for the operator.
-func (h *Handler) syncOperatorStatus() {
+func (h *Handler) syncOperatorStatus() error {
 	co := &configv1.ClusterOperator{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterOperator",
@@ -38,16 +38,14 @@ func (h *Handler) syncOperatorStatus() {
 	mustCreate := false
 	if err := sdk.Get(co); err != nil {
 		if !errors.IsNotFound(err) {
-			logrus.Errorf("syncOperatorStatus: failed to get ClusterOperator %q: %v", co.Name, err)
-			return
+			return fmt.Errorf("syncOperatorStatus: failed to get ClusterOperator %q: %v", co.Name, err)
 		}
 		mustCreate = true
 	}
 
 	ns, dnses, daemonsets, err := h.getOperatorState()
 	if err != nil {
-		logrus.Errorf("syncOperatorStatus: failed to get operator state: %v", err)
-		return
+		return fmt.Errorf("syncOperatorStatus: failed to get operator state: %v", err)
 	}
 
 	oldConditions := co.Status.Conditions
@@ -67,51 +65,45 @@ func (h *Handler) syncOperatorStatus() {
 
 	versionMap, err := getVersionMap()
 	if err != nil {
-		logrus.Errorf("syncOperatorStatus: failed to get version map: %v", err)
-		return
+		return fmt.Errorf("syncOperatorStatus: failed to get version map: %v", err)
 	}
 
 	oldVersions := co.Status.Versions
 	if co.Status.Versions, err = computeStatusVersions(h.Config.OperatorImageVersion, daemonsets, versionMap); err != nil {
-		logrus.Errorf("syncOperatorStatus: failed to compute status versions: %v", err)
-		return
+		return fmt.Errorf("syncOperatorStatus: failed to compute status versions: %v", err)
 	}
 
 	if mustCreate {
 		if err := sdk.Create(co); err != nil {
-			logrus.Errorf("syncOperatorStatus: failed to create ClusterOperator %q: %v", co.Name, err)
-		} else {
-			logrus.Infof("syncOperatorStatus: created ClusterOperator %q (UID %v)", co.Name, co.UID)
-			if err := sdk.Get(co); err != nil {
-				logrus.Errorf("syncOperatorStatus: error getting ClusterOperator %q: %v", co.Name, err)
-				return
-			}
+			return fmt.Errorf("syncOperatorStatus: failed to create ClusterOperator %q: %v", co.Name, err)
+		}
+		logrus.Infof("syncOperatorStatus: created ClusterOperator %q (UID %v)", co.Name, co.UID)
+		if err := sdk.Get(co); err != nil {
+			return fmt.Errorf("syncOperatorStatus: error getting ClusterOperator %q: %v", co.Name, err)
 		}
 	}
 
 	if clusteroperator.ConditionsEqual(oldConditions, co.Status.Conditions) &&
 		clusteroperator.ObjectReferencesEqual(oldRelatedObjects, co.Status.RelatedObjects) &&
 		clusteroperator.VersionsEqual(oldVersions, co.Status.Versions) {
-		return
+		return nil
 	}
 
 	unstructObj, err := k8sutil.UnstructuredFromRuntimeObject(co)
 	if err != nil {
-		logrus.Errorf("syncOperatorStatus: failed to convert ClusterOperator %q: %v\n%#v", co.Name, err, co)
-		return
+		return fmt.Errorf("syncOperatorStatus: failed to convert ClusterOperator %q: %v\n%#v", co.Name, err, co)
 	}
 
 	resourceClient, _, err := k8sclient.GetResourceClient(co.APIVersion, co.Kind, co.Namespace)
 	if err != nil {
-		logrus.Errorf("syncOperatorStatus: failed to get resource client: %v", err)
-		return
+		return fmt.Errorf("syncOperatorStatus: failed to get resource client: %v", err)
 	}
 
 	if _, err := resourceClient.UpdateStatus(unstructObj); err != nil {
-		logrus.Errorf("syncOperatorStatus: failed to update status of %q: %v", co.Name, err)
-	} else {
-		logrus.Infof("syncOperatorStatus: updated status of %q", co.Name)
+		return fmt.Errorf("syncOperatorStatus: failed to update status of %q: %v", co.Name, err)
 	}
+	logrus.Infof("syncOperatorStatus: updated status of %q", co.Name)
+	return nil
 }
 
 // getOperatorState gets and returns the resources necessary to compute the

@@ -36,15 +36,15 @@ type Handler struct {
 }
 
 func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
-	defer h.syncOperatorStatus()
-
 	// TODO: This should be adding an item to a rate limited work queue, but for
 	// now correctness is more important than performance.
 	switch o := event.Object.(type) {
 	case *dnsv1alpha1.ClusterDNS:
 		logrus.Infof("reconciling for update to clusterdns %q", o.Name)
 	}
-	return h.reconcile()
+	reconcileErr := h.reconcile()
+	syncErr := h.syncOperatorStatus()
+	return utilerrors.NewAggregate([]error{reconcileErr, syncErr})
 }
 
 // EnsureDefaultClusterDNS ensures that the default ClusterDNS exists.
