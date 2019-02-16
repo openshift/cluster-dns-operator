@@ -28,7 +28,7 @@ func (h *Handler) syncOperatorStatus() {
 	co := &configv1.ClusterOperator{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterOperator",
-			APIVersion: "config.openshift.io/v1",
+			APIVersion: configv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "dns",
@@ -129,7 +129,7 @@ func (h *Handler) getOperatorState() (*corev1.Namespace, []dnsv1alpha1.ClusterDN
 	dnsList := &dnsv1alpha1.ClusterDNSList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterDNS",
-			APIVersion: "dns.openshift.io/v1alpha1",
+			APIVersion: dnsv1alpha1.SchemeGroupVersion.String(),
 		},
 	}
 	if err := sdk.List(corev1.NamespaceAll, dnsList, sdk.WithListOptions(&metav1.ListOptions{})); err != nil {
@@ -139,7 +139,7 @@ func (h *Handler) getOperatorState() (*corev1.Namespace, []dnsv1alpha1.ClusterDN
 	daemonsetList := &appsv1.DaemonSetList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "DaemonSet",
-			APIVersion: "apps/v1",
+			APIVersion: appsv1.SchemeGroupVersion.String(),
 		},
 	}
 	if err := sdk.List(ns.Name, daemonsetList, sdk.WithListOptions(&metav1.ListOptions{})); err != nil {

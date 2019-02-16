@@ -53,7 +53,7 @@ func (h *Handler) EnsureDefaultClusterDNS() error {
 	networkConfig := &configv1.Network{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Network",
-			APIVersion: "config.openshift.io/v1",
+			APIVersion: configv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
@@ -89,7 +89,7 @@ func (h *Handler) reconcile() error {
 	dnses := &dnsv1alpha1.ClusterDNSList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterDNS",
-			APIVersion: "dns.openshift.io/v1alpha1",
+			APIVersion: dnsv1alpha1.SchemeGroupVersion.String(),
 		},
 	}
 	err = sdk.List(corev1.NamespaceAll, dnses, sdk.WithListOptions(&metav1.ListOptions{}))

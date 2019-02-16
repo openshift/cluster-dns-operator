@@ -19,7 +19,7 @@ func TestOperatorAvailable(t *testing.T) {
 	co := &configv1.ClusterOperator{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterOperator",
-			APIVersion: "config.openshift.io/v1",
+			APIVersion: configv1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "dns",
@@ -48,7 +48,7 @@ func TestDefaultClusterDNSExists(t *testing.T) {
 	dns := &dnsv1alpha1.ClusterDNS{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ClusterDNS",
-			APIVersion: "dns.openshift.io/v1alpha1",
+			APIVersion: dnsv1alpha1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "default",
