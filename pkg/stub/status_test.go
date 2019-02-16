@@ -47,12 +47,12 @@ func TestComputeStatusConditions(t *testing.T) {
 			namespace = &corev1.Namespace{}
 		}
 		for i := 0; i < tc.inputs.numWanted; i++ {
-			clusterdnses = append(clusterdnses,
-				dnsv1alpha1.ClusterDNS{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: fmt.Sprintf("%d", i+1),
-					},
-				})
+			clusterdns := dnsv1alpha1.ClusterDNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: fmt.Sprintf("%d", i+1),
+				},
+			}
+			clusterdnses = append(clusterdnses, clusterdns)
 		}
 		numDaemonsets := tc.inputs.numAvailable + tc.inputs.numUnavailable
 		for i := 0; i < numDaemonsets; i++ {
@@ -124,8 +124,7 @@ func TestComputeStatusConditions(t *testing.T) {
 			}
 		}
 		if !gotExpected {
-			t.Fatalf("%q: expected %#v, got %#v", tc.description,
-				expected, new)
+			t.Fatalf("%q: expected %#v, got %#v", tc.description, expected, new)
 		}
 	}
 }
