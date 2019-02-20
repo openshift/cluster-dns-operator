@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net"
 	"strings"
-
-	configv1 "github.com/openshift/api/config/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -19,8 +16,6 @@ import (
 
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
-
-	"github.com/apparentlymart/go-cidr/cidr"
 )
 
 const (
@@ -50,31 +45,12 @@ func NewFactory(config operator.Config) *Factory {
 	return &Factory{config: config}
 }
 
-// ClusterDNSDefaultCR builds a default cluster DNS with a cluster IP set to the
-// 10th IP from the service CIDR range defined in the install config within the
-// cluster config.
-func (f *Factory) ClusterDNSDefaultCR(networkConfig *configv1.Network) (*dnsv1alpha1.ClusterDNS, error) {
-	if networkConfig == nil {
-		return nil, fmt.Errorf("networkConfig is required")
-	}
-
+// ClusterDNSDefaultCR builds a default cluster DNS
+func (f *Factory) ClusterDNSDefaultCR() (*dnsv1alpha1.ClusterDNS, error) {
 	cr, err := NewClusterDNS(MustAssetReader(ClusterDNSDefaultCR))
 	if err != nil {
 		return nil, err
 	}
-
-	_, serviceCIDR, err := net.ParseCIDR(networkConfig.Status.ServiceNetwork[0])
-	if err != nil {
-		return nil, fmt.Errorf("invalid serviceCIDR %q: %v", networkConfig.Status.ServiceNetwork[0], err)
-	}
-
-	dnsClusterIP, err := cidr.Host(serviceCIDR, 10)
-	if err != nil {
-		return nil, fmt.Errorf("invalid serviceCIDR %v: %v", serviceCIDR, err)
-	}
-
-	ip := dnsClusterIP.String()
-	cr.Spec.ClusterIP = &ip
 	return cr, nil
 }
 
@@ -110,20 +86,20 @@ func (f *Factory) DNSClusterRoleBinding() (*rbacv1.ClusterRoleBinding, error) {
 	return crb, nil
 }
 
-func (f *Factory) DNSConfigMap(dns *dnsv1alpha1.ClusterDNS) (*corev1.ConfigMap, error) {
+func (f *Factory) DNSConfigMap(dns *dnsv1alpha1.ClusterDNS, clusterDomain string) (*corev1.ConfigMap, error) {
 	cm, err := NewConfigMap(MustAssetReader(DNSConfigMap))
 	if err != nil {
 		return nil, err
 	}
 	cm.Name = "dns-" + dns.Name
 
-	if dns.Spec.ClusterDomain != nil {
-		cm.Data["Corefile"] = strings.Replace(cm.Data["Corefile"], "cluster.local", *dns.Spec.ClusterDomain, -1)
+	if len(clusterDomain) > 0 {
+		cm.Data["Corefile"] = strings.Replace(cm.Data["Corefile"], "cluster.local", clusterDomain, -1)
 	}
 	return cm, nil
 }
 
-func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS) (*appsv1.DaemonSet, error) {
+func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS, clusterIP, clusterDomain string) (*appsv1.DaemonSet, error) {
 	ds, err := NewDaemonSet(MustAssetReader(DNSDaemonSet))
 	if err != nil {
 		return nil, err
@@ -158,28 +134,30 @@ func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS) (*appsv1.DaemonSet, 
 			ds.Spec.Template.Spec.Containers[i].Image = f.config.CoreDNSImage
 		case "dns-node-resolver":
 			ds.Spec.Template.Spec.Containers[i].Image = f.config.OpenshiftCLIImage
-			if dns.Spec.ClusterIP != nil && dns.Spec.ClusterDomain != nil {
-				if c.Env == nil {
-					c.Env = []corev1.EnvVar{}
-				}
-				envs := []corev1.EnvVar{
-					{
-						Name:  "NAMESERVER",
-						Value: *dns.Spec.ClusterIP,
-					},
-					{
-						Name:  "CLUSTER_DOMAIN",
-						Value: *dns.Spec.ClusterDomain,
-					},
-				}
-				ds.Spec.Template.Spec.Containers[i].Env = append(ds.Spec.Template.Spec.Containers[i].Env, envs...)
+			envs := []corev1.EnvVar{}
+			if len(clusterIP) > 0 {
+				envs = append(envs, corev1.EnvVar{
+					Name:  "NAMESERVER",
+					Value: clusterIP,
+				})
 			}
+			if len(clusterDomain) > 0 {
+				envs = append(envs, corev1.EnvVar{
+					Name:  "CLUSTER_DOMAIN",
+					Value: clusterDomain,
+				})
+			}
+
+			if ds.Spec.Template.Spec.Containers[i].Env == nil {
+				ds.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{}
+			}
+			ds.Spec.Template.Spec.Containers[i].Env = append(ds.Spec.Template.Spec.Containers[i].Env, envs...)
 		}
 	}
 	return ds, nil
 }
 
-func (f *Factory) DNSService(dns *dnsv1alpha1.ClusterDNS) (*corev1.Service, error) {
+func (f *Factory) DNSService(dns *dnsv1alpha1.ClusterDNS, clusterIP string) (*corev1.Service, error) {
 	s, err := NewService(MustAssetReader(DNSService))
 	if err != nil {
 		return nil, err
@@ -196,8 +174,8 @@ func (f *Factory) DNSService(dns *dnsv1alpha1.ClusterDNS) (*corev1.Service, erro
 	}
 	s.Spec.Selector["dns"] = s.Name
 
-	if dns.Spec.ClusterIP != nil {
-		s.Spec.ClusterIP = *dns.Spec.ClusterIP
+	if len(clusterIP) > 0 {
+		s.Spec.ClusterIP = clusterIP
 	}
 	return s, nil
 }

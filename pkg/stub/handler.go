@@ -3,13 +3,16 @@ package stub
 import (
 	"context"
 	"fmt"
+	"net"
 
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
 
+	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
+	"github.com/operator-framework/operator-sdk/pkg/util/k8sutil"
 
 	"github.com/sirupsen/logrus"
 
@@ -20,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+
+	"github.com/apparentlymart/go-cidr/cidr"
 )
 
 const (
@@ -48,22 +53,8 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 }
 
 // EnsureDefaultClusterDNS ensures that the default ClusterDNS exists.
-// TODO: overwrite existing persisted things like clusterIP.
 func (h *Handler) EnsureDefaultClusterDNS() error {
-	networkConfig := &configv1.Network{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Network",
-			APIVersion: "config.openshift.io/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "cluster",
-		},
-	}
-	err := sdk.Get(networkConfig)
-	if err != nil {
-		return fmt.Errorf("failed to get network 'cluster': %v", err)
-	}
-	desired, err := h.ManifestFactory.ClusterDNSDefaultCR(networkConfig)
+	desired, err := h.ManifestFactory.ClusterDNSDefaultCR()
 	if err != nil {
 		return err
 	}
@@ -100,6 +91,11 @@ func (h *Handler) reconcile() error {
 	// Reconcile all the clusterdnses.
 	errors := []error{}
 	for _, dns := range dnses.Items {
+		if dns.Name != "default" {
+			// We do not want to return this error to avoid re-triggering the event
+			logrus.Errorf("skipping unexpected clusterdns %s", dns.Name)
+			continue
+		}
 		// Handle deleted dns.
 		// TODO: Assert/ensure that the dns has a finalizer so we can reliably detect
 		// deletion.
@@ -175,7 +171,14 @@ func (h *Handler) ensureDNSNamespace() error {
 // ensureCoreDNSForClusterDNS ensures all necessary CoreDNS resources exist for
 // a given clusterdns.
 func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error {
-	ds, err := h.ManifestFactory.DNSDaemonSet(dns)
+	// TODO: fetch this from higher level openshift resource when it is exposed
+	clusterDomain := "cluster.local"
+	clusterIP, err := getClusterIPFromNetworkConfig()
+	if err != nil {
+		return fmt.Errorf("failed to fetch cluster IP from network config for clusterdns %s, %v", dns.Name, err)
+	}
+
+	ds, err := h.ManifestFactory.DNSDaemonSet(dns, clusterIP, clusterDomain)
 	if err != nil {
 		return fmt.Errorf("couldn't build daemonset: %v", err)
 	}
@@ -196,22 +199,20 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 		Controller: &trueVar,
 	}
 
-	cm, err := h.ManifestFactory.DNSConfigMap(dns)
+	cm, err := h.ManifestFactory.DNSConfigMap(dns, clusterDomain)
 	if err != nil {
 		return fmt.Errorf("couldn't build dns config map: %v", err)
 	}
 	cm.SetOwnerReferences([]metav1.OwnerReference{dsRef})
-	err = sdk.Create(cm)
-	if err != nil && !errors.IsAlreadyExists(err) {
+	if err = sdk.Create(cm); err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("couldn't create dns config map: %v", err)
 	}
 
-	service, err := h.ManifestFactory.DNSService(dns)
+	service, err := h.ManifestFactory.DNSService(dns, clusterIP)
 	if err != nil {
 		return fmt.Errorf("couldn't build service: %v", err)
 	}
-	err = sdk.Get(service)
-	if err != nil {
+	if err = sdk.Get(service); err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch service %s, %v", service.Name, err)
 		}
@@ -221,6 +222,9 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 		}
 	}
 
+	if err := syncClusterDNSStatus(dns, clusterIP, clusterDomain); err != nil {
+		return fmt.Errorf("failed to sync dns status %s, %v", dns.Name, err)
+	}
 	return nil
 }
 
@@ -230,7 +234,7 @@ func (h *Handler) ensureDNSDeleted(dns *dnsv1alpha1.ClusterDNS) error {
 	// DNS specific configmap and service has owner reference to daemonset.
 	// So deletion of daemonset will trigger garbage collection of corresponding
 	// configmap and service resources.
-	ds, err := h.ManifestFactory.DNSDaemonSet(dns)
+	ds, err := h.ManifestFactory.DNSDaemonSet(dns, "", "")
 	if err != nil {
 		return fmt.Errorf("failed to build daemonset for deletion, ClusterDNS: %q, %v", dns.Name, err)
 	}
@@ -239,4 +243,59 @@ func (h *Handler) ensureDNSDeleted(dns *dnsv1alpha1.ClusterDNS) error {
 		return err
 	}
 	return nil
+}
+
+// syncClusterDNSStatus updates the status for a given clusterdns.
+func syncClusterDNSStatus(dns *dnsv1alpha1.ClusterDNS, clusterIP, clusterDomain string) error {
+	dns.Status = dnsv1alpha1.ClusterDNSStatus{
+		ClusterIP:     clusterIP,
+		ClusterDomain: clusterDomain,
+	}
+
+	unstructObj, err := k8sutil.UnstructuredFromRuntimeObject(dns)
+	if err != nil {
+		return fmt.Errorf("failed to convert unstructured obj from runtime obj: %v", err)
+	}
+
+	client, _, err := k8sclient.GetResourceClient(dns.APIVersion, dns.Kind, dns.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get resource client for clusterdns %s: %v", dns.Name, err)
+	}
+
+	if _, err := client.UpdateStatus(unstructObj); err != nil {
+		return fmt.Errorf("update status failed for clusterdns %s: %v", dns.Name, err)
+	}
+	return nil
+}
+
+// getClusterIPFromNetworkConfig will return 10th IP from the service CIDR range
+// defined in the cluster network config.
+func getClusterIPFromNetworkConfig() (string, error) {
+	networkConfig := &configv1.Network{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Network",
+			APIVersion: "config.openshift.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+		},
+	}
+	err := sdk.Get(networkConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to get network 'cluster': %v", err)
+	}
+
+	if len(networkConfig.Status.ServiceNetwork) == 0 {
+		return "", fmt.Errorf("no service networks found in cluster network config")
+	}
+	_, serviceCIDR, err := net.ParseCIDR(networkConfig.Status.ServiceNetwork[0])
+	if err != nil {
+		return "", fmt.Errorf("invalid serviceCIDR %q: %v", networkConfig.Status.ServiceNetwork[0], err)
+	}
+
+	dnsClusterIP, err := cidr.Host(serviceCIDR, 10)
+	if err != nil {
+		return "", fmt.Errorf("invalid serviceCIDR %v: %v", serviceCIDR, err)
+	}
+	return dnsClusterIP.String(), nil
 }
