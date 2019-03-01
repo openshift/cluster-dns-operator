@@ -9,7 +9,7 @@ oc patch clusterdnses/default --patch '{"metadata":{"finalizers": []}}' --type=m
 oc delete --force --grace-period 0 clusterdnses/default
 oc delete namespaces/openshift-dns-operator
 oc delete namespaces/openshift-dns
-oc delete clusteroperator openshift-dns-operator
+oc delete clusteroperator dns
 oc delete clusterroles/openshift-dns-operator
 oc delete clusterroles/openshift-dns
 oc delete clusterrolebindings/openshift-dns-operator
