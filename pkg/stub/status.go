@@ -2,6 +2,7 @@ package stub
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -9,7 +10,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/util/clusteroperator"
-	operatorversion "github.com/openshift/cluster-dns-operator/version"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
@@ -66,15 +66,22 @@ func (h *Handler) syncOperatorStatus() {
 	}
 
 	oldVersions := co.Status.Versions
-	co.Status.Versions = []configv1.OperandVersion{
-		{
-			Name:    "operator",
-			Version: operatorversion.Version,
-		},
-		{
-			Name:    "coredns",
-			Version: h.Config.CoreDNSImage,
-		},
+	if releaseVersion := os.Getenv("RELEASE_VERSION"); len(releaseVersion) > 0 {
+		// an available operator resets release version
+		for _, condition := range co.Status.Conditions {
+			if condition.Type == configv1.OperatorAvailable && condition.Status == configv1.ConditionTrue {
+				co.Status.Versions = []configv1.OperandVersion{
+					{
+						Name:    "operator",
+						Version: releaseVersion,
+					},
+					{
+						Name:    "coredns",
+						Version: h.Config.CoreDNSImage,
+					},
+				}
+			}
+		}
 	}
 
 	if isNotFound {
