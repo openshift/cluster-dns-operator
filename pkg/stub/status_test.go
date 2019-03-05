@@ -123,8 +123,7 @@ func TestComputeStatusConditions(t *testing.T) {
 			}
 		}
 		if !gotExpected {
-			t.Fatalf("%q: expected %#v, got %#v", tc.description,
-				expected, new)
+			t.Fatalf("%q: expected %#v, got %#v", tc.description, expected, new)
 		}
 	}
 }
