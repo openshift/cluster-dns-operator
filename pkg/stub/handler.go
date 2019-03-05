@@ -65,6 +65,7 @@ func (h *Handler) EnsureDefaultClusterDNS() error {
 		if err := sdk.Create(desired); err != nil {
 			return fmt.Errorf("failed to create clusterdns %s: %v", desired.Name, err)
 		}
+		logrus.Infof("created clusterdns %s", desired.Name)
 	}
 	return nil
 }
@@ -139,6 +140,7 @@ func (h *Handler) ensureDNSNamespace() error {
 		if err := sdk.Create(ns); err != nil {
 			return fmt.Errorf("failed to create dns namespace %s: %v", ns.Name, err)
 		}
+		logrus.Infof("created dns namespace %s", ns.Name)
 	}
 
 	sa, err := h.ManifestFactory.DNSServiceAccount()
@@ -152,6 +154,7 @@ func (h *Handler) ensureDNSNamespace() error {
 		if err := sdk.Create(sa); err != nil {
 			return fmt.Errorf("failed to create dns service account %s: %v", sa.Name, err)
 		}
+		logrus.Infof("created dns service account %s", sa.Name)
 	}
 
 	cr, err := h.ManifestFactory.DNSClusterRole()
@@ -165,6 +168,7 @@ func (h *Handler) ensureDNSNamespace() error {
 		if err := sdk.Create(cr); err != nil {
 			return fmt.Errorf("failed to create dns cluster role %s: %v", cr.Name, err)
 		}
+		logrus.Infof("created dns cluster role %s", cr.Name)
 	}
 
 	crb, err := h.ManifestFactory.DNSClusterRoleBinding()
@@ -178,6 +182,7 @@ func (h *Handler) ensureDNSNamespace() error {
 		if err := sdk.Create(crb); err != nil {
 			return fmt.Errorf("failed to create dns cluster role binding %s: %v", crb.Name, err)
 		}
+		logrus.Infof("created dns cluster role binding %s", crb.Name)
 	}
 	return nil
 }
@@ -203,6 +208,7 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 		if err := sdk.Create(ds); err != nil {
 			return fmt.Errorf("failed to create dns daemonset %s: %v", ds.Name, err)
 		}
+		logrus.Infof("created dns daemonset %s", ds.Name)
 	}
 
 	trueVar := true
@@ -226,6 +232,7 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 		if err := sdk.Create(cm); err != nil {
 			return fmt.Errorf("failed to create dns config map %s: %v", cm.Name, err)
 		}
+		logrus.Infof("created dns config map %s", cm.Name)
 	}
 
 	service, err := h.ManifestFactory.DNSService(dns, clusterIP)
@@ -240,6 +247,7 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 		if err := sdk.Create(service); err != nil {
 			return fmt.Errorf("failed to create dns service %s: %v", service.Name, err)
 		}
+		logrus.Infof("created dns service %s", service.Name)
 	}
 
 	if err := syncClusterDNSStatus(dns, clusterIP, clusterDomain); err != nil {
@@ -261,11 +269,15 @@ func (h *Handler) ensureDNSDeleted(dns *dnsv1alpha1.ClusterDNS) error {
 	if err := sdk.Delete(ds); err != nil && !errors.IsNotFound(err) {
 		return err
 	}
+	logrus.Infof("deleted dns daemonset %s", ds.Name)
 	return nil
 }
 
 // syncClusterDNSStatus updates the status for a given clusterdns.
 func syncClusterDNSStatus(dns *dnsv1alpha1.ClusterDNS, clusterIP, clusterDomain string) error {
+	if err := sdk.Get(dns); err != nil {
+		return fmt.Errorf("failed to get latest dns object %s: %v", dns.Name, err)
+	}
 	dns.Status = dnsv1alpha1.ClusterDNSStatus{
 		ClusterIP:     clusterIP,
 		ClusterDomain: clusterDomain,

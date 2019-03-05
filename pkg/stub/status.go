@@ -35,8 +35,7 @@ func (h *Handler) syncOperatorStatus() {
 	err := sdk.Get(co)
 	isNotFound := errors.IsNotFound(err)
 	if err != nil && !isNotFound {
-		logrus.Errorf("syncOperatorStatus: error getting ClusterOperator %s: %v",
-			co.Name, err)
+		logrus.Errorf("syncOperatorStatus: error getting ClusterOperator %s: %v", co.Name, err)
 		return
 	}
 
@@ -47,8 +46,7 @@ func (h *Handler) syncOperatorStatus() {
 	}
 
 	oldConditions := co.Status.Conditions
-	co.Status.Conditions = computeStatusConditions(oldConditions, ns,
-		dnses, daemonsets)
+	co.Status.Conditions = computeStatusConditions(oldConditions, ns, dnses, daemonsets)
 
 	oldRelatedObjects := co.Status.RelatedObjects
 	co.Status.RelatedObjects = []configv1.ObjectReference{
@@ -83,12 +81,10 @@ func (h *Handler) syncOperatorStatus() {
 
 	if isNotFound {
 		if err := sdk.Create(co); err != nil {
-			logrus.Errorf("syncOperatorStatus: failed to create ClusterOperator %s: %v",
-				co.Name, err)
-		} else {
-			logrus.Infof("syncOperatorStatus: created ClusterOperator %s (UID %v)",
-				co.Name, co.UID)
+			logrus.Errorf("syncOperatorStatus: failed to create ClusterOperator %s: %v", co.Name, err)
 		}
+		logrus.Infof("syncOperatorStatus: created ClusterOperator %s (UID %v)", co.Name, co.UID)
+		return
 	}
 
 	if clusteroperator.ConditionsEqual(oldConditions, co.Status.Conditions) &&
@@ -103,16 +99,14 @@ func (h *Handler) syncOperatorStatus() {
 		return
 	}
 
-	resourceClient, _, err := k8sclient.GetResourceClient(co.APIVersion,
-		co.Kind, co.Namespace)
+	resourceClient, _, err := k8sclient.GetResourceClient(co.APIVersion, co.Kind, co.Namespace)
 	if err != nil {
 		logrus.Errorf("syncOperatorStatus: GetResourceClient: %v", err)
 		return
 	}
 
 	if _, err := resourceClient.UpdateStatus(unstructObj); err != nil {
-		logrus.Errorf("syncOperatorStatus: UpdateStatus on %s: %v",
-			co.Name, err)
+		logrus.Errorf("syncOperatorStatus: UpdateStatus on %s: %v", co.Name, err)
 	}
 }
 
