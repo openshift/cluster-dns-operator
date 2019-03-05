@@ -47,7 +47,7 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	// now correctness is more important than performance.
 	switch o := event.Object.(type) {
 	case *dnsv1alpha1.ClusterDNS:
-		logrus.Infof("reconciling for update to clusterdns %q", o.Name)
+		logrus.Infof("reconciling for update to clusterdns %s", o.Name)
 	}
 	return h.reconcile()
 }
@@ -56,11 +56,15 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 func (h *Handler) EnsureDefaultClusterDNS() error {
 	desired, err := h.ManifestFactory.ClusterDNSDefaultCR()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to build default clusterdns: %v", err)
 	}
-	err = sdk.Create(desired)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return err
+	if err := sdk.Get(desired); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get clusterdns %s: %v", desired.Name, err)
+		}
+		if err := sdk.Create(desired); err != nil {
+			return fmt.Errorf("failed to create clusterdns %s: %v", desired.Name, err)
+		}
 	}
 	return nil
 }
@@ -71,9 +75,8 @@ func (h *Handler) EnsureDefaultClusterDNS() error {
 func (h *Handler) reconcile() error {
 	// Ensure we have all the necessary scaffolding on which to place DNS
 	// instances.
-	err := h.ensureDNSNamespace()
-	if err != nil {
-		return err
+	if err := h.ensureDNSNamespace(); err != nil {
+		return fmt.Errorf("failed to ensure dns namespace: %v", err)
 	}
 
 	// Find all clusterdnses.
@@ -83,8 +86,7 @@ func (h *Handler) reconcile() error {
 			APIVersion: "dns.openshift.io/v1alpha1",
 		},
 	}
-	err = sdk.List(corev1.NamespaceAll, dnses, sdk.WithListOptions(&metav1.ListOptions{}))
-	if err != nil {
+	if err := sdk.List(corev1.NamespaceAll, dnses, sdk.WithListOptions(&metav1.ListOptions{})); err != nil {
 		return fmt.Errorf("failed to list clusterdnses: %v", err)
 	}
 
@@ -101,26 +103,23 @@ func (h *Handler) reconcile() error {
 		// deletion.
 		if dns.DeletionTimestamp != nil {
 			// Destroy any coredns instance associated with the dns.
-			err := h.ensureDNSDeleted(&dns)
-			if err != nil {
-				errors = append(errors, fmt.Errorf("couldn't delete clusterdns %q: %v", dns.Name, err))
+			if err := h.ensureDNSDeleted(&dns); err != nil {
+				errors = append(errors, fmt.Errorf("failed to delete clusterdns %s: %v", dns.Name, err))
 				continue
 			}
 			// Clean up the finalizer to allow the clusterdns to be deleted.
 			if slice.ContainsString(dns.Finalizers, ClusterDNSFinalizer) {
 				dns.Finalizers = slice.RemoveString(dns.Finalizers, ClusterDNSFinalizer)
-				err = sdk.Update(&dns)
-				if err != nil {
-					errors = append(errors, fmt.Errorf("couldn't remove finalizer from clusterdns %q: %v", dns.Name, err))
+				if err := sdk.Update(&dns); err != nil {
+					errors = append(errors, fmt.Errorf("failed to remove finalizer from clusterdns %s: %v", dns.Name, err))
 				}
 			}
 			continue
 		}
 
 		// Handle active DNS.
-		err := h.ensureCoreDNSForClusterDNS(&dns)
-		if err != nil {
-			errors = append(errors, fmt.Errorf("couldn't ensure clusterdns %q: %v", dns.Name, err))
+		if err := h.ensureCoreDNSForClusterDNS(&dns); err != nil {
+			errors = append(errors, fmt.Errorf("failed to ensure clusterdns %s: %v", dns.Name, err))
 		}
 	}
 	return utilerrors.NewAggregate(errors)
@@ -131,40 +130,55 @@ func (h *Handler) reconcile() error {
 func (h *Handler) ensureDNSNamespace() error {
 	ns, err := h.ManifestFactory.DNSNamespace()
 	if err != nil {
-		return fmt.Errorf("couldn't build dns namespace: %v", err)
+		return fmt.Errorf("failed to build dns namespace: %v", err)
 	}
-	err = sdk.Create(ns)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns namespace: %v", err)
+	if err := sdk.Get(ns); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns namespace %s: %v", ns.Name, err)
+		}
+		if err := sdk.Create(ns); err != nil {
+			return fmt.Errorf("failed to create dns namespace %s: %v", ns.Name, err)
+		}
 	}
 
 	sa, err := h.ManifestFactory.DNSServiceAccount()
 	if err != nil {
-		return fmt.Errorf("couldn't build dns service account: %v", err)
+		return fmt.Errorf("failed to build dns service account: %v", err)
 	}
-	err = sdk.Create(sa)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns service account: %v", err)
+	if err := sdk.Get(sa); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns service account %s: %v", sa.Name, err)
+		}
+		if err := sdk.Create(sa); err != nil {
+			return fmt.Errorf("failed to create dns service account %s: %v", sa.Name, err)
+		}
 	}
 
 	cr, err := h.ManifestFactory.DNSClusterRole()
 	if err != nil {
-		return fmt.Errorf("couldn't build dns cluster role: %v", err)
+		return fmt.Errorf("failed to build dns cluster role: %v", err)
 	}
-	err = sdk.Create(cr)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns cluster role: %v", err)
+	if err := sdk.Get(cr); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns cluster role %s: %v", cr.Name, err)
+		}
+		if err := sdk.Create(cr); err != nil {
+			return fmt.Errorf("failed to create dns cluster role %s: %v", cr.Name, err)
+		}
 	}
 
 	crb, err := h.ManifestFactory.DNSClusterRoleBinding()
 	if err != nil {
-		return fmt.Errorf("couldn't build dns cluster role binding: %v", err)
+		return fmt.Errorf("failed to build dns cluster role binding: %v", err)
 	}
-	err = sdk.Create(crb)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns cluster role binding: %v", err)
+	if err := sdk.Get(crb); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns cluster role binding %s: %v", crb.Name, err)
+		}
+		if err := sdk.Create(crb); err != nil {
+			return fmt.Errorf("failed to create dns cluster role binding %s: %v", crb.Name, err)
+		}
 	}
-
 	return nil
 }
 
@@ -180,16 +194,17 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 
 	ds, err := h.ManifestFactory.DNSDaemonSet(dns, clusterIP, clusterDomain)
 	if err != nil {
-		return fmt.Errorf("couldn't build daemonset: %v", err)
+		return fmt.Errorf("failed to build dns daemonset: %v", err)
 	}
-	err = sdk.Create(ds)
-	if errors.IsAlreadyExists(err) {
-		if err = sdk.Get(ds); err != nil {
-			return fmt.Errorf("failed to fetch daemonset %s, %v", ds.Name, err)
+	if err := sdk.Get(ds); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns daemonset %s: %v", ds.Name, err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("failed to create daemonset: %v", err)
+		if err := sdk.Create(ds); err != nil {
+			return fmt.Errorf("failed to create dns daemonset %s: %v", ds.Name, err)
+		}
 	}
+
 	trueVar := true
 	dsRef := metav1.OwnerReference{
 		APIVersion: ds.APIVersion,
@@ -201,24 +216,29 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 
 	cm, err := h.ManifestFactory.DNSConfigMap(dns, clusterDomain)
 	if err != nil {
-		return fmt.Errorf("couldn't build dns config map: %v", err)
+		return fmt.Errorf("failed to build dns config map: %v", err)
 	}
-	cm.SetOwnerReferences([]metav1.OwnerReference{dsRef})
-	if err = sdk.Create(cm); err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("couldn't create dns config map: %v", err)
+	if err := sdk.Get(cm); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns config map %s: %v", cm.Name, err)
+		}
+		cm.SetOwnerReferences([]metav1.OwnerReference{dsRef})
+		if err := sdk.Create(cm); err != nil {
+			return fmt.Errorf("failed to create dns config map %s: %v", cm.Name, err)
+		}
 	}
 
 	service, err := h.ManifestFactory.DNSService(dns, clusterIP)
 	if err != nil {
-		return fmt.Errorf("couldn't build service: %v", err)
+		return fmt.Errorf("failed to build service: %v", err)
 	}
-	if err = sdk.Get(service); err != nil {
+	if err := sdk.Get(service); err != nil {
 		if !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to fetch service %s, %v", service.Name, err)
+			return fmt.Errorf("failed to get dns service %s: %v", service.Name, err)
 		}
 		service.SetOwnerReferences([]metav1.OwnerReference{dsRef})
-		if err = sdk.Create(service); err != nil {
-			return fmt.Errorf("failed to create service: %v", err)
+		if err := sdk.Create(service); err != nil {
+			return fmt.Errorf("failed to create dns service %s: %v", service.Name, err)
 		}
 	}
 
@@ -236,10 +256,9 @@ func (h *Handler) ensureDNSDeleted(dns *dnsv1alpha1.ClusterDNS) error {
 	// configmap and service resources.
 	ds, err := h.ManifestFactory.DNSDaemonSet(dns, "", "")
 	if err != nil {
-		return fmt.Errorf("failed to build daemonset for deletion, ClusterDNS: %q, %v", dns.Name, err)
+		return fmt.Errorf("failed to build daemonset for deletion, ClusterDNS: %s, %v", dns.Name, err)
 	}
-	err = sdk.Delete(ds)
-	if !errors.IsNotFound(err) {
+	if err := sdk.Delete(ds); err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 	return nil
@@ -259,11 +278,11 @@ func syncClusterDNSStatus(dns *dnsv1alpha1.ClusterDNS, clusterIP, clusterDomain 
 
 	client, _, err := k8sclient.GetResourceClient(dns.APIVersion, dns.Kind, dns.Namespace)
 	if err != nil {
-		return fmt.Errorf("failed to get resource client for clusterdns %s: %v", dns.Name, err)
+		return fmt.Errorf("failed to get resource client for dns %s: %v", dns.Name, err)
 	}
 
 	if _, err := client.UpdateStatus(unstructObj); err != nil {
-		return fmt.Errorf("update status failed for clusterdns %s: %v", dns.Name, err)
+		return fmt.Errorf("failed to update status for dns %s: %v", dns.Name, err)
 	}
 	return nil
 }
@@ -280,8 +299,7 @@ func getClusterIPFromNetworkConfig() (string, error) {
 			Name: "cluster",
 		},
 	}
-	err := sdk.Get(networkConfig)
-	if err != nil {
+	if err := sdk.Get(networkConfig); err != nil {
 		return "", fmt.Errorf("failed to get network 'cluster': %v", err)
 	}
 
@@ -290,7 +308,7 @@ func getClusterIPFromNetworkConfig() (string, error) {
 	}
 	_, serviceCIDR, err := net.ParseCIDR(networkConfig.Status.ServiceNetwork[0])
 	if err != nil {
-		return "", fmt.Errorf("invalid serviceCIDR %q: %v", networkConfig.Status.ServiceNetwork[0], err)
+		return "", fmt.Errorf("invalid serviceCIDR %s: %v", networkConfig.Status.ServiceNetwork[0], err)
 	}
 
 	dnsClusterIP, err := cidr.Host(serviceCIDR, 10)
