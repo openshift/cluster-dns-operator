@@ -4,6 +4,4 @@ metadata:
   name: dns
 spec: {}
 status:
-  versions:
-    - name: operator
-      version: "0.0.1-snapshot"
+ # status is set at runtime

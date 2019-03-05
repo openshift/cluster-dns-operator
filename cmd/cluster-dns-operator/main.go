@@ -49,8 +49,9 @@ func main() {
 	}
 
 	operatorConfig := operator.Config{
-		CoreDNSImage:      coreDNSImage,
-		OpenshiftCLIImage: cliImage,
+		OperatorReleaseVersion: os.Getenv("RELEASE_VERSION"),
+		CoreDNSImage:           coreDNSImage,
+		OpenshiftCLIImage:      cliImage,
 	}
 
 	handler := &stub.Handler{

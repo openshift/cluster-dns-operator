@@ -2,7 +2,6 @@ package stub
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -66,14 +65,14 @@ func (h *Handler) syncOperatorStatus() {
 	}
 
 	oldVersions := co.Status.Versions
-	if releaseVersion := os.Getenv("RELEASE_VERSION"); len(releaseVersion) > 0 {
+	if len(h.Config.OperatorReleaseVersion) > 0 {
 		// an available operator resets release version
 		for _, condition := range co.Status.Conditions {
 			if condition.Type == configv1.OperatorAvailable && condition.Status == configv1.ConditionTrue {
 				co.Status.Versions = []configv1.OperandVersion{
 					{
 						Name:    "operator",
-						Version: releaseVersion,
+						Version: h.Config.OperatorReleaseVersion,
 					},
 					{
 						Name:    "coredns",
