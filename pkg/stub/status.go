@@ -82,6 +82,7 @@ func (h *Handler) syncOperatorStatus() {
 	if isNotFound {
 		if err := sdk.Create(co); err != nil {
 			logrus.Errorf("syncOperatorStatus: failed to create ClusterOperator %s: %v", co.Name, err)
+			return
 		}
 		logrus.Infof("syncOperatorStatus: created ClusterOperator %s (UID %v)", co.Name, co.UID)
 		return
