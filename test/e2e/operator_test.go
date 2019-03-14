@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -91,10 +92,28 @@ func TestVersionReporting(t *testing.T) {
 		t.Errorf("failed to get deployment %s/%s: %v", deployment.Namespace, deployment.Name, err)
 	}
 
-	patch := []byte(`{"spec": {"template": {"spec": {"containers": [{"name":"dns-operator","env":[{"name":"RELEASE_VERSION","value":"0.0.1-test"}]}]}}}}`)
+	var curVersion string
+	for _, env := range deployment.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "RELEASE_VERSION" {
+			curVersion = env.Value
+			break
+		}
+	}
+	if len(curVersion) == 0 {
+		t.Errorf("env RELEASE_VERSION not found in the operator deployment")
+	}
+
+	newVersion := "0.0.1-test"
+	patch := []byte(fmt.Sprintf(`{"spec": {"template": {"spec": {"containers": [{"name":"dns-operator","env":[{"name":"RELEASE_VERSION","value":"%s"}]}]}}}}`, newVersion))
 	if err := sdk.Patch(deployment, types.StrategicMergePatchType, patch); err != nil {
 		t.Fatalf("failed to patch dns operator to new version: %v", err)
 	}
+	defer func() {
+		patch := []byte(fmt.Sprintf(`{"spec": {"template": {"spec": {"containers": [{"name":"dns-operator","env":[{"name":"RELEASE_VERSION","value":"%s"}]}]}}}}`, curVersion))
+		if err := sdk.Patch(deployment, types.StrategicMergePatchType, patch); err != nil {
+			t.Fatalf("failed to restore dns operator to old release version: %v", err)
+		}
+	}()
 
 	err = wait.PollImmediate(1*time.Second, 3*time.Minute, func() (bool, error) {
 		co := &configv1.ClusterOperator{
@@ -111,14 +130,17 @@ func TestVersionReporting(t *testing.T) {
 		}
 
 		for _, v := range co.Status.Versions {
-			if v.Name == "operator" && v.Version == "0.0.1-test" {
-				return true, nil
+			if v.Name == "operator" {
+				if v.Version == newVersion {
+					return true, nil
+				}
+				break
 			}
 		}
 		return false, nil
 	})
 	if err != nil {
-		t.Fatalf("failed to observe updated version reported in dns clusteroperator status: %v", err)
+		t.Errorf("failed to observe updated version reported in dns clusteroperator status: %v", err)
 	}
 }
 
@@ -144,12 +166,30 @@ func TestCoreDNSImageUpgrade(t *testing.T) {
 		t.Errorf("failed to get deployment %s/%s: %v", deployment.Namespace, deployment.Name, err)
 	}
 
-	patch := []byte(`{"spec": {"template": {"spec": {"containers": [{"name":"dns-operator","env":[{"name":"IMAGE","value":"openshift/origin-coredns:latest"}]}]}}}}`)
-	if err := sdk.Patch(deployment, types.StrategicMergePatchType, patch); err != nil {
-		t.Fatalf("failed to patch dns operator to new version: %v", err)
+	var curImage string
+	for _, env := range deployment.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "IMAGE" {
+			curImage = env.Value
+			break
+		}
+	}
+	if len(curImage) == 0 {
+		t.Errorf("env IMAGE not found in the operator deployment")
 	}
 
-	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+	newImage := "openshift/origin-coredns:latest"
+	patch := []byte(fmt.Sprintf(`{"spec": {"template": {"spec": {"containers": [{"name":"dns-operator","env":[{"name":"IMAGE","value":"%s"}]}]}}}}`, newImage))
+	if err := sdk.Patch(deployment, types.StrategicMergePatchType, patch); err != nil {
+		t.Fatalf("failed to patch dns operator to new coredns image: %v", err)
+	}
+	defer func() {
+		patch := []byte(fmt.Sprintf(`{"spec": {"template": {"spec": {"containers": [{"name":"dns-operator","env":[{"name":"IMAGE","value":"%s"}]}]}}}}`, curImage))
+		if err := sdk.Patch(deployment, types.StrategicMergePatchType, patch); err != nil {
+			t.Fatalf("failed to restore dns operator to old coredns image: %v", err)
+		}
+	}()
+
+	err = wait.PollImmediate(1*time.Second, 3*time.Minute, func() (bool, error) {
 		podList := &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Pod",
@@ -162,14 +202,17 @@ func TestCoreDNSImageUpgrade(t *testing.T) {
 
 		for _, pod := range podList.Items {
 			for _, container := range pod.Spec.Containers {
-				if container.Name == "dns" && container.Image == "openshift/origin-coredns:latest" {
-					return true, nil
+				if container.Name == "dns" {
+					if container.Image == newImage {
+						return true, nil
+					}
+					break
 				}
 			}
 		}
 		return false, nil
 	})
 	if err != nil {
-		t.Fatalf("failed to observe updated coreDNS image: %v", err)
+		t.Errorf("failed to observe updated coreDNS image: %v", err)
 	}
 }
