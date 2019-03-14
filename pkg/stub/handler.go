@@ -210,17 +210,27 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 		}
 		logrus.Infof("created dns daemonset %s", ds.Name)
 	}
+
+	needsUpdate := false
 	for i, c := range ds.Spec.Template.Spec.Containers {
 		switch c.Name {
 		case "dns":
 			if h.Config.CoreDNSImage != ds.Spec.Template.Spec.Containers[i].Image {
 				ds.Spec.Template.Spec.Containers[i].Image = h.Config.CoreDNSImage
-				if err := sdk.Update(ds); err != nil {
-					return fmt.Errorf("failed to update dns daemonset %s: %v", ds.Name, err)
-				}
-				logrus.Infof("updated dns daemonset %s", ds.Name)
+				needsUpdate = true
+			}
+		case "dns-node-resolver":
+			if h.Config.OpenshiftCLIImage != ds.Spec.Template.Spec.Containers[i].Image {
+				ds.Spec.Template.Spec.Containers[i].Image = h.Config.OpenshiftCLIImage
+				needsUpdate = true
 			}
 		}
+	}
+	if needsUpdate {
+		if err := sdk.Update(ds); err != nil {
+			return fmt.Errorf("failed to update dns daemonset %s: %v", ds.Name, err)
+		}
+		logrus.Infof("updated dns daemonset %s", ds.Name)
 	}
 
 	trueVar := true
