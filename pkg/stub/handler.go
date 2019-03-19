@@ -103,24 +103,30 @@ func (h *Handler) reconcile() error {
 		// TODO: Assert/ensure that the dns has a finalizer so we can reliably detect
 		// deletion.
 		if dns.DeletionTimestamp != nil {
+			if err := h.ensureOpenshiftExternalNameServiceDeleted(); err != nil {
+				errors = append(errors, fmt.Errorf("failed to delete external name for openshift service: %v", err))
+			}
 			// Destroy any coredns instance associated with the dns.
 			if err := h.ensureDNSDeleted(&dns); err != nil {
 				errors = append(errors, fmt.Errorf("failed to delete clusterdns %s: %v", dns.Name, err))
-				continue
 			}
-			// Clean up the finalizer to allow the clusterdns to be deleted.
-			if slice.ContainsString(dns.Finalizers, ClusterDNSFinalizer) {
-				dns.Finalizers = slice.RemoveString(dns.Finalizers, ClusterDNSFinalizer)
-				if err := sdk.Update(&dns); err != nil {
-					errors = append(errors, fmt.Errorf("failed to remove finalizer from clusterdns %s: %v", dns.Name, err))
+
+			if len(errors) == 0 {
+				// Clean up the finalizer to allow the clusterdns to be deleted.
+				if slice.ContainsString(dns.Finalizers, ClusterDNSFinalizer) {
+					dns.Finalizers = slice.RemoveString(dns.Finalizers, ClusterDNSFinalizer)
+					if err := sdk.Update(&dns); err != nil {
+						errors = append(errors, fmt.Errorf("failed to remove finalizer from clusterdns %s: %v", dns.Name, err))
+					}
 				}
 			}
-			continue
-		}
-
-		// Handle active DNS.
-		if err := h.ensureCoreDNSForClusterDNS(&dns); err != nil {
-			errors = append(errors, fmt.Errorf("failed to ensure clusterdns %s: %v", dns.Name, err))
+		} else {
+			// Handle active DNS.
+			if err := h.ensureCoreDNSForClusterDNS(&dns); err != nil {
+				errors = append(errors, fmt.Errorf("failed to ensure clusterdns %s: %v", dns.Name, err))
+			} else if err := h.ensureExternalNameForOpenshiftService(); err != nil {
+				errors = append(errors, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
+			}
 		}
 	}
 	return utilerrors.NewAggregate(errors)
@@ -275,6 +281,57 @@ func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error 
 	if err := syncClusterDNSStatus(dns, clusterIP, clusterDomain); err != nil {
 		return fmt.Errorf("failed to sync dns status %s, %v", dns.Name, err)
 	}
+	return nil
+}
+
+// ensureExternalNameForOpenshiftService ensures 'openshift.default.svc'
+// resolves to 'kubernetes.default.svc'.
+// This will ensure backward compatibility with openshift 3.x
+func (h *Handler) ensureExternalNameForOpenshiftService() error {
+	svc := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "openshift",
+			Namespace: "default",
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: "kubernetes.default.svc.cluster.local",
+		},
+	}
+
+	if err := sdk.Get(svc); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get external name service %s/%s: %v", svc.Namespace, svc.Name, err)
+		}
+
+		if err := sdk.Create(svc); err != nil {
+			return fmt.Errorf("failed to create external name service %s/%s: %v", svc.Namespace, svc.Name, err)
+		}
+		logrus.Infof("created external name service %s/%s", svc.Namespace, svc.Name)
+	}
+	return nil
+}
+
+// ensureOpenshiftExternalNameServiceDeleted ensures deletion of 'openshift.default.svc'
+func (h *Handler) ensureOpenshiftExternalNameServiceDeleted() error {
+	svc := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "openshift",
+			Namespace: "default",
+		},
+	}
+	if err := sdk.Delete(svc); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete external name service %s/%s: %v", svc.Namespace, svc.Name, err)
+	}
+	logrus.Infof("deleted external name service %s/%s", svc.Namespace, svc.Name)
 	return nil
 }
 
