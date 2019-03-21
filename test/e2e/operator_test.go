@@ -8,7 +8,7 @@ import (
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
-	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
 
@@ -49,12 +49,12 @@ func TestOperatorAvailable(t *testing.T) {
 }
 
 func TestDefaultClusterDNSExists(t *testing.T) {
-	var dns *dnsv1alpha1.ClusterDNS
+	var dns *operatorv1.DNS
 	err := wait.PollImmediate(1*time.Second, 10*time.Minute, func() (bool, error) {
-		dns = &dnsv1alpha1.ClusterDNS{
+		dns = &operatorv1.DNS{
 			TypeMeta: metav1.TypeMeta{
-				Kind:       "ClusterDNS",
-				APIVersion: "dns.openshift.io/v1alpha1",
+				Kind:       "DNS",
+				APIVersion: "operator.openshift.io/v1",
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",

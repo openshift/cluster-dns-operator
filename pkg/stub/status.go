@@ -7,7 +7,8 @@ import (
 	"github.com/sirupsen/logrus"
 
 	configv1 "github.com/openshift/api/config/v1"
-	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	operatorv1 "github.com/openshift/api/operator/v1"
+
 	"github.com/openshift/cluster-dns-operator/pkg/util/clusteroperator"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
@@ -113,7 +114,7 @@ func (h *Handler) syncOperatorStatus() {
 
 // getOperatorState gets and returns the resources necessary to compute the
 // operator's current state.
-func (h *Handler) getOperatorState() (*corev1.Namespace, []dnsv1alpha1.ClusterDNS, []appsv1.DaemonSet, error) {
+func (h *Handler) getOperatorState() (*corev1.Namespace, []operatorv1.DNS, []appsv1.DaemonSet, error) {
 	ns, err := h.ManifestFactory.DNSNamespace()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("error building Namespace: %v",
@@ -127,22 +128,12 @@ func (h *Handler) getOperatorState() (*corev1.Namespace, []dnsv1alpha1.ClusterDN
 		return nil, nil, nil, fmt.Errorf("error getting Namespace %s: %v", ns.Name, err)
 	}
 
-	dnsList := &dnsv1alpha1.ClusterDNSList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ClusterDNS",
-			APIVersion: "dns.openshift.io/v1alpha1",
-		},
-	}
+	dnsList := &operatorv1.DNSList{}
 	if err := sdk.List(corev1.NamespaceAll, dnsList, sdk.WithListOptions(&metav1.ListOptions{})); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to list ClusterDNSes: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to list DNSes: %v", err)
 	}
 
-	daemonsetList := &appsv1.DaemonSetList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "DaemonSet",
-			APIVersion: "apps/v1",
-		},
-	}
+	daemonsetList := &appsv1.DaemonSetList{}
 	if err := sdk.List(ns.Name, daemonsetList, sdk.WithListOptions(&metav1.ListOptions{})); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to list DaemonSets: %v", err)
 	}
@@ -151,7 +142,7 @@ func (h *Handler) getOperatorState() (*corev1.Namespace, []dnsv1alpha1.ClusterDN
 }
 
 // computeStatusConditions computes the operator's current state.
-func computeStatusConditions(conditions []configv1.ClusterOperatorStatusCondition, ns *corev1.Namespace, dnses []dnsv1alpha1.ClusterDNS, daemonsets []appsv1.DaemonSet) []configv1.ClusterOperatorStatusCondition {
+func computeStatusConditions(conditions []configv1.ClusterOperatorStatusCondition, ns *corev1.Namespace, dnses []operatorv1.DNS, daemonsets []appsv1.DaemonSet) []configv1.ClusterOperatorStatusCondition {
 	failingCondition := &configv1.ClusterOperatorStatusCondition{
 		Type:   configv1.OperatorFailing,
 		Status: configv1.ConditionUnknown,

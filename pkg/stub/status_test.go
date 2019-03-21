@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	configv1 "github.com/openshift/api/config/v1"
-	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,7 +37,7 @@ func TestComputeStatusConditions(t *testing.T) {
 	for _, tc := range testCases {
 		var (
 			namespace    *corev1.Namespace
-			clusterdnses []dnsv1alpha1.ClusterDNS
+			clusterdnses []operatorv1.DNS
 			daemonsets   []appsv1.DaemonSet
 
 			failing, progressing, available configv1.ConditionStatus
@@ -47,7 +47,7 @@ func TestComputeStatusConditions(t *testing.T) {
 		}
 		for i := 0; i < tc.inputs.numWanted; i++ {
 			clusterdnses = append(clusterdnses,
-				dnsv1alpha1.ClusterDNS{
+				operatorv1.DNS{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: fmt.Sprintf("%d", i+1),
 					},

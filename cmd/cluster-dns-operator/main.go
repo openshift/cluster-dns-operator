@@ -30,8 +30,8 @@ func main() {
 
 	sdk.ExposeMetricsPort()
 
-	resource := "dns.openshift.io/v1alpha1"
-	kind := "ClusterDNS"
+	resource := "operator.openshift.io/v1"
+	kind := "DNS"
 	resyncPeriod := 10 * time.Minute
 	logrus.Infof("Watching %s, %s, %d", resource, kind, resyncPeriod)
 	sdk.Watch(resource, kind, corev1.NamespaceAll, resyncPeriod)

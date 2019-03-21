@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 
-	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
@@ -19,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	configv1 "github.com/openshift/api/config/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,8 +46,8 @@ func (h *Handler) Handle(ctx context.Context, event sdk.Event) error {
 	// TODO: This should be adding an item to a rate limited work queue, but for
 	// now correctness is more important than performance.
 	switch o := event.Object.(type) {
-	case *dnsv1alpha1.ClusterDNS:
-		logrus.Infof("reconciling for update to clusterdns %s", o.Name)
+	case *operatorv1.DNS:
+		logrus.Infof("reconciling for update to dns %s", o.Name)
 	}
 	return h.reconcile()
 }
@@ -81,12 +81,7 @@ func (h *Handler) reconcile() error {
 	}
 
 	// Find all clusterdnses.
-	dnses := &dnsv1alpha1.ClusterDNSList{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ClusterDNS",
-			APIVersion: "dns.openshift.io/v1alpha1",
-		},
-	}
+	dnses := &operatorv1.DNSList{}
 	if err := sdk.List(corev1.NamespaceAll, dnses, sdk.WithListOptions(&metav1.ListOptions{})); err != nil {
 		return fmt.Errorf("failed to list clusterdnses: %v", err)
 	}
@@ -195,7 +190,7 @@ func (h *Handler) ensureDNSNamespace() error {
 
 // ensureCoreDNSForClusterDNS ensures all necessary CoreDNS resources exist for
 // a given clusterdns.
-func (h *Handler) ensureCoreDNSForClusterDNS(dns *dnsv1alpha1.ClusterDNS) error {
+func (h *Handler) ensureCoreDNSForClusterDNS(dns *operatorv1.DNS) error {
 	// TODO: fetch this from higher level openshift resource when it is exposed
 	clusterDomain := "cluster.local"
 	clusterIP, err := getClusterIPFromNetworkConfig()
@@ -337,7 +332,7 @@ func (h *Handler) ensureOpenshiftExternalNameServiceDeleted() error {
 
 // ensureDNSDeleted ensures that any CoreDNS resources associated with the
 // clusterdns are deleted.
-func (h *Handler) ensureDNSDeleted(dns *dnsv1alpha1.ClusterDNS) error {
+func (h *Handler) ensureDNSDeleted(dns *operatorv1.DNS) error {
 	// DNS specific configmap and service has owner reference to daemonset.
 	// So deletion of daemonset will trigger garbage collection of corresponding
 	// configmap and service resources.
@@ -353,11 +348,11 @@ func (h *Handler) ensureDNSDeleted(dns *dnsv1alpha1.ClusterDNS) error {
 }
 
 // syncClusterDNSStatus updates the status for a given clusterdns.
-func syncClusterDNSStatus(dns *dnsv1alpha1.ClusterDNS, clusterIP, clusterDomain string) error {
+func syncClusterDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string) error {
 	if err := sdk.Get(dns); err != nil {
 		return fmt.Errorf("failed to get latest dns object %s: %v", dns.Name, err)
 	}
-	dns.Status = dnsv1alpha1.ClusterDNSStatus{
+	dns.Status = operatorv1.DNSStatus{
 		ClusterIP:     clusterIP,
 		ClusterDomain: clusterDomain,
 	}

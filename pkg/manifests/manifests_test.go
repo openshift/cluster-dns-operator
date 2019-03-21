@@ -3,7 +3,7 @@ package manifests
 import (
 	"testing"
 
-	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,7 +18,7 @@ func TestManifests(t *testing.T) {
 	f := NewFactory(config)
 	clusterDomain := "cluster.local"
 	clusterIP := "172.30.77.10"
-	dns := &dnsv1alpha1.ClusterDNS{
+	dns := &operatorv1.DNS{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "default",
 		},

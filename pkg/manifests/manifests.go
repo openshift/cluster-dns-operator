@@ -14,7 +14,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/yaml"
 
-	dnsv1alpha1 "github.com/openshift/cluster-dns-operator/pkg/apis/dns/v1alpha1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 )
 
@@ -46,7 +46,7 @@ func NewFactory(config operator.Config) *Factory {
 }
 
 // ClusterDNSDefaultCR builds a default cluster DNS
-func (f *Factory) ClusterDNSDefaultCR() (*dnsv1alpha1.ClusterDNS, error) {
+func (f *Factory) ClusterDNSDefaultCR() (*operatorv1.DNS, error) {
 	cr, err := NewClusterDNS(MustAssetReader(ClusterDNSDefaultCR))
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func (f *Factory) DNSClusterRoleBinding() (*rbacv1.ClusterRoleBinding, error) {
 	return crb, nil
 }
 
-func (f *Factory) DNSConfigMap(dns *dnsv1alpha1.ClusterDNS, clusterDomain string) (*corev1.ConfigMap, error) {
+func (f *Factory) DNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.ConfigMap, error) {
 	cm, err := NewConfigMap(MustAssetReader(DNSConfigMap))
 	if err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func (f *Factory) DNSConfigMap(dns *dnsv1alpha1.ClusterDNS, clusterDomain string
 	return cm, nil
 }
 
-func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS, clusterIP, clusterDomain string) (*appsv1.DaemonSet, error) {
+func (f *Factory) DNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (*appsv1.DaemonSet, error) {
 	ds, err := NewDaemonSet(MustAssetReader(DNSDaemonSet))
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func (f *Factory) DNSDaemonSet(dns *dnsv1alpha1.ClusterDNS, clusterIP, clusterDo
 	return ds, nil
 }
 
-func (f *Factory) DNSService(dns *dnsv1alpha1.ClusterDNS, clusterIP string) (*corev1.Service, error) {
+func (f *Factory) DNSService(dns *operatorv1.DNS, clusterIP string) (*corev1.Service, error) {
 	s, err := NewService(MustAssetReader(DNSService))
 	if err != nil {
 		return nil, err
@@ -244,8 +244,8 @@ func NewDeployment(manifest io.Reader) (*appsv1.Deployment, error) {
 	return &o, nil
 }
 
-func NewClusterDNS(manifest io.Reader) (*dnsv1alpha1.ClusterDNS, error) {
-	o := dnsv1alpha1.ClusterDNS{}
+func NewClusterDNS(manifest io.Reader) (*operatorv1.DNS, error) {
+	o := operatorv1.DNS{}
 	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&o); err != nil {
 		return nil, err
 	}
