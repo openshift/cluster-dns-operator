@@ -1,7 +1,5 @@
 #!/bin/bash
-set -e
-set -u
-set -o pipefail
+set -euo pipefail
 
 # Setup temporary GOPATH so we can install go-bindata from vendor
 TMP_GOPATH=$(mktemp -d)

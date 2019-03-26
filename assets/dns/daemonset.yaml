@@ -1,18 +1,8 @@
 kind: DaemonSet
 apiVersion: apps/v1
-metadata:
-  # Name is set at runtime
-  namespace: openshift-dns
-  labels:
-    openshift-app: dns
+# name, namespace and labels are set at runtime
 spec:
-  selector:
-    matchLabels:
-      openshift-app: dns
   template:
-    metadata:
-      labels:
-        openshift-app: dns
     spec:
       serviceAccountName: dns
       priorityClassName: system-node-critical

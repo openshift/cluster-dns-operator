@@ -1,8 +1,0 @@
-# Installer config specific values are applied at runtime.
-apiVersion: operator.openshift.io/v1
-kind: DNS
-metadata:
-  name: default
-  # Ensure that only the operator can delete the default cluster dns object.
-  finalizers:
-  - dns.openshift.io/default-cluster-dns
