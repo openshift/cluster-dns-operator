@@ -1,44 +1,23 @@
 package main
 
 import (
-	"context"
 	"os"
-	"runtime"
-	"time"
 
-	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
-	stub "github.com/openshift/cluster-dns-operator/pkg/stub"
+	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 
-	sdk "github.com/operator-framework/operator-sdk/pkg/sdk"
-	sdkVersion "github.com/operator-framework/operator-sdk/version"
-
-	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 
 	"github.com/sirupsen/logrus"
+
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
 
-func printVersion() {
-	logrus.Infof("Go Version: %s", runtime.Version())
-	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
-	logrus.Infof("operator-sdk Version: %v", sdkVersion.Version)
-}
-
 func main() {
-	printVersion()
+	metrics.DefaultBindAddress = ":60000"
 
-	sdk.ExposeMetricsPort()
-
-	resource := "dns.openshift.io/v1alpha1"
-	kind := "ClusterDNS"
-	resyncPeriod := 10 * time.Minute
-	logrus.Infof("Watching %s, %s, %d", resource, kind, resyncPeriod)
-	sdk.Watch(resource, kind, corev1.NamespaceAll, resyncPeriod)
-	// TODO Use a named constant for the application's namespace or get the
-	// namespace from config.
-	sdk.Watch("apps/v1", "DaemonSet", "openshift-dns", resyncPeriod)
-
+	// Collect operator configuration.
 	coreDNSImage := os.Getenv("IMAGE")
 	if len(coreDNSImage) == 0 {
 		logrus.Fatalf("IMAGE environment variable is required")
@@ -48,20 +27,18 @@ func main() {
 		logrus.Fatalf("OPENSHIFT_CLI_IMAGE environment variable is required")
 	}
 
-	operatorConfig := operator.Config{
+	operatorConfig := operatorconfig.Config{
 		OperatorReleaseVersion: os.Getenv("RELEASE_VERSION"),
 		CoreDNSImage:           coreDNSImage,
 		OpenshiftCLIImage:      cliImage,
 	}
 
-	handler := &stub.Handler{
-		ManifestFactory: manifests.NewFactory(operatorConfig),
-		Config:          operatorConfig,
+	// Set up and start the operator.
+	op, err := operator.New(operatorConfig)
+	if err != nil {
+		logrus.Fatalf("failed to create operator: %v", err)
 	}
-
-	if err := handler.EnsureDefaultClusterDNS(); err != nil {
-		logrus.Fatalf("failed to ensure default clusterdns: %v", err)
+	if err := op.Start(signals.SetupSignalHandler()); err != nil {
+		logrus.Fatalf("failed to start operator: %v", err)
 	}
-	sdk.Handle(handler)
-	sdk.Run(context.TODO())
 }

@@ -1,7 +1,5 @@
 #!/bin/bash
-set -e
-set -u
-set -o pipefail
+set -euo pipefail
 
 TMP_DIR=$(mktemp -d)
 

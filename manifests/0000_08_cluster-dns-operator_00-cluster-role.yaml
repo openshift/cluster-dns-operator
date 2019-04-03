@@ -5,16 +5,16 @@ metadata:
   name: openshift-dns-operator
 rules:
 - apiGroups:
-  - dns.openshift.io
+  - operator.openshift.io
   resources:
-  - clusterdnses
+  - dnses
   verbs:
   - "*"
 
 - apiGroups:
-  - dns.openshift.io
+  - operator.openshift.io
   resources:
-  - clusterdnses/status
+  - dnses/status
   verbs:
   - update
 

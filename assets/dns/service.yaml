@@ -1,14 +1,9 @@
 kind: Service
 apiVersion: v1
-metadata:
-  # Name is set at runtime
-  namespace: openshift-dns
-  labels:
-    openshift-app: dns
+# name, namespace and labels are set at runtime
 spec:
   # clusterIP will be automatically managed.
-  selector:
-    openshift-app: dns
+  # selector is set at runtime
   ports:
   - name: dns
     port: 53

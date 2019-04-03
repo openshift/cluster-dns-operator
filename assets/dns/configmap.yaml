@@ -1,8 +1,6 @@
 kind: ConfigMap
 apiVersion: v1
-metadata:
-  # Name is set at runtime
-  namespace: openshift-dns
+# name and namespace are set at runtime
 data:
   Corefile: |
     .:5353 {
