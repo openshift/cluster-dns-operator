@@ -26,7 +26,7 @@ import (
 func bindataRead(data []byte, name string) ([]byte, error) {
 	gz, err := gzip.NewReader(bytes.NewBuffer(data))
 	if err != nil {
-		return nil, fmt.Errorf("read %q: %v", name, err)
+		return nil, fmt.Errorf("Read %q: %v", name, err)
 	}
 
 	var buf bytes.Buffer
@@ -34,7 +34,7 @@ func bindataRead(data []byte, name string) ([]byte, error) {
 	clErr := gz.Close()
 
 	if err != nil {
-		return nil, fmt.Errorf("read %q: %v", name, err)
+		return nil, fmt.Errorf("Read %q: %v", name, err)
 	}
 	if clErr != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func assetsDnsClusterRoleBindingYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/dns/cluster-role-binding.yaml", size: 223, mode: os.FileMode(0644), modTime: time.Unix(1, 0)}
+	info := bindataFileInfo{name: "assets/dns/cluster-role-binding.yaml", size: 223, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xd9, 0xf6, 0x2a, 0x3b, 0x84, 0xd7, 0x3e, 0xc4, 0xe1, 0x70, 0x66, 0x31, 0xda, 0xc4, 0x2f, 0x53, 0x27, 0x29, 0x13, 0xfe, 0x80, 0x36, 0xc5, 0xa1, 0x70, 0xdc, 0x2d, 0xef, 0xcf, 0xe0, 0xc4, 0xeb}}
 	return a, nil
 }
@@ -110,7 +110,7 @@ func assetsDnsClusterRoleYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/dns/cluster-role.yaml", size: 210, mode: os.FileMode(0644), modTime: time.Unix(1, 0)}
+	info := bindataFileInfo{name: "assets/dns/cluster-role.yaml", size: 210, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x37, 0xb2, 0x0, 0x7d, 0x4a, 0xd9, 0xf, 0x8, 0x44, 0xe7, 0xab, 0x82, 0xe4, 0x50, 0x94, 0xaa, 0x4e, 0xfd, 0xa0, 0x63, 0xba, 0x18, 0xcf, 0xeb, 0xa6, 0xe4, 0x2d, 0x4, 0x35, 0xd5, 0xc7, 0xd}}
 	return a, nil
 }
@@ -130,7 +130,7 @@ func assetsDnsConfigmapYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/dns/configmap.yaml", size: 390, mode: os.FileMode(0644), modTime: time.Unix(1, 0)}
+	info := bindataFileInfo{name: "assets/dns/configmap.yaml", size: 390, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x60, 0x35, 0x3d, 0x20, 0x71, 0xe4, 0x2d, 0x28, 0xd6, 0xac, 0xd6, 0xef, 0x59, 0x0, 0x1, 0x68, 0xee, 0x6, 0x5b, 0xde, 0x33, 0x4d, 0xdf, 0xf1, 0x31, 0xbd, 0x16, 0xd1, 0xfc, 0xec, 0x7e, 0x62}}
 	return a, nil
 }
@@ -150,7 +150,7 @@ func assetsDnsDaemonsetYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/dns/daemonset.yaml", size: 4302, mode: os.FileMode(0644), modTime: time.Unix(1, 0)}
+	info := bindataFileInfo{name: "assets/dns/daemonset.yaml", size: 4302, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x66, 0x9, 0x9a, 0x9e, 0x45, 0x7e, 0x37, 0xa8, 0x5d, 0xa2, 0x8e, 0xca, 0xf1, 0xcd, 0xb5, 0xd1, 0xd6, 0x2b, 0xe0, 0xa, 0x7d, 0x73, 0x6, 0xbc, 0xc8, 0x46, 0xe1, 0x50, 0x5, 0x93, 0xad, 0xd1}}
 	return a, nil
 }
@@ -170,7 +170,7 @@ func assetsDnsNamespaceYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/dns/namespace.yaml", size: 189, mode: os.FileMode(0644), modTime: time.Unix(1, 0)}
+	info := bindataFileInfo{name: "assets/dns/namespace.yaml", size: 189, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xc7, 0xcc, 0xc6, 0xb2, 0x81, 0xa0, 0x7d, 0xc5, 0x5b, 0x8f, 0xf3, 0xd1, 0xf1, 0xee, 0x65, 0x3d, 0x0, 0x7c, 0x93, 0x89, 0x1c, 0x38, 0xd0, 0x9, 0x86, 0x1a, 0xd6, 0xef, 0x5, 0xee, 0x70, 0xe8}}
 	return a, nil
 }
@@ -190,7 +190,7 @@ func assetsDnsServiceAccountYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/dns/service-account.yaml", size: 85, mode: os.FileMode(0644), modTime: time.Unix(1, 0)}
+	info := bindataFileInfo{name: "assets/dns/service-account.yaml", size: 85, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x57, 0x12, 0x50, 0x4d, 0x67, 0x2f, 0x1b, 0x74, 0xa0, 0xa4, 0xbb, 0xa7, 0x59, 0xe9, 0x5a, 0xc6, 0xc1, 0x1a, 0xf8, 0x5f, 0xff, 0x5, 0xdb, 0xc, 0x10, 0x8b, 0xc1, 0x0, 0xcc, 0xf, 0x9f, 0x3a}}
 	return a, nil
 }
@@ -210,7 +210,7 @@ func assetsDnsServiceYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/dns/service.yaml", size: 306, mode: os.FileMode(0644), modTime: time.Unix(1, 0)}
+	info := bindataFileInfo{name: "assets/dns/service.yaml", size: 306, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x9e, 0x93, 0x4, 0xf3, 0xfa, 0x9, 0xf9, 0x4b, 0x62, 0xe1, 0xad, 0x9d, 0x3b, 0x6c, 0x45, 0x65, 0xbf, 0x2b, 0x4, 0x5c, 0xce, 0x83, 0x2c, 0x7e, 0xa7, 0x49, 0xcd, 0x13, 0x69, 0x2a, 0x54, 0x70}}
 	return a, nil
 }

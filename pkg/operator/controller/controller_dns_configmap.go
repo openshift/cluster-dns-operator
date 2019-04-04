@@ -52,12 +52,11 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, daemonsetRef
 	name := DNSConfigMapName(dns)
 	cm.Namespace = name.Namespace
 	cm.Name = name.Name
+	cm.SetOwnerReferences([]metav1.OwnerReference{dnsOwnerRef(dns)})
 
 	cm.Labels = map[string]string{
 		manifests.OwningClusterDNSLabel: DNSDaemonSetLabel(dns),
 	}
-
-	cm.SetOwnerReferences([]metav1.OwnerReference{daemonsetRef})
 
 	if len(clusterDomain) > 0 {
 		cm.Data["Corefile"] = strings.Replace(cm.Data["Corefile"], "cluster.local", clusterDomain, -1)

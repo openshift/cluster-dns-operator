@@ -190,7 +190,7 @@ func TestCoreDNSImageUpgrade(t *testing.T) {
 
 	err = wait.PollImmediate(1*time.Second, 3*time.Minute, func() (bool, error) {
 		podList := &corev1.PodList{}
-		if err := cl.List(context.TODO(), &client.ListOptions{Namespace: "openshift-dns"}, podList); err != nil {
+		if err := cl.List(context.TODO(), podList, client.InNamespace("openshift-dns")); err != nil {
 			return false, nil
 		}
 
