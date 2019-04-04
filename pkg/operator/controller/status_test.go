@@ -1,221 +1,100 @@
 package controller
 
 import (
-	"fmt"
 	"testing"
 
-	configv1 "github.com/openshift/api/config/v1"
-	operatorv1 "github.com/openshift/api/operator/v1"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
-	appsv1 "k8s.io/api/apps/v1"
+	configv1 "github.com/openshift/api/config/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestComputeStatusConditions(t *testing.T) {
-	type testInputs struct {
-		haveNamespace                           bool
-		numWanted, numAvailable, numUnavailable int
-	}
-	type testOutputs struct {
+func TestComputeOperatorStatusConditions(t *testing.T) {
+	type conditions struct {
 		degraded, progressing, available bool
 	}
+	type versions struct {
+		operator, operand string
+	}
+
 	testCases := []struct {
-		description string
-		inputs      testInputs
-		outputs     testOutputs
+		description       string
+		noNamespace       bool
+		dnsesAvail, dnses int
+		reportedVersions  versions
+		curVersions       versions
+		expected          conditions
 	}{
-		{"no namespace", testInputs{false, 0, 0, 0}, testOutputs{true, false, true}},
-		{"no dnses, no daemonsets", testInputs{true, 0, 0, 0}, testOutputs{false, false, true}},
-		{"scaling up", testInputs{true, 1, 0, 0}, testOutputs{false, true, false}},
-		{"scaling down", testInputs{true, 0, 1, 0}, testOutputs{false, true, true}},
-		{"0/2 daemonsets available", testInputs{true, 2, 0, 2}, testOutputs{false, false, false}},
-		{"1/2 daemonsets available", testInputs{true, 2, 1, 1}, testOutputs{false, false, false}},
-		{"2/2 daemonsets available", testInputs{true, 2, 2, 0}, testOutputs{false, false, true}},
+		{
+			description: "no operand namespace or dnses available",
+			noNamespace: true,
+			expected:    conditions{true, true, false},
+		},
+		{
+			description: "0/0 dns resources available",
+			expected:    conditions{true, true, false},
+		},
+		{
+			description: "1/2 dns resources available",
+			dnsesAvail:  1,
+			dnses:       2,
+			expected:    conditions{true, true, true},
+		},
+		{
+			description: "2/2 dns resources available",
+			dnsesAvail:  2,
+			dnses:       2,
+			expected:    conditions{false, false, true},
+		},
 	}
 
 	for _, tc := range testCases {
-		var (
-			namespace  *corev1.Namespace
-			dnses      []operatorv1.DNS
-			daemonsets []appsv1.DaemonSet
-
-			degraded, progressing, available configv1.ConditionStatus
-		)
-		if tc.inputs.haveNamespace {
+		var namespace *corev1.Namespace
+		if !tc.noNamespace {
 			namespace = &corev1.Namespace{}
 		}
-		for i := 0; i < tc.inputs.numWanted; i++ {
-			dnses = append(dnses,
-				operatorv1.DNS{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: fmt.Sprintf("%d", i+1),
-					},
-				})
-		}
-		numDaemonsets := tc.inputs.numAvailable + tc.inputs.numUnavailable
-		for i := 0; i < numDaemonsets; i++ {
-			numberAvailable := 0
-			if i < tc.inputs.numAvailable {
-				numberAvailable = 1
-			}
-			daemonsets = append(daemonsets, appsv1.DaemonSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: fmt.Sprintf("dns-%d", i+1),
-				},
-				Status: appsv1.DaemonSetStatus{
-					NumberAvailable: int32(numberAvailable),
-				},
-			})
-		}
-		if tc.outputs.degraded {
-			degraded = configv1.ConditionTrue
-		} else {
-			degraded = configv1.ConditionFalse
-		}
-		if tc.outputs.progressing {
-			progressing = configv1.ConditionTrue
-		} else {
-			progressing = configv1.ConditionFalse
-		}
-		if tc.outputs.available {
-			available = configv1.ConditionTrue
-		} else {
-			available = configv1.ConditionFalse
-		}
-		expected := []configv1.ClusterOperatorStatusCondition{
+
+		expectedConditions := []configv1.ClusterOperatorStatusCondition{
 			{
 				Type:   configv1.OperatorDegraded,
-				Status: degraded,
+				Status: configv1.ConditionFalse,
 			},
 			{
 				Type:   configv1.OperatorProgressing,
-				Status: progressing,
+				Status: configv1.ConditionFalse,
 			},
 			{
 				Type:   configv1.OperatorAvailable,
-				Status: available,
+				Status: configv1.ConditionFalse,
 			},
 		}
-		new := computeStatusConditions(
-			[]configv1.ClusterOperatorStatusCondition{},
-			namespace,
-			dnses,
-			daemonsets,
-		)
-		gotExpected := true
-		if len(new) != len(expected) {
-			gotExpected = false
+		if tc.expected.degraded {
+			expectedConditions[0].Status = configv1.ConditionTrue
 		}
-		for _, conditionA := range new {
-			foundMatchingCondition := false
-
-			for _, conditionB := range expected {
-				if conditionA.Type == conditionB.Type &&
-					conditionA.Status == conditionB.Status {
-					foundMatchingCondition = true
-					break
-				}
-			}
-
-			if !foundMatchingCondition {
-				gotExpected = false
-			}
+		if tc.expected.progressing {
+			expectedConditions[1].Status = configv1.ConditionTrue
 		}
-		if !gotExpected {
-			t.Fatalf("%q: expected %#v, got %#v", tc.description, expected, new)
+		if tc.expected.available {
+			expectedConditions[2].Status = configv1.ConditionTrue
+		}
+
+		conditions := computeOperatorStatusConditions([]configv1.ClusterOperatorStatusCondition{}, namespace,
+			tc.dnsesAvail, tc.dnses)
+		conditionsCmpOpts := []cmp.Option{
+			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
+			cmpopts.EquateEmpty(),
+			cmpopts.SortSlices(func(a, b configv1.ClusterOperatorStatusCondition) bool { return a.Type < b.Type }),
+		}
+		if !cmp.Equal(conditions, expectedConditions, conditionsCmpOpts...) {
+			t.Fatalf("%q: expected %#v, got %#v", tc.description, expectedConditions, conditions)
 		}
 	}
 }
 
-func TestSetStatusCondition(t *testing.T) {
-	testCases := []struct {
-		description   string
-		oldConditions []configv1.ClusterOperatorStatusCondition
-		newCondition  *configv1.ClusterOperatorStatusCondition
-		expected      []configv1.ClusterOperatorStatusCondition
-	}{
-		{
-			description: "new condition",
-			newCondition: &configv1.ClusterOperatorStatusCondition{
-				Type:   configv1.OperatorAvailable,
-				Status: configv1.ConditionTrue,
-			},
-			expected: []configv1.ClusterOperatorStatusCondition{
-				{
-					Type:   configv1.OperatorAvailable,
-					Status: configv1.ConditionTrue,
-				},
-			},
-		},
-		{
-			description: "existing condition, unchanged",
-			oldConditions: []configv1.ClusterOperatorStatusCondition{
-				{
-					Type:   configv1.OperatorAvailable,
-					Status: configv1.ConditionTrue,
-				},
-			},
-			newCondition: &configv1.ClusterOperatorStatusCondition{
-				Type:   configv1.OperatorAvailable,
-				Status: configv1.ConditionTrue,
-			},
-			expected: []configv1.ClusterOperatorStatusCondition{
-				{
-					Type:   configv1.OperatorAvailable,
-					Status: configv1.ConditionTrue,
-				},
-			},
-		},
-		{
-			description: "existing conditions, one changed",
-			oldConditions: []configv1.ClusterOperatorStatusCondition{
-				{
-					Type:   configv1.OperatorDegraded,
-					Status: configv1.ConditionFalse,
-				},
-				{
-					Type:   configv1.OperatorProgressing,
-					Status: configv1.ConditionFalse,
-				},
-				{
-					Type:   configv1.OperatorAvailable,
-					Status: configv1.ConditionFalse,
-				},
-			},
-			newCondition: &configv1.ClusterOperatorStatusCondition{
-				Type:   configv1.OperatorAvailable,
-				Status: configv1.ConditionTrue,
-			},
-			expected: []configv1.ClusterOperatorStatusCondition{
-				{
-					Type:   configv1.OperatorDegraded,
-					Status: configv1.ConditionFalse,
-				},
-				{
-					Type:   configv1.OperatorProgressing,
-					Status: configv1.ConditionFalse,
-				},
-				{
-					Type:   configv1.OperatorAvailable,
-					Status: configv1.ConditionTrue,
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		actual := setStatusCondition(tc.oldConditions, tc.newCondition)
-		a := configv1.ClusterOperatorStatus{Conditions: actual}
-		b := configv1.ClusterOperatorStatus{Conditions: tc.expected}
-		if !statusesEqual(a, b) {
-			t.Fatalf("%q: expected %v, got %v", tc.description,
-				tc.expected, actual)
-		}
-	}
-}
-
-func TestStatusesEqual(t *testing.T) {
+func TestOperatorStatusesEqual(t *testing.T) {
 	testCases := []struct {
 		description string
 		expected    bool
@@ -271,8 +150,8 @@ func TestStatusesEqual(t *testing.T) {
 			},
 		},
 		{
-			description: "condition LastTransitionTime should be ignored",
-			expected:    true,
+			description: "condition LastTransitionTime should not be ignored",
+			expected:    false,
 			a: configv1.ClusterOperatorStatus{
 				Conditions: []configv1.ClusterOperatorStatusCondition{
 					{
@@ -385,6 +264,28 @@ func TestStatusesEqual(t *testing.T) {
 			},
 		},
 		{
+			description: "check condition message differs",
+			expected:    false,
+			a: configv1.ClusterOperatorStatus{
+				Conditions: []configv1.ClusterOperatorStatusCondition{
+					{
+						Type:    configv1.OperatorAvailable,
+						Status:  configv1.ConditionFalse,
+						Message: "foo",
+					},
+				},
+			},
+			b: configv1.ClusterOperatorStatus{
+				Conditions: []configv1.ClusterOperatorStatusCondition{
+					{
+						Type:    configv1.OperatorAvailable,
+						Status:  configv1.ConditionFalse,
+						Message: "bar",
+					},
+				},
+			},
+		},
+		{
 			description: "check duplicate with single condition",
 			expected:    false,
 			a: configv1.ClusterOperatorStatus{
@@ -441,7 +342,7 @@ func TestStatusesEqual(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if actual := statusesEqual(tc.a, tc.b); actual != tc.expected {
+		if actual := operatorStatusesEqual(tc.a, tc.b); actual != tc.expected {
 			t.Fatalf("%q: expected %v, got %v", tc.description, tc.expected, actual)
 		}
 	}

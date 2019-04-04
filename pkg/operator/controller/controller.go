@@ -382,31 +382,12 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 			errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))
 		}
 
-		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain); err != nil {
+		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset); err != nil {
 			errs = append(errs, fmt.Errorf("failed to sync status of dns %s/%s: %v", daemonset.Namespace, daemonset.Name, err))
 		}
 	}
 
 	return utilerrors.NewAggregate(errs)
-}
-
-// syncDNSStatus updates the status for a given dns.
-func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string) error {
-	current := &operatorv1.DNS{}
-	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: dns.Name}, current); err != nil {
-		return fmt.Errorf("failed to get dns %s: %v", dns.Name, err)
-	}
-	if current.Status.ClusterIP == clusterIP &&
-		current.Status.ClusterDomain == clusterDomain {
-		return nil
-	}
-	current.Status.ClusterIP = clusterIP
-	current.Status.ClusterDomain = clusterDomain
-
-	if err := r.client.Status().Update(context.TODO(), current); err != nil {
-		return fmt.Errorf("failed to update status for dns %s: %v", current.Name, err)
-	}
-	return nil
 }
 
 // getClusterIPFromNetworkConfig will return 10th IP from the service CIDR range

@@ -3,8 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
@@ -15,24 +13,21 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	DNSClusterOperatorName = "dns"
+	DNSOperatorName = "dns"
 )
 
 // syncOperatorStatus computes the operator's current status and therefrom
 // creates or updates the ClusterOperator resource for the operator.
 func (r *reconciler) syncOperatorStatus() error {
-	co := &configv1.ClusterOperator{ObjectMeta: metav1.ObjectMeta{Name: DNSClusterOperatorName}}
+	co := &configv1.ClusterOperator{ObjectMeta: metav1.ObjectMeta{Name: DNSOperatorName}}
 	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: co.Name}, co); err != nil {
 		if errors.IsNotFound(err) {
 			if err := r.client.Create(context.TODO(), co); err != nil {
@@ -44,13 +39,15 @@ func (r *reconciler) syncOperatorStatus() error {
 		}
 	}
 
-	ns, dnses, daemonsets, err := r.getOperatorState()
+	ns, dnses, err := r.getOperatorState()
 	if err != nil {
 		return fmt.Errorf("failed to get operator state: %v", err)
 	}
 
+	dnsesTotal := len(dnses)
+	dnsesAvailable := numDNSesAvailable(dnses)
 	oldStatus := co.Status.DeepCopy()
-	co.Status.Conditions = computeStatusConditions(oldStatus.Conditions, ns, dnses, daemonsets)
+	co.Status.Conditions = computeOperatorStatusConditions(oldStatus.Conditions, ns, dnsesAvailable, dnsesTotal)
 	co.Status.RelatedObjects = []configv1.ObjectReference{
 		{
 			Resource: "namespaces",
@@ -84,7 +81,7 @@ func (r *reconciler) syncOperatorStatus() error {
 		}
 	}
 
-	if !statusesEqual(*oldStatus, co.Status) {
+	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(context.TODO(), co); err != nil {
 			return fmt.Errorf("failed to update clusteroperator %s: %v", co.Name, err)
 		}
@@ -95,123 +92,144 @@ func (r *reconciler) syncOperatorStatus() error {
 
 // getOperatorState gets and returns the resources necessary to compute the
 // operator's current state.
-func (r *reconciler) getOperatorState() (*corev1.Namespace, []operatorv1.DNS, []appsv1.DaemonSet, error) {
+func (r *reconciler) getOperatorState() (*corev1.Namespace, []operatorv1.DNS, error) {
 	ns := manifests.DNSNamespace()
 	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: ns.Name}, ns); err != nil {
 		if errors.IsNotFound(err) {
-			return nil, nil, nil, nil
+			return nil, nil, nil
 		}
-		return nil, nil, nil, fmt.Errorf("failed to get namespace %s: %v", ns.Name, err)
+		return nil, nil, fmt.Errorf("failed to get namespace %s: %v", ns.Name, err)
 	}
 
 	dnsList := &operatorv1.DNSList{}
 	if err := r.client.List(context.TODO(), dnsList); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to list dnses: %v", err)
+		return nil, nil, fmt.Errorf("failed to list dnses: %v", err)
 	}
 
-	daemonsetList := &appsv1.DaemonSetList{}
-	if err := r.client.List(context.TODO(), daemonsetList, client.InNamespace(ns.Name)); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to list daemonsets: %v", err)
-	}
-	return ns, dnsList.Items, daemonsetList.Items, nil
+	return ns, dnsList.Items, nil
 }
 
-// computeStatusConditions computes the operator's current state.
-func computeStatusConditions(conditions []configv1.ClusterOperatorStatusCondition, ns *corev1.Namespace, dnses []operatorv1.DNS, daemonsets []appsv1.DaemonSet) []configv1.ClusterOperatorStatusCondition {
-	degradedCondition := &configv1.ClusterOperatorStatusCondition{
-		Type:   configv1.OperatorDegraded,
-		Status: configv1.ConditionUnknown,
-	}
-	if ns == nil {
-		degradedCondition.Status = configv1.ConditionTrue
-		degradedCondition.Reason = "NoNamespace"
-		degradedCondition.Message = "DNS namespace does not exist"
-	} else {
-		degradedCondition.Status = configv1.ConditionFalse
-	}
-	conditions = setStatusCondition(conditions, degradedCondition)
-
-	progressingCondition := &configv1.ClusterOperatorStatusCondition{
-		Type:   configv1.OperatorProgressing,
-		Status: configv1.ConditionUnknown,
-	}
-	numDNSes := len(dnses)
-	numDaemonSets := len(daemonsets)
-	if numDNSes == numDaemonSets {
-		progressingCondition.Status = configv1.ConditionFalse
-	} else {
-		progressingCondition.Status = configv1.ConditionTrue
-		progressingCondition.Reason = "Reconciling"
-		progressingCondition.Message = fmt.Sprintf("have %d daemonsets, want %d", numDaemonSets, numDNSes)
-	}
-	conditions = setStatusCondition(conditions, progressingCondition)
-
-	availableCondition := &configv1.ClusterOperatorStatusCondition{
-		Type:   configv1.OperatorAvailable,
-		Status: configv1.ConditionUnknown,
-	}
-	daemonsetsAvailable := map[string]bool{}
-	for _, d := range daemonsets {
-		daemonsetsAvailable[d.Name] = d.Status.NumberAvailable > 0
-	}
-	unavailable := []string{}
-	for _, dns := range dnses {
-		name := DNSDaemonSetName(&dns).Name
-		if available, exists := daemonsetsAvailable[name]; !exists {
-			msg := fmt.Sprintf("no daemonset for dns %q", dns.Name)
-			unavailable = append(unavailable, msg)
-		} else if !available {
-			msg := fmt.Sprintf("daemonset %q is not available", name)
-			unavailable = append(unavailable, msg)
+// computeOperatorStatusConditions computes the operator's current state.
+func computeOperatorStatusConditions(oldConditions []configv1.ClusterOperatorStatusCondition, ns *corev1.Namespace,
+	dnsesAvailable, dnses int) []configv1.ClusterOperatorStatusCondition {
+	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition *configv1.ClusterOperatorStatusCondition
+	for i := range oldConditions {
+		switch oldConditions[i].Type {
+		case configv1.OperatorDegraded:
+			oldDegradedCondition = &oldConditions[i]
+		case configv1.OperatorProgressing:
+			oldProgressingCondition = &oldConditions[i]
+		case configv1.OperatorAvailable:
+			oldAvailableCondition = &oldConditions[i]
 		}
 	}
-	if len(unavailable) == 0 {
-		availableCondition.Status = configv1.ConditionTrue
-	} else {
-		availableCondition.Status = configv1.ConditionFalse
-		availableCondition.Reason = "DaemonSetNotAvailable"
-		availableCondition.Message = strings.Join(unavailable, "\n")
+
+	conditions := []configv1.ClusterOperatorStatusCondition{
+		computeOperatorDegradedCondition(oldDegradedCondition, dnsesAvailable, dnses, ns),
+		computeOperatorProgressingCondition(oldProgressingCondition, dnsesAvailable, dnses),
+		computeOperatorAvailableCondition(oldAvailableCondition, dnsesAvailable),
 	}
-	conditions = setStatusCondition(conditions, availableCondition)
 
 	return conditions
 }
 
-// setStatusCondition returns the result of setting the specified condition in
-// the given slice of conditions.
-func setStatusCondition(oldConditions []configv1.ClusterOperatorStatusCondition, condition *configv1.ClusterOperatorStatusCondition) []configv1.ClusterOperatorStatusCondition {
-	condition.LastTransitionTime = metav1.Now()
-
-	newConditions := []configv1.ClusterOperatorStatusCondition{}
-
-	found := false
-	for _, c := range oldConditions {
-		if condition.Type == c.Type {
-			if condition.Status == c.Status &&
-				condition.Reason == c.Reason &&
-				condition.Message == c.Message {
-				return oldConditions
-			}
-
-			found = true
-			newConditions = append(newConditions, *condition)
-		} else {
-			newConditions = append(newConditions, c)
-		}
+// computeOperatorDegradedCondition computes the operator's current Degraded status state.
+func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnsesAvailable, dnsesTotal int,
+	ns *corev1.Namespace) configv1.ClusterOperatorStatusCondition {
+	degradedCondition := &configv1.ClusterOperatorStatusCondition{
+		Type: configv1.OperatorDegraded,
 	}
-	if !found {
-		newConditions = append(newConditions, *condition)
+	switch {
+	case ns == nil:
+		degradedCondition.Status = configv1.ConditionTrue
+		degradedCondition.Reason = "NoNamespace"
+		degradedCondition.Message = "Operand Namespace does not exist"
+	case dnsesAvailable == 0 || dnsesAvailable != dnsesTotal:
+		degradedCondition.Status = configv1.ConditionTrue
+		degradedCondition.Reason = "NotAllDNSesAvailable"
+		degradedCondition.Message = "Not all desired DNS DaemonSets available"
+	default:
+		degradedCondition.Status = configv1.ConditionFalse
+		degradedCondition.Reason = "AsExpected"
+		degradedCondition.Message = "All desired DNS DaemonSets available and operand Namespace exists"
 	}
 
-	return newConditions
+	return setOperatorLastTransitionTime(degradedCondition, oldCondition)
 }
 
-// statusesEqual compares two ClusterOperatorStatus values.  Returns true if the
-// provided ClusterOperatorStatus values should be considered equal for the
+// computeOperatorProgressingCondition computes the operator's current Progressing status state.
+func computeOperatorProgressingCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnsesAvailable,
+	dnsesTotal int) configv1.ClusterOperatorStatusCondition {
+	progressingCondition := &configv1.ClusterOperatorStatusCondition{
+		Type: configv1.OperatorProgressing,
+	}
+
+	if dnsesAvailable == 0 || dnsesAvailable != dnsesTotal {
+		progressingCondition.Status = configv1.ConditionTrue
+		progressingCondition.Reason = "Reconciling"
+		progressingCondition.Message = "Not all DNS DaemonSets available"
+	} else {
+		progressingCondition.Status = configv1.ConditionFalse
+		progressingCondition.Reason = "AsExpected"
+		progressingCondition.Message = "Desired and available number of DNS DaemonSets are equal"
+	}
+
+	return setOperatorLastTransitionTime(progressingCondition, oldCondition)
+}
+
+// computeOperatorAvailableCondition computes the operator's current Available status state.
+func computeOperatorAvailableCondition(oldCondition *configv1.ClusterOperatorStatusCondition,
+	dnsesAvailable int) configv1.ClusterOperatorStatusCondition {
+	availableCondition := &configv1.ClusterOperatorStatusCondition{
+		Type: configv1.OperatorAvailable,
+	}
+	if dnsesAvailable > 0 {
+		availableCondition.Status = configv1.ConditionTrue
+		availableCondition.Reason = "AsExpected"
+		availableCondition.Message = "At least 1 DNS DaemonSet available"
+	} else {
+		availableCondition.Status = configv1.ConditionFalse
+		availableCondition.Reason = "DNSUnavailable"
+		availableCondition.Message = "No DNS DaemonSets available"
+	}
+
+	return setOperatorLastTransitionTime(availableCondition, oldCondition)
+}
+
+// numDNSesAvailable returns the number of DNS resources from dnses with
+// an Available status condition.
+func numDNSesAvailable(dnses []operatorv1.DNS) int {
+	var dnsesAvailable int
+	for _, dns := range dnses {
+		for _, c := range dns.Status.Conditions {
+			if c.Type == operatorv1.DNSAvailable && c.Status == operatorv1.ConditionTrue {
+				dnsesAvailable++
+				break
+			}
+		}
+	}
+
+	return dnsesAvailable
+}
+
+// setOperatorLastTransitionTime sets LastTransitionTime for the given condition.
+// If the condition has changed, it will assign a new timestamp otherwise keeps the old timestamp.
+func setOperatorLastTransitionTime(condition, oldCondition *configv1.ClusterOperatorStatusCondition) configv1.ClusterOperatorStatusCondition {
+	if oldCondition != nil && condition.Status == oldCondition.Status &&
+		condition.Reason == oldCondition.Reason && condition.Message == oldCondition.Message {
+		condition.LastTransitionTime = oldCondition.LastTransitionTime
+	} else {
+		condition.LastTransitionTime = metav1.Now()
+	}
+
+	return *condition
+}
+
+// operatorStatusesEqual compares two ClusterOperatorStatus values.  Returns true
+// if the provided ClusterOperatorStatus values should be considered equal for the
 // purpose of determining whether an update is necessary, false otherwise.
-func statusesEqual(a, b configv1.ClusterOperatorStatus) bool {
+func operatorStatusesEqual(a, b configv1.ClusterOperatorStatus) bool {
 	conditionCmpOpts := []cmp.Option{
-		cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime"),
 		cmpopts.EquateEmpty(),
 		cmpopts.SortSlices(func(a, b configv1.ClusterOperatorStatusCondition) bool { return a.Type < b.Type }),
 	}

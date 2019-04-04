@@ -44,7 +44,7 @@ func TestOperatorAvailable(t *testing.T) {
 
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		co := &configv1.ClusterOperator{}
-		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DNSClusterOperatorName}, co); err != nil {
+		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DNSOperatorName}, co); err != nil {
 			return false, nil
 		}
 
@@ -125,7 +125,7 @@ func TestVersionReporting(t *testing.T) {
 
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		co := &configv1.ClusterOperator{}
-		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DNSClusterOperatorName}, co); err != nil {
+		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DNSOperatorName}, co); err != nil {
 			return false, nil
 		}
 
