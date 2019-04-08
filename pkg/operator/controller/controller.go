@@ -16,6 +16,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/apparentlymart/go-cidr/cidr"
@@ -62,6 +63,15 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 		return nil, err
 	}
 	if err := c.Watch(&source.Kind{Type: &operatorv1.DNS{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return nil, err
+	}
+	if err := c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
+		return nil, err
+	}
+	if err := c.Watch(&source.Kind{Type: &corev1.Service{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
+		return nil, err
+	}
+	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -365,4 +375,15 @@ func (r *reconciler) getClusterIPFromNetworkConfig() (string, error) {
 		return "", fmt.Errorf("invalid service cidr %v: %v", serviceCIDR, err)
 	}
 	return dnsClusterIP.String(), nil
+}
+
+func dnsOwnerRef(dns *operatorv1.DNS) metav1.OwnerReference {
+	trueVar := true
+	return metav1.OwnerReference{
+		APIVersion: "operator.openshift.io/v1",
+		Kind:       "DNS",
+		Name:       dns.Name,
+		UID:        dns.UID,
+		Controller: &trueVar,
+	}
 }

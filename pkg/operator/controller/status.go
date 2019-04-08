@@ -112,12 +112,12 @@ func (r *reconciler) getOperatorState() (*corev1.Namespace, []operatorv1.DNS, []
 	}
 
 	dnsList := &operatorv1.DNSList{}
-	if err := r.client.List(context.TODO(), &client.ListOptions{}, dnsList); err != nil {
+	if err := r.client.List(context.TODO(), dnsList); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to list cluster dnses: %v", err)
 	}
 
 	daemonsetList := &appsv1.DaemonSetList{}
-	if err := r.client.List(context.TODO(), &client.ListOptions{Namespace: ns.Name}, daemonsetList); err != nil {
+	if err := r.client.List(context.TODO(), daemonsetList, client.InNamespace(ns.Name)); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to list daemonsets: %v", err)
 	}
 	return ns, dnsList.Items, daemonsetList.Items, nil

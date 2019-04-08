@@ -51,7 +51,7 @@ type Reader interface {
 	// List retrieves list of objects for a given namespace and list options. On a
 	// successful call, Items field in the list will be populated with the
 	// result returned from the server.
-	List(ctx context.Context, opts *ListOptions, list runtime.Object) error
+	List(ctx context.Context, list runtime.Object, opts ...ListOptionFunc) error
 }
 
 // Writer knows how to create, delete, and update Kubernetes objects.
@@ -89,7 +89,8 @@ type Client interface {
 }
 
 // IndexerFunc knows how to take an object and turn it into a series
-// of (non-namespaced) keys for that object.
+// of non-namespaced keys. Namespaced objects are automatically given
+// namespaced and non-spaced variants, so keys do not need to include namespace.
 type IndexerFunc func(runtime.Object) []string
 
 // FieldIndexer knows how to index over a particular "field" such that it
@@ -100,6 +101,8 @@ type FieldIndexer interface {
 	// compatibility with the Kubernetes API server, only return one key, and only use
 	// fields that the API server supports.  Otherwise, you can return multiple keys,
 	// and "equality" in the field selector means that at least one key matches the value.
+	// The FieldIndexer will automatically take care of indexing over namespace
+	// and supporting efficient all-namespace queries.
 	IndexField(obj runtime.Object, field string, extractValue IndexerFunc) error
 }
 
@@ -185,7 +188,7 @@ func PropagationPolicy(p metav1.DeletionPropagation) DeleteOptionFunc {
 	}
 }
 
-// ListOptions contains options for limitting or filtering results.
+// ListOptions contains options for limiting or filtering results.
 // It's generally a subset of metav1.ListOptions, with support for
 // pre-parsed selectors (since generally, selectors will be executed
 // against the cache).
@@ -248,6 +251,20 @@ func (o *ListOptions) AsListOptions() *metav1.ListOptions {
 	return o.Raw
 }
 
+// ApplyOptions executes the given ListOptionFuncs and returns the mutated
+// ListOptions.
+func (o *ListOptions) ApplyOptions(optFuncs []ListOptionFunc) *ListOptions {
+	for _, optFunc := range optFuncs {
+		optFunc(o)
+	}
+	return o
+}
+
+// ListOptionFunc is a function that mutates a ListOptions struct. It implements
+// the functional options pattern. See
+// https://github.com/tmrts/go-patterns/blob/master/idiom/functional-options.md.
+type ListOptionFunc func(*ListOptions)
+
 // MatchingLabels is a convenience function that sets the label selector
 // to match the given labels, and then returns the options.
 // It mutates the list options.
@@ -273,20 +290,39 @@ func (o *ListOptions) InNamespace(ns string) *ListOptions {
 	return o
 }
 
-// MatchingLabels is a convenience function that constructs list options
-// to match the given labels.
-func MatchingLabels(lbls map[string]string) *ListOptions {
-	return (&ListOptions{}).MatchingLabels(lbls)
+// MatchingLabels is a functional option that sets the LabelSelector field of
+// a ListOptions struct.
+func MatchingLabels(lbls map[string]string) ListOptionFunc {
+	sel := labels.SelectorFromSet(lbls)
+	return func(opts *ListOptions) {
+		opts.LabelSelector = sel
+	}
 }
 
-// MatchingField is a convenience function that constructs list options
-// to match the given field.
-func MatchingField(name, val string) *ListOptions {
-	return (&ListOptions{}).MatchingField(name, val)
+// MatchingField is a functional option that sets the FieldSelector field of
+// a ListOptions struct.
+func MatchingField(name, val string) ListOptionFunc {
+	sel := fields.SelectorFromSet(fields.Set{name: val})
+	return func(opts *ListOptions) {
+		opts.FieldSelector = sel
+	}
 }
 
-// InNamespace is a convenience function that constructs list
-// options to list in the given namespace.
-func InNamespace(ns string) *ListOptions {
-	return (&ListOptions{}).InNamespace(ns)
+// InNamespace is a functional option that sets the Namespace field of
+// a ListOptions struct.
+func InNamespace(ns string) ListOptionFunc {
+	return func(opts *ListOptions) {
+		opts.Namespace = ns
+	}
+}
+
+// UseListOptions is a functional option that replaces the fields of a
+// ListOptions struct with those of a different ListOptions struct.
+//
+// Example:
+// cl.List(ctx, list, client.UseListOptions(lo.InNamespace(ns).MatchingLabels(labels)))
+func UseListOptions(newOpts *ListOptions) ListOptionFunc {
+	return func(opts *ListOptions) {
+		*opts = *newOpts
+	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given cluster dns.
@@ -61,6 +62,7 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 	name := DNSDaemonSetName(dns)
 	daemonset.Name = name.Name
 	daemonset.Namespace = name.Namespace
+	daemonset.SetOwnerReferences([]metav1.OwnerReference{dnsOwnerRef(dns)})
 
 	daemonset.Labels = map[string]string{
 		// associate the daemonset with the dns
