@@ -20,10 +20,10 @@ const (
 	DNSDaemonSetAsset          = "assets/dns/daemonset.yaml"
 	DNSServiceAsset            = "assets/dns/service.yaml"
 
-	// OwningClusterDNSLabel should be applied to any objects "owned by" a
-	// cluster dns to aid in selection (especially in cases where an ownerref
+	// OwningDNSLabel should be applied to any objects "owned by" a
+	// dns to aid in selection (especially in cases where an ownerref
 	// can't be established due to namespace boundaries).
-	OwningClusterDNSLabel = "dns.operator.openshift.io/cluster-dns"
+	OwningDNSLabel = "dns.operator.openshift.io/cluster-dns"
 )
 
 func MustAssetReader(asset string) io.Reader {

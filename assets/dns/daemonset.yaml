@@ -77,7 +77,7 @@ spec:
           while true; do
             declare -A svc_ips
             for svc in "${services[@]}"; do
-              # Fetch service IP from cluster dns if present
+              # Fetch service IP from dns if present
               ips=($(dig @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"))
 
               if [[ "$?" -eq 0 && "${#ips[@]}" -ne 0 ]]; then

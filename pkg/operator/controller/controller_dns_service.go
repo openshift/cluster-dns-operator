@@ -54,7 +54,7 @@ func desiredDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav
 	s.SetOwnerReferences([]metav1.OwnerReference{dnsOwnerRef(dns)})
 
 	s.Labels = map[string]string{
-		manifests.OwningClusterDNSLabel: DNSDaemonSetLabel(dns),
+		manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
 	}
 
 	s.Spec.Selector = DNSDaemonSetPodSelector(dns).MatchLabels

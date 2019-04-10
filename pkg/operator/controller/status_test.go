@@ -26,7 +26,7 @@ func TestComputeStatusConditions(t *testing.T) {
 		outputs     testOutputs
 	}{
 		{"no namespace", testInputs{false, 0, 0, 0}, testOutputs{true, false, true}},
-		{"no clusterdnses, no daemonsets", testInputs{true, 0, 0, 0}, testOutputs{false, false, true}},
+		{"no dnses, no daemonsets", testInputs{true, 0, 0, 0}, testOutputs{false, false, true}},
 		{"scaling up", testInputs{true, 1, 0, 0}, testOutputs{false, true, false}},
 		{"scaling down", testInputs{true, 0, 1, 0}, testOutputs{false, true, true}},
 		{"0/2 daemonsets available", testInputs{true, 2, 0, 2}, testOutputs{false, false, false}},
@@ -36,9 +36,9 @@ func TestComputeStatusConditions(t *testing.T) {
 
 	for _, tc := range testCases {
 		var (
-			namespace    *corev1.Namespace
-			clusterdnses []operatorv1.DNS
-			daemonsets   []appsv1.DaemonSet
+			namespace  *corev1.Namespace
+			dnses      []operatorv1.DNS
+			daemonsets []appsv1.DaemonSet
 
 			failing, progressing, available configv1.ConditionStatus
 		)
@@ -46,7 +46,7 @@ func TestComputeStatusConditions(t *testing.T) {
 			namespace = &corev1.Namespace{}
 		}
 		for i := 0; i < tc.inputs.numWanted; i++ {
-			clusterdnses = append(clusterdnses,
+			dnses = append(dnses,
 				operatorv1.DNS{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: fmt.Sprintf("%d", i+1),
@@ -100,7 +100,7 @@ func TestComputeStatusConditions(t *testing.T) {
 		new := computeStatusConditions(
 			[]configv1.ClusterOperatorStatusCondition{},
 			namespace,
-			clusterdnses,
+			dnses,
 			daemonsets,
 		)
 		gotExpected := true

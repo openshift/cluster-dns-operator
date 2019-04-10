@@ -61,7 +61,7 @@ func TestOperatorAvailable(t *testing.T) {
 	}
 }
 
-func TestDefaultClusterDNSExists(t *testing.T) {
+func TestDefaultDNSExists(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func TestDefaultClusterDNSExists(t *testing.T) {
 		return true, nil
 	})
 	if err != nil {
-		t.Errorf("failed to get default cluster dns: %v", err)
+		t.Errorf("failed to get default dns: %v", err)
 	}
 }
 

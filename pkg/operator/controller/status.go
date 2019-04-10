@@ -113,7 +113,7 @@ func (r *reconciler) getOperatorState() (*corev1.Namespace, []operatorv1.DNS, []
 
 	dnsList := &operatorv1.DNSList{}
 	if err := r.client.List(context.TODO(), dnsList); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to list cluster dnses: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to list dnses: %v", err)
 	}
 
 	daemonsetList := &appsv1.DaemonSetList{}
@@ -165,7 +165,7 @@ func computeStatusConditions(conditions []configv1.ClusterOperatorStatusConditio
 	for _, dns := range dnses {
 		name := DNSDaemonSetName(&dns).Name
 		if available, exists := daemonsetsAvailable[name]; !exists {
-			msg := fmt.Sprintf("no daemonset for cluster dns %q", dns.Name)
+			msg := fmt.Sprintf("no daemonset for dns %q", dns.Name)
 			unavailable = append(unavailable, msg)
 		} else if !available {
 			msg := fmt.Sprintf("daemonset %q is not available", name)
