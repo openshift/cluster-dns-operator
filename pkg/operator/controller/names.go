@@ -10,7 +10,7 @@ import (
 const (
 	// controllerDaemonSetLabel identifies a daemonset as a dns
 	// daemonset, and the value is the name of the owning dns.
-	controllerDaemonSetLabel = "dns.operator.openshift.io/dns-controller-daemonset"
+	controllerDaemonSetLabel = "dns.operator.openshift.io/daemonset-dns"
 )
 
 // DNSDaemonSetName returns the namespaced name for the dns daemonset.

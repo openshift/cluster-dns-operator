@@ -67,20 +67,20 @@ func New(config operatorconfig.Config) (*Operator, error) {
 	return &Operator{
 		manager: operatorManager,
 
-		// TODO: These are only needed for the default cluster dns stuff, which
+		// TODO: These are only needed for the default dns stuff, which
 		// should be refactored away.
 		client: kubeClient,
 	}, nil
 }
 
-// Start creates the default cluster DNS and then starts the operator
+// Start creates the default DNS and then starts the operator
 // synchronously until a message is received on the stop channel.
-// TODO: Move the default cluster DNS logic elsewhere.
+// TODO: Move the default DNS logic elsewhere.
 func (o *Operator) Start(stop <-chan struct{}) error {
 	// Periodicaly ensure the default controller exists.
 	go wait.Until(func() {
 		if err := o.ensureDefaultDNS(); err != nil {
-			logrus.Errorf("failed to ensure default cluster dns: %v", err)
+			logrus.Errorf("failed to ensure default dns: %v", err)
 		}
 	}, 1*time.Minute, stop)
 
@@ -100,7 +100,7 @@ func (o *Operator) Start(stop <-chan struct{}) error {
 	}
 }
 
-// ensureDefaultDNS creates the default cluster dns if it doesn't already exist.
+// ensureDefaultDNS creates the default dns if it doesn't already exist.
 func (o *Operator) ensureDefaultDNS() error {
 	dns := &operatorv1.DNS{
 		ObjectMeta: metav1.ObjectMeta{
@@ -112,9 +112,9 @@ func (o *Operator) ensureDefaultDNS() error {
 			return err
 		}
 		if err := o.client.Create(context.TODO(), dns); err != nil {
-			return fmt.Errorf("failed to create default cluster dns: %v", err)
+			return fmt.Errorf("failed to create default dns: %v", err)
 		}
-		logrus.Infof("created default cluster dns: %s", dns.Name)
+		logrus.Infof("created default dns: %s", dns.Name)
 	}
 	return nil
 }

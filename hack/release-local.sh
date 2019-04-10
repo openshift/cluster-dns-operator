@@ -29,7 +29,7 @@ if [[ "${TEMP_COMMIT}" == "true" ]]; then
 fi
 
 cp -R manifests/* $MANIFESTS
-cat manifests/0000_08_cluster-dns-operator_02-deployment.yaml | sed "s~openshift/origin-cluster-dns-operator:latest~$REPO:$REV~" > "$MANIFESTS/0000_08_cluster-dns-operator_02-deployment.yaml"
+cat manifests/0000_08_dns-operator_02-deployment.yaml | sed "s~openshift/origin-cluster-dns-operator:latest~$REPO:$REV~" > "$MANIFESTS/0000_08_dns-operator_02-deployment.yaml"
 
 echo "Pushed $REPO:$REV"
 echo "Install manifests using:"

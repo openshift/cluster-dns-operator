@@ -55,7 +55,7 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, daemonsetRef
 	cm.SetOwnerReferences([]metav1.OwnerReference{dnsOwnerRef(dns)})
 
 	cm.Labels = map[string]string{
-		manifests.OwningClusterDNSLabel: DNSDaemonSetLabel(dns),
+		manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
 	}
 
 	if len(clusterDomain) > 0 {

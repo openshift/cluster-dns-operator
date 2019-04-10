@@ -45,7 +45,7 @@ const (
 
 // New creates the operator controller from configuration. This is the
 // controller that handles all the logic for implementing dns based on
-// cluster DNS resources.
+// DNS resources.
 //
 // The controller will be pre-configured to watch for DNS resources.
 func New(mgr manager.Manager, config Config) (controller.Controller, error) {
@@ -98,8 +98,8 @@ type reconciler struct {
 	client kclient.Client
 }
 
-// Reconcile expects request to refer to a cluster dns and will do all the work
-// to ensure the cluster dns is in the desired state.
+// Reconcile expects request to refer to a dns and will do all the work
+// to ensure the dns is in the desired state.
 func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	errs := []error{}
 	result := reconcile.Result{}
@@ -108,7 +108,7 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 
 	if request.NamespacedName.Name != DefaultDNSController {
 		// Return a nil error value to avoid re-triggering the event.
-		logrus.Errorf("skipping unexpected cluster dns %s", request.NamespacedName.Name)
+		logrus.Errorf("skipping unexpected dns %s", request.NamespacedName.Name)
 		return result, nil
 	}
 	// Get the current dns state.
@@ -118,9 +118,9 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 			// This means the dns was already deleted/finalized and there are
 			// stale queue entries (or something edge triggering from a related
 			// resource that got deleted async).
-			logrus.Infof("cluster dns not found; reconciliation will be skipped for request: %v", request)
+			logrus.Infof("dns not found; reconciliation will be skipped for request: %v", request)
 		} else {
-			errs = append(errs, fmt.Errorf("failed to get cluster dns %s: %v", request, err))
+			errs = append(errs, fmt.Errorf("failed to get dns %s: %v", request, err))
 		}
 		dns = nil
 	}
@@ -137,25 +137,25 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 				errs = append(errs, fmt.Errorf("failed to delete external name for openshift service: %v", err))
 			}
 			if err := r.ensureDNSDeleted(dns); err != nil {
-				errs = append(errs, fmt.Errorf("failed to ensure deletion for cluster dns %s: %v", dns.Name, err))
+				errs = append(errs, fmt.Errorf("failed to ensure deletion for dns %s: %v", dns.Name, err))
 			}
 
 			if len(errs) == 0 {
-				// Clean up the finalizer to allow the cluster dns to be deleted.
+				// Clean up the finalizer to allow the dns to be deleted.
 				if slice.ContainsString(dns.Finalizers, DNSControllerFinalizer) {
 					updated := dns.DeepCopy()
 					updated.Finalizers = slice.RemoveString(updated.Finalizers, DNSControllerFinalizer)
 					if err := r.client.Update(context.TODO(), updated); err != nil {
-						errs = append(errs, fmt.Errorf("failed to remove finalizer from cluster dns %s: %v", dns.Name, err))
+						errs = append(errs, fmt.Errorf("failed to remove finalizer from dns %s: %v", dns.Name, err))
 					}
 				}
 			}
 		} else if err := r.enforceDNSFinalizer(dns); err != nil {
-			errs = append(errs, fmt.Errorf("failed to enforce finalizer for cluster dns %s: %v", dns.Name, err))
+			errs = append(errs, fmt.Errorf("failed to enforce finalizer for dns %s: %v", dns.Name, err))
 		} else {
 			// Handle everything else.
-			if err := r.ensureClusterDNS(dns); err != nil {
-				errs = append(errs, fmt.Errorf("failed to ensure cluster dns %s: %v", dns.Name, err))
+			if err := r.ensureDNS(dns); err != nil {
+				errs = append(errs, fmt.Errorf("failed to ensure dns %s: %v", dns.Name, err))
 			} else if err := r.ensureExternalNameForOpenshiftService(); err != nil {
 				errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
 			}
@@ -237,7 +237,7 @@ func (r *reconciler) enforceDNSFinalizer(dns *operatorv1.DNS) error {
 	return nil
 }
 
-// ensureDNSDeleted tries to delete related cluster dns resources.
+// ensureDNSDeleted tries to delete related dns resources.
 func (r *reconciler) ensureDNSDeleted(dns *operatorv1.DNS) error {
 	// DNS specific configmap and service has owner reference to daemonset.
 	// So deletion of daemonset will trigger garbage collection of corresponding
@@ -298,8 +298,8 @@ func (r *reconciler) ensureDNSNamespace() error {
 	return nil
 }
 
-// ensureClusterDNS ensures all necessary dns resources exist for a given cluster dns.
-func (r *reconciler) ensureClusterDNS(dns *operatorv1.DNS) error {
+// ensureDNS ensures all necessary dns resources exist for a given dns.
+func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	// TODO: fetch this from higher level openshift resource when it is exposed
 	clusterDomain := "cluster.local"
 	clusterIP, err := r.getClusterIPFromNetworkConfig()
@@ -309,7 +309,7 @@ func (r *reconciler) ensureClusterDNS(dns *operatorv1.DNS) error {
 
 	errs := []error{}
 	if daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
-		errs = append(errs, fmt.Errorf("failed to ensure daemonset for cluster dns %s: %v", dns.Name, err))
+		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
 	} else {
 		trueVar := true
 		daemonsetRef := metav1.OwnerReference{
@@ -321,25 +321,25 @@ func (r *reconciler) ensureClusterDNS(dns *operatorv1.DNS) error {
 		}
 
 		if _, err := r.ensureDNSConfigMap(dns, clusterDomain, daemonsetRef); err != nil {
-			errs = append(errs, fmt.Errorf("failed to create configmap for cluster dns %s: %v", dns.Name, err))
+			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
 		}
 		if _, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
-			errs = append(errs, fmt.Errorf("failed to create service for cluster dns %s: %v", dns.Name, err))
+			errs = append(errs, fmt.Errorf("failed to create service for dns %s: %v", dns.Name, err))
 		}
 
-		if err := r.syncClusterDNSStatus(dns, clusterIP, clusterDomain); err != nil {
-			errs = append(errs, fmt.Errorf("failed to sync status of cluster dns %s/%s: %v", daemonset.Namespace, daemonset.Name, err))
+		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain); err != nil {
+			errs = append(errs, fmt.Errorf("failed to sync status of dns %s/%s: %v", daemonset.Namespace, daemonset.Name, err))
 		}
 	}
 
 	return utilerrors.NewAggregate(errs)
 }
 
-// syncClusterDNSStatus updates the status for a given cluster dns.
-func (r *reconciler) syncClusterDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string) error {
+// syncDNSStatus updates the status for a given dns.
+func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string) error {
 	current := &operatorv1.DNS{}
 	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: dns.Name}, current); err != nil {
-		return fmt.Errorf("failed to get cluster dns %s: %v", dns.Name, err)
+		return fmt.Errorf("failed to get dns %s: %v", dns.Name, err)
 	}
 	if current.Status.ClusterIP == clusterIP &&
 		current.Status.ClusterDomain == clusterDomain {
@@ -349,7 +349,7 @@ func (r *reconciler) syncClusterDNSStatus(dns *operatorv1.DNS, clusterIP, cluste
 	current.Status.ClusterDomain = clusterDomain
 
 	if err := r.client.Status().Update(context.TODO(), current); err != nil {
-		return fmt.Errorf("failed to update status for cluster dns %s: %v", current.Name, err)
+		return fmt.Errorf("failed to update status for dns %s: %v", current.Name, err)
 	}
 	return nil
 }

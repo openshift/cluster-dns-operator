@@ -16,7 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ensureDNSDaemonSet ensures the dns daemonset exists for a given cluster dns.
+// ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
 func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (*appsv1.DaemonSet, error) {
 	desired, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, r.CoreDNSImage, r.OpenshiftCLIImage)
 	if err != nil {
@@ -40,7 +40,7 @@ func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterD
 }
 
 // ensureDNSDaemonSetDeleted ensures deletion of daemonset and related resources
-// associated with the cluster dns.
+// associated with the dns.
 func (r *reconciler) ensureDNSDaemonSetDeleted(dns *operatorv1.DNS) error {
 	daemonset := &appsv1.DaemonSet{}
 	name := DNSDaemonSetName(dns)
@@ -66,7 +66,7 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 
 	daemonset.Labels = map[string]string{
 		// associate the daemonset with the dns
-		manifests.OwningClusterDNSLabel: DNSDaemonSetLabel(dns),
+		manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
 	}
 
 	// Ensure the daemonset adopts only its own pods.
@@ -151,7 +151,7 @@ func (r *reconciler) updateDNSDaemonSet(current, desired *appsv1.DaemonSet) erro
 }
 
 // daemonsetConfigChanged checks if current config matches the expected config
-// for the cluster dns daemonset and if not returns the updated config.
+// for the dns daemonset and if not returns the updated config.
 func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.DaemonSet) {
 	changed := false
 	updated := current.DeepCopy()

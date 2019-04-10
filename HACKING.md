@@ -1,4 +1,4 @@
-# Cluster DNS Operator Hacking
+# The DNS Operator Hacking
 
 ## Building
 
