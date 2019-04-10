@@ -23,7 +23,7 @@ const (
 	// OwningDNSLabel should be applied to any objects "owned by" a
 	// dns to aid in selection (especially in cases where an ownerref
 	// can't be established due to namespace boundaries).
-	OwningDNSLabel = "dns.operator.openshift.io/cluster-dns"
+	OwningDNSLabel = "dns.operator.openshift.io/owning-dns"
 )
 
 func MustAssetReader(asset string) io.Reader {
