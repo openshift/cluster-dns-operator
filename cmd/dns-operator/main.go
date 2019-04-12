@@ -6,8 +6,6 @@ import (
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-
 	"github.com/sirupsen/logrus"
 
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
