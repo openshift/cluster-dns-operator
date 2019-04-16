@@ -32,17 +32,16 @@ const (
 // syncOperatorStatus computes the operator's current status and therefrom
 // creates or updates the ClusterOperator resource for the operator.
 func (r *reconciler) syncOperatorStatus() error {
-	co := &configv1.ClusterOperator{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: DNSClusterOperatorName,
-		},
-	}
-	coFound := true
+	co := &configv1.ClusterOperator{ObjectMeta: metav1.ObjectMeta{Name: DNSClusterOperatorName}}
 	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: co.Name}, co); err != nil {
-		if !errors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
+			if err := r.client.Create(context.TODO(), co); err != nil {
+				return fmt.Errorf("failed to create clusteroperator %s: %v", co.Name, err)
+			}
+			logrus.Infof("created clusteroperator %s", co.Name)
+		} else {
 			return fmt.Errorf("failed to get clusteroperator %s: %v", co.Name, err)
 		}
-		coFound = false
 	}
 
 	ns, dnses, daemonsets, err := r.getOperatorState()
@@ -85,18 +84,12 @@ func (r *reconciler) syncOperatorStatus() error {
 		}
 	}
 
-	if coFound {
-		if !statusesEqual(*oldStatus, co.Status) {
-			if err := r.client.Status().Update(context.TODO(), co); err != nil {
-				return fmt.Errorf("failed to update clusteroperator %s: %v", co.Name, err)
-			}
+	if !statusesEqual(*oldStatus, co.Status) {
+		if err := r.client.Status().Update(context.TODO(), co); err != nil {
+			return fmt.Errorf("failed to update clusteroperator %s: %v", co.Name, err)
 		}
-	} else {
-		if err := r.client.Create(context.TODO(), co); err != nil {
-			return fmt.Errorf("failed to create clusteroperator %s: %v", co.Name, err)
-		}
-		logrus.Infof("created clusteroperator %s", co.Name)
 	}
+
 	return nil
 }
 
