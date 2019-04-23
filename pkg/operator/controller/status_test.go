@@ -18,7 +18,7 @@ func TestComputeStatusConditions(t *testing.T) {
 		numWanted, numAvailable, numUnavailable int
 	}
 	type testOutputs struct {
-		failing, progressing, available bool
+		degraded, progressing, available bool
 	}
 	testCases := []struct {
 		description string
@@ -40,7 +40,7 @@ func TestComputeStatusConditions(t *testing.T) {
 			dnses      []operatorv1.DNS
 			daemonsets []appsv1.DaemonSet
 
-			failing, progressing, available configv1.ConditionStatus
+			degraded, progressing, available configv1.ConditionStatus
 		)
 		if tc.inputs.haveNamespace {
 			namespace = &corev1.Namespace{}
@@ -68,10 +68,10 @@ func TestComputeStatusConditions(t *testing.T) {
 				},
 			})
 		}
-		if tc.outputs.failing {
-			failing = configv1.ConditionTrue
+		if tc.outputs.degraded {
+			degraded = configv1.ConditionTrue
 		} else {
-			failing = configv1.ConditionFalse
+			degraded = configv1.ConditionFalse
 		}
 		if tc.outputs.progressing {
 			progressing = configv1.ConditionTrue
@@ -85,8 +85,8 @@ func TestComputeStatusConditions(t *testing.T) {
 		}
 		expected := []configv1.ClusterOperatorStatusCondition{
 			{
-				Type:   configv1.OperatorFailing,
-				Status: failing,
+				Type:   configv1.OperatorDegraded,
+				Status: degraded,
 			},
 			{
 				Type:   configv1.OperatorProgressing,
@@ -171,7 +171,7 @@ func TestSetStatusCondition(t *testing.T) {
 			description: "existing conditions, one changed",
 			oldConditions: []configv1.ClusterOperatorStatusCondition{
 				{
-					Type:   configv1.OperatorFailing,
+					Type:   configv1.OperatorDegraded,
 					Status: configv1.ConditionFalse,
 				},
 				{
@@ -189,7 +189,7 @@ func TestSetStatusCondition(t *testing.T) {
 			},
 			expected: []configv1.ClusterOperatorStatusCondition{
 				{
-					Type:   configv1.OperatorFailing,
+					Type:   configv1.OperatorDegraded,
 					Status: configv1.ConditionFalse,
 				},
 				{
