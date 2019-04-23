@@ -118,18 +118,18 @@ func (r *reconciler) getOperatorState() (*corev1.Namespace, []operatorv1.DNS, []
 
 // computeStatusConditions computes the operator's current state.
 func computeStatusConditions(conditions []configv1.ClusterOperatorStatusCondition, ns *corev1.Namespace, dnses []operatorv1.DNS, daemonsets []appsv1.DaemonSet) []configv1.ClusterOperatorStatusCondition {
-	failingCondition := &configv1.ClusterOperatorStatusCondition{
-		Type:   configv1.OperatorFailing,
+	degradedCondition := &configv1.ClusterOperatorStatusCondition{
+		Type:   configv1.OperatorDegraded,
 		Status: configv1.ConditionUnknown,
 	}
 	if ns == nil {
-		failingCondition.Status = configv1.ConditionTrue
-		failingCondition.Reason = "NoNamespace"
-		failingCondition.Message = "DNS namespace does not exist"
+		degradedCondition.Status = configv1.ConditionTrue
+		degradedCondition.Reason = "NoNamespace"
+		degradedCondition.Message = "DNS namespace does not exist"
 	} else {
-		failingCondition.Status = configv1.ConditionFalse
+		degradedCondition.Status = configv1.ConditionFalse
 	}
-	conditions = setStatusCondition(conditions, failingCondition)
+	conditions = setStatusCondition(conditions, degradedCondition)
 
 	progressingCondition := &configv1.ClusterOperatorStatusCondition{
 		Type:   configv1.OperatorProgressing,
