@@ -13,3 +13,7 @@ spec:
     port: 53
     targetPort: dns-tcp
     protocol: TCP
+  - name: metrics
+    port: 9153
+    targetPort: metrics
+    protocol: TCP

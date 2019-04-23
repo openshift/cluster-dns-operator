@@ -298,6 +298,59 @@ func (r *reconciler) ensureDNSNamespace() error {
 	return nil
 }
 
+// ensureMetricsIntegration ensures that dns prometheus metrics are integrated with openshift-monitoring for the given DNS.
+func (r *reconciler) ensureMetricsIntegration(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRef metav1.OwnerReference) error {
+	cr := manifests.MetricsClusterRole()
+	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name}, cr); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns metrics cluster role %s: %v", cr.Name, err)
+		}
+		if err := r.client.Create(context.TODO(), cr); err != nil {
+			return fmt.Errorf("failed to create dns metrics cluster role %s: %v", cr.Name, err)
+		}
+		logrus.Infof("created dns metrics cluster role %s", cr.Name)
+	}
+
+	crb := manifests.MetricsClusterRoleBinding()
+	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: crb.Name}, crb); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns metrics cluster role binding %s: %v", crb.Name, err)
+		}
+		if err := r.client.Create(context.TODO(), crb); err != nil {
+			return fmt.Errorf("failed to create dns metrics cluster role binding %s: %v", crb.Name, err)
+		}
+		logrus.Infof("created dns metrics cluster role binding %s", crb.Name)
+	}
+
+	mr := manifests.MetricsRole()
+	if err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: mr.Namespace, Name: mr.Name}, mr); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns metrics role %s/%s: %v", mr.Namespace, mr.Name, err)
+		}
+		if err := r.client.Create(context.TODO(), mr); err != nil {
+			return fmt.Errorf("failed to create dns metrics role %s/%s: %v", mr.Namespace, mr.Name, err)
+		}
+		logrus.Infof("created dns metrics role %s/%s", mr.Namespace, mr.Name)
+	}
+
+	mrb := manifests.MetricsRoleBinding()
+	if err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: mrb.Namespace, Name: mrb.Name}, mrb); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dns metrics role binding %s/%s: %v", mrb.Namespace, mrb.Name, err)
+		}
+		if err := r.client.Create(context.TODO(), mrb); err != nil {
+			return fmt.Errorf("failed to create dns metrics role binding %s/%s: %v", mrb.Namespace, mrb.Name, err)
+		}
+		logrus.Infof("created dns metrics role binding %s/%s", mrb.Namespace, mrb.Name)
+	}
+
+	if _, err := r.ensureServiceMonitor(dns, svc, daemonsetRef); err != nil {
+		return fmt.Errorf("failed to ensure servicemonitor for %s: %v", dns.Name, err)
+	}
+
+	return nil
+}
+
 // ensureDNS ensures all necessary dns resources exist for a given dns.
 func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	// TODO: fetch this from higher level openshift resource when it is exposed
@@ -323,8 +376,10 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		if _, err := r.ensureDNSConfigMap(dns, clusterDomain, daemonsetRef); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
 		}
-		if _, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
+		if svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create service for dns %s: %v", dns.Name, err))
+		} else if err := r.ensureMetricsIntegration(dns, svc, daemonsetRef); err != nil {
+			errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))
 		}
 
 		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain); err != nil {

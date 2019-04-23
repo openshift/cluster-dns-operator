@@ -12,6 +12,8 @@ oc delete namespaces/openshift-dns
 oc delete clusteroperator dns
 oc delete clusterroles/openshift-dns-operator
 oc delete clusterroles/openshift-dns
+oc delete clusterroles/dns-monitoring
 oc delete clusterrolebindings/openshift-dns-operator
 oc delete clusterrolebindings/openshift-dns
+oc delete clusterrolebindings/dns-monitoring
 oc delete customresourcedefinition.apiextensions.k8s.io/dnses.operator.openshift.io

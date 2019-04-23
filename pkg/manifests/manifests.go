@@ -20,6 +20,11 @@ const (
 	DNSDaemonSetAsset          = "assets/dns/daemonset.yaml"
 	DNSServiceAsset            = "assets/dns/service.yaml"
 
+	MetricsClusterRoleAsset        = "assets/dns/metrics/cluster-role.yaml"
+	MetricsClusterRoleBindingAsset = "assets/dns/metrics/cluster-role-binding.yaml"
+	MetricsRoleAsset               = "assets/dns/metrics/role.yaml"
+	MetricsRoleBindingAsset        = "assets/dns/metrics/role-binding.yaml"
+
 	// OwningDNSLabel should be applied to any objects "owned by" a
 	// dns to aid in selection (especially in cases where an ownerref
 	// can't be established due to namespace boundaries).
@@ -86,6 +91,38 @@ func DNSService() *corev1.Service {
 	return s
 }
 
+func MetricsClusterRole() *rbacv1.ClusterRole {
+	cr, err := NewClusterRole(MustAssetReader(MetricsClusterRoleAsset))
+	if err != nil {
+		panic(err)
+	}
+	return cr
+}
+
+func MetricsClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	crb, err := NewClusterRoleBinding(MustAssetReader(MetricsClusterRoleBindingAsset))
+	if err != nil {
+		panic(err)
+	}
+	return crb
+}
+
+func MetricsRole() *rbacv1.Role {
+	r, err := NewRole(MustAssetReader(MetricsRoleAsset))
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func MetricsRoleBinding() *rbacv1.RoleBinding {
+	rb, err := NewRoleBinding(MustAssetReader(MetricsRoleBindingAsset))
+	if err != nil {
+		panic(err)
+	}
+	return rb
+}
+
 func NewServiceAccount(manifest io.Reader) (*corev1.ServiceAccount, error) {
 	sa := corev1.ServiceAccount{}
 	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&sa); err != nil {
@@ -108,6 +145,24 @@ func NewClusterRoleBinding(manifest io.Reader) (*rbacv1.ClusterRoleBinding, erro
 		return nil, err
 	}
 	return &crb, nil
+}
+
+func NewRole(manifest io.Reader) (*rbacv1.Role, error) {
+	r := rbacv1.Role{}
+	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&r); err != nil {
+		return nil, err
+	}
+
+	return &r, nil
+}
+
+func NewRoleBinding(manifest io.Reader) (*rbacv1.RoleBinding, error) {
+	rb := rbacv1.RoleBinding{}
+	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&rb); err != nil {
+		return nil, err
+	}
+
+	return &rb, nil
 }
 
 func NewConfigMap(manifest io.Reader) (*corev1.ConfigMap, error) {

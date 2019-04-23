@@ -46,3 +46,10 @@ func DNSConfigMapName(dns *operatorv1.DNS) types.NamespacedName {
 		Name:      "dns-" + dns.Name,
 	}
 }
+
+func DNSServiceMonitorName(dns *operatorv1.DNS) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: "openshift-dns",
+		Name:      "dns-" + dns.Name,
+	}
+}

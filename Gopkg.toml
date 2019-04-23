@@ -23,6 +23,11 @@ required = [
   name = "github.com/openshift/library-go"
   revision = "dab26bb3a8dc7fccde7227194af755bbff30ce5d"
 
+# coreos
+[[override]]
+  name = "github.com/coreos/prometheus-operator"
+  version = "v0.28.0"
+
 # kube
 [[override]]
   name = "k8s.io/api"

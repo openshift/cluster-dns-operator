@@ -11,19 +11,15 @@ rules:
   - pods
   - services
   - endpoints
-  - persistentvolumeclaims
   - events
   - configmaps
-  - secrets
   verbs:
   - "*"
+
 - apiGroups:
   - apps
   resources:
-  - deployments
-  - services
   - daemonsets
-  - replicasets
-  - statefulsets
+  - services
   verbs:
   - "*"
