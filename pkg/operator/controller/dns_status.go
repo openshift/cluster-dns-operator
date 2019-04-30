@@ -19,7 +19,7 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 	updated := dns.DeepCopy()
 	updated.Status.ClusterIP = clusterIP
 	updated.Status.ClusterDomain = clusterDomain
-	updated.Status.Conditions = r.computeDNSStatusConditions(dns.Status.Conditions, clusterIP, ds)
+	updated.Status.Conditions = computeDNSStatusConditions(dns.Status.Conditions, clusterIP, ds)
 	if !dnsStatusesEqual(updated.Status, dns.Status) {
 		if err := r.client.Status().Update(context.TODO(), updated); err != nil {
 			return fmt.Errorf("failed to update dns status: %v", err)
@@ -31,7 +31,7 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 
 // computeDNSStatusConditions computes dns status conditions based on
 // the status of ds and clusterIP.
-func (r *reconciler) computeDNSStatusConditions(oldConditions []operatorv1.OperatorCondition, clusterIP string,
+func computeDNSStatusConditions(oldConditions []operatorv1.OperatorCondition, clusterIP string,
 	ds *appsv1.DaemonSet) []operatorv1.OperatorCondition {
 	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition *operatorv1.OperatorCondition
 	for i := range oldConditions {

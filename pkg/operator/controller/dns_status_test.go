@@ -10,8 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var r reconciler
-
 func TestDNSStatusConditions(t *testing.T) {
 	type testInputs struct {
 		haveClusterIP bool
@@ -114,7 +112,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: available,
 			},
 		}
-		actual := r.computeDNSStatusConditions([]operatorv1.OperatorCondition{}, clusterIP, ds)
+		actual := computeDNSStatusConditions([]operatorv1.OperatorCondition{}, clusterIP, ds)
 		gotExpected := true
 		if len(actual) != len(expected) {
 			gotExpected = false
