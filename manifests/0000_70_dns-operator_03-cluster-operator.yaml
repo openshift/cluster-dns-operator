@@ -5,4 +5,3 @@ apiVersion: config.openshift.io/v1
 kind: ClusterOperator
 metadata:
   name: dns
-spec: {}

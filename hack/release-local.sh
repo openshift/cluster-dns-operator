@@ -30,6 +30,8 @@ fi
 
 cp -R manifests/* $MANIFESTS
 cat manifests/0000_70_dns-operator_02-deployment.yaml | sed "s~openshift/origin-cluster-dns-operator:latest~$REPO:$REV~" > "$MANIFESTS/0000_70_dns-operator_02-deployment.yaml"
+# To simulate CVO, ClusterOperator resource need to be created by the operator.
+rm $MANIFESTS/0000_70_dns-operator_03-cluster-operator.yaml
 
 echo "Pushed $REPO:$REV"
 echo "Install manifests using:"
