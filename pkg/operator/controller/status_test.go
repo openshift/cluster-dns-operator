@@ -17,16 +17,19 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 		degraded, progressing, available bool
 	}
 	type versions struct {
-		operator, operand string
+		operator, coreDNSOperand, openshiftCLIOperand string
+	}
+	type dnsesCount struct {
+		available, total int
 	}
 
 	testCases := []struct {
-		description       string
-		noNamespace       bool
-		dnsesAvail, dnses int
-		reportedVersions  versions
-		curVersions       versions
-		expected          conditions
+		description      string
+		noNamespace      bool
+		dnses            dnsesCount
+		reportedVersions versions
+		curVersions      versions
+		expected         conditions
 	}{
 		{
 			description: "no operand namespace or dnses available",
@@ -39,15 +42,48 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 		},
 		{
 			description: "1/2 dns resources available",
-			dnsesAvail:  1,
-			dnses:       2,
+			dnses:       dnsesCount{1, 2},
 			expected:    conditions{true, true, true},
 		},
 		{
 			description: "2/2 dns resources available",
-			dnsesAvail:  2,
-			dnses:       2,
+			dnses:       dnsesCount{2, 2},
 			expected:    conditions{false, false, true},
+		},
+		{
+			description:      "versions match",
+			dnses:            dnsesCount{2, 2},
+			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			expected:         conditions{false, false, true},
+		},
+		{
+			description:      "operator version mismatch",
+			dnses:            dnsesCount{2, 2},
+			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v2", "dns-v1", "cli-v1"},
+			expected:         conditions{false, true, true},
+		},
+		{
+			description:      "coredns operand version mismatch",
+			dnses:            dnsesCount{2, 2},
+			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v2", "cli-v1"},
+			expected:         conditions{false, true, true},
+		},
+		{
+			description:      "openshift-cli operand version mismatch",
+			dnses:            dnsesCount{2, 2},
+			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v1", "cli-v2"},
+			expected:         conditions{false, true, true},
+		},
+		{
+			description:      "operator, coredns and openshift-cli version mismatch",
+			dnses:            dnsesCount{2, 2},
+			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
+			expected:         conditions{false, true, true},
 		},
 	}
 
@@ -55,6 +91,28 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 		var namespace *corev1.Namespace
 		if !tc.noNamespace {
 			namespace = &corev1.Namespace{}
+		}
+
+		reportedVersions := []configv1.OperandVersion{
+			{
+				Name:    OperatorVersionName,
+				Version: tc.reportedVersions.operator,
+			},
+			{
+				Name:    CoreDNSVersionName,
+				Version: tc.reportedVersions.coreDNSOperand,
+			},
+			{
+				Name:    OpenshiftCLIVersionName,
+				Version: tc.reportedVersions.openshiftCLIOperand,
+			},
+		}
+		r := &reconciler{
+			Config: Config{
+				OperatorReleaseVersion: tc.curVersions.operator,
+				CoreDNSImage:           tc.curVersions.coreDNSOperand,
+				OpenshiftCLIImage:      tc.curVersions.openshiftCLIOperand,
+			},
 		}
 
 		expectedConditions := []configv1.ClusterOperatorStatusCondition{
@@ -81,8 +139,8 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 			expectedConditions[2].Status = configv1.ConditionTrue
 		}
 
-		conditions := computeOperatorStatusConditions([]configv1.ClusterOperatorStatusCondition{}, namespace,
-			tc.dnsesAvail, tc.dnses)
+		conditions := r.computeOperatorStatusConditions([]configv1.ClusterOperatorStatusCondition{}, namespace,
+			tc.dnses.total, tc.dnses.available, reportedVersions)
 		conditionsCmpOpts := []cmp.Option{
 			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
 			cmpopts.EquateEmpty(),
@@ -344,6 +402,145 @@ func TestOperatorStatusesEqual(t *testing.T) {
 	for _, tc := range testCases {
 		if actual := operatorStatusesEqual(tc.a, tc.b); actual != tc.expected {
 			t.Fatalf("%q: expected %v, got %v", tc.description, tc.expected, actual)
+		}
+	}
+}
+
+func TestComputeOperatorStatusVersions(t *testing.T) {
+	type versions struct {
+		operator, coreDNSOperand, openshiftCLIOperand string
+	}
+
+	testCases := []struct {
+		description       string
+		oldVersions       versions
+		curVersions       versions
+		allDNSesAvailable bool
+		expectedVersions  versions
+	}{
+		{
+			description:       "initialize versions, DNSes available",
+			oldVersions:       versions{UnknownVersionValue, UnknownVersionValue, UnknownVersionValue},
+			curVersions:       versions{"v1", "dns-v1", "cli-v1"},
+			allDNSesAvailable: true,
+			expectedVersions:  versions{"v1", "dns-v1", "cli-v1"},
+		},
+		{
+			description:      "initialize versions, DNSes not all available",
+			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue, UnknownVersionValue},
+			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue, UnknownVersionValue},
+		},
+		{
+			description:       "update with no change",
+			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:       versions{"v1", "dns-v1", "cli-v1"},
+			allDNSesAvailable: true,
+			expectedVersions:  versions{"v1", "dns-v1", "cli-v1"},
+		},
+		{
+			description:      "update operator version, DNSes not all available",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v2", "dns-v1", "cli-v1"},
+			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
+		},
+		{
+			description:       "update operator version, DNSes available",
+			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:       versions{"v2", "dns-v1", "cli-v1"},
+			allDNSesAvailable: true,
+			expectedVersions:  versions{"v2", "dns-v1", "cli-v1"},
+		},
+		{
+			description:      "update coredns image, DNSes not all available",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v2", "cli-v1"},
+			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
+		},
+		{
+			description:       "update coredns image, DNSes available",
+			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:       versions{"v1", "dns-v2", "cli-v1"},
+			allDNSesAvailable: true,
+			expectedVersions:  versions{"v1", "dns-v2", "cli-v1"},
+		},
+		{
+			description:      "update openshift-cli image, DNSes not all available",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v1", "cli-v2"},
+			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
+		},
+		{
+			description:       "update openshift-cli image, DNSes available",
+			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:       versions{"v1", "dns-v1", "cli-v2"},
+			allDNSesAvailable: true,
+			expectedVersions:  versions{"v1", "dns-v1", "cli-v2"},
+		},
+		{
+			description:      "update operator, coredns and openshift-cli image, DNSes not all available",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
+			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
+		},
+		{
+			description:       "update operator, coredns and openshift-cli image, DNSes available",
+			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:       versions{"v2", "dns-v2", "cli-v2"},
+			allDNSesAvailable: true,
+			expectedVersions:  versions{"v2", "dns-v2", "cli-v2"},
+		},
+	}
+
+	for _, tc := range testCases {
+		var (
+			oldVersions      []configv1.OperandVersion
+			expectedVersions []configv1.OperandVersion
+		)
+
+		oldVersions = []configv1.OperandVersion{
+			{
+				Name:    OperatorVersionName,
+				Version: tc.oldVersions.operator,
+			},
+			{
+				Name:    CoreDNSVersionName,
+				Version: tc.oldVersions.coreDNSOperand,
+			},
+			{
+				Name:    OpenshiftCLIVersionName,
+				Version: tc.oldVersions.openshiftCLIOperand,
+			},
+		}
+		expectedVersions = []configv1.OperandVersion{
+			{
+				Name:    OperatorVersionName,
+				Version: tc.expectedVersions.operator,
+			},
+			{
+				Name:    CoreDNSVersionName,
+				Version: tc.expectedVersions.coreDNSOperand,
+			},
+			{
+				Name:    OpenshiftCLIVersionName,
+				Version: tc.expectedVersions.openshiftCLIOperand,
+			},
+		}
+
+		r := &reconciler{
+			Config: Config{
+				OperatorReleaseVersion: tc.curVersions.operator,
+				CoreDNSImage:           tc.curVersions.coreDNSOperand,
+				OpenshiftCLIImage:      tc.curVersions.openshiftCLIOperand,
+			},
+		}
+		versions := r.computeOperatorStatusVersions(oldVersions, tc.allDNSesAvailable)
+		versionsCmpOpts := []cmp.Option{
+			cmpopts.EquateEmpty(),
+			cmpopts.SortSlices(func(a, b configv1.OperandVersion) bool { return a.Name < b.Name }),
+		}
+		if !cmp.Equal(versions, expectedVersions, versionsCmpOpts...) {
+			t.Fatalf("%q: expected %v, got %v", tc.description, expectedVersions, versions)
 		}
 	}
 }

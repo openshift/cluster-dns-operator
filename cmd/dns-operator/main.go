@@ -5,6 +5,7 @@ import (
 
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
+	"github.com/openshift/cluster-dns-operator/pkg/operator/controller"
 
 	"github.com/sirupsen/logrus"
 
@@ -16,6 +17,11 @@ func main() {
 	metrics.DefaultBindAddress = ":60000"
 
 	// Collect operator configuration.
+	releaseVersion := os.Getenv("RELEASE_VERSION")
+	if len(releaseVersion) == 0 {
+		releaseVersion = controller.UnknownVersionValue
+		logrus.Infof("RELEASE_VERSION environment variable is missing, defaulting to %q", controller.UnknownVersionValue)
+	}
 	coreDNSImage := os.Getenv("IMAGE")
 	if len(coreDNSImage) == 0 {
 		logrus.Fatalf("IMAGE environment variable is required")
@@ -26,7 +32,7 @@ func main() {
 	}
 
 	operatorConfig := operatorconfig.Config{
-		OperatorReleaseVersion: os.Getenv("RELEASE_VERSION"),
+		OperatorReleaseVersion: releaseVersion,
 		CoreDNSImage:           coreDNSImage,
 		OpenshiftCLIImage:      cliImage,
 	}

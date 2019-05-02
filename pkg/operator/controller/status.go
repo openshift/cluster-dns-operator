@@ -3,6 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
@@ -22,14 +24,22 @@ import (
 
 const (
 	DNSOperatorName = "dns"
+
+	OperatorVersionName     = "operator"
+	CoreDNSVersionName      = "coredns"
+	OpenshiftCLIVersionName = "openshift-cli"
+	UnknownVersionValue     = "unknown"
 )
 
 // syncOperatorStatus computes the operator's current status and therefrom
 // creates or updates the ClusterOperator resource for the operator.
 func (r *reconciler) syncOperatorStatus() error {
+	ns := manifests.DNSNamespace()
+
 	co := &configv1.ClusterOperator{ObjectMeta: metav1.ObjectMeta{Name: DNSOperatorName}}
 	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: co.Name}, co); err != nil {
 		if errors.IsNotFound(err) {
+			initializeClusterOperator(co, ns.Name)
 			if err := r.client.Create(context.TODO(), co); err != nil {
 				return fmt.Errorf("failed to create clusteroperator %s: %v", co.Name, err)
 			}
@@ -38,48 +48,19 @@ func (r *reconciler) syncOperatorStatus() error {
 			return fmt.Errorf("failed to get clusteroperator %s: %v", co.Name, err)
 		}
 	}
+	oldStatus := co.Status.DeepCopy()
 
-	ns, dnses, err := r.getOperatorState()
+	dnses, ns, err := r.getOperatorState(ns.Name)
 	if err != nil {
 		return fmt.Errorf("failed to get operator state: %v", err)
 	}
-
 	dnsesTotal := len(dnses)
 	dnsesAvailable := numDNSesAvailable(dnses)
-	oldStatus := co.Status.DeepCopy()
-	co.Status.Conditions = computeOperatorStatusConditions(oldStatus.Conditions, ns, dnsesAvailable, dnsesTotal)
-	co.Status.RelatedObjects = []configv1.ObjectReference{
-		{
-			Resource: "namespaces",
-			Name:     "openshift-dns-operator",
-		},
-		{
-			Resource: "namespaces",
-			Name:     ns.Name,
-		},
-	}
+	allDNSesAvailable := ((dnsesAvailable != 0) && (dnsesAvailable == dnsesTotal))
 
-	if len(r.OperatorReleaseVersion) > 0 {
-		// An available operator resets release version
-		for _, condition := range co.Status.Conditions {
-			if condition.Type == configv1.OperatorAvailable && condition.Status == configv1.ConditionTrue {
-				co.Status.Versions = []configv1.OperandVersion{
-					{
-						Name:    "operator",
-						Version: r.OperatorReleaseVersion,
-					},
-					{
-						Name:    "coredns",
-						Version: r.CoreDNSImage,
-					},
-					{
-						Name:    "openshift-cli",
-						Version: r.OpenshiftCLIImage,
-					},
-				}
-			}
-		}
-	}
+	co.Status.Versions = r.computeOperatorStatusVersions(oldStatus.Versions, allDNSesAvailable)
+	co.Status.Conditions = r.computeOperatorStatusConditions(oldStatus.Conditions, ns, dnsesTotal,
+		dnsesAvailable, co.Status.Versions)
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(context.TODO(), co); err != nil {
@@ -90,15 +71,57 @@ func (r *reconciler) syncOperatorStatus() error {
 	return nil
 }
 
+// Populate versions and conditions in cluster operator status as CVO expects these fields.
+func initializeClusterOperator(co *configv1.ClusterOperator, nsName string) {
+	co.Status.Versions = []configv1.OperandVersion{
+		{
+			Name:    OperatorVersionName,
+			Version: UnknownVersionValue,
+		},
+		{
+			Name:    CoreDNSVersionName,
+			Version: UnknownVersionValue,
+		},
+		{
+			Name:    OpenshiftCLIVersionName,
+			Version: UnknownVersionValue,
+		},
+	}
+	co.Status.Conditions = []configv1.ClusterOperatorStatusCondition{
+		{
+			Type:   configv1.OperatorDegraded,
+			Status: configv1.ConditionUnknown,
+		},
+		{
+			Type:   configv1.OperatorProgressing,
+			Status: configv1.ConditionUnknown,
+		},
+		{
+			Type:   configv1.OperatorAvailable,
+			Status: configv1.ConditionUnknown,
+		},
+	}
+	co.Status.RelatedObjects = []configv1.ObjectReference{
+		{
+			Resource: "namespaces",
+			Name:     "openshift-dns-operator",
+		},
+		{
+			Resource: "namespaces",
+			Name:     nsName,
+		},
+	}
+}
+
 // getOperatorState gets and returns the resources necessary to compute the
 // operator's current state.
-func (r *reconciler) getOperatorState() (*corev1.Namespace, []operatorv1.DNS, error) {
-	ns := manifests.DNSNamespace()
-	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: ns.Name}, ns); err != nil {
+func (r *reconciler) getOperatorState(nsName string) ([]operatorv1.DNS, *corev1.Namespace, error) {
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
+	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: nsName}, ns); err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil, nil
 		}
-		return nil, nil, fmt.Errorf("failed to get namespace %s: %v", ns.Name, err)
+		return nil, nil, fmt.Errorf("failed to get namespace %s: %v", nsName, err)
 	}
 
 	dnsList := &operatorv1.DNSList{}
@@ -106,12 +129,37 @@ func (r *reconciler) getOperatorState() (*corev1.Namespace, []operatorv1.DNS, er
 		return nil, nil, fmt.Errorf("failed to list dnses: %v", err)
 	}
 
-	return ns, dnsList.Items, nil
+	return dnsList.Items, ns, nil
+}
+
+// computeOperatorStatusVersions computes the operator's current versions.
+func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.OperandVersion, allDNSesAvailable bool) []configv1.OperandVersion {
+	// We need to report old version until the operator fully transitions to the new version.
+	// https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusteroperator.md#version-reporting-during-an-upgrade
+	if !allDNSesAvailable {
+		return oldVersions
+	}
+
+	return []configv1.OperandVersion{
+		{
+			Name:    OperatorVersionName,
+			Version: r.OperatorReleaseVersion,
+		},
+		{
+			Name:    CoreDNSVersionName,
+			Version: r.CoreDNSImage,
+		},
+		{
+			Name:    OpenshiftCLIVersionName,
+			Version: r.OpenshiftCLIImage,
+		},
+	}
 }
 
 // computeOperatorStatusConditions computes the operator's current state.
-func computeOperatorStatusConditions(oldConditions []configv1.ClusterOperatorStatusCondition, ns *corev1.Namespace,
-	dnsesAvailable, dnses int) []configv1.ClusterOperatorStatusCondition {
+func (r *reconciler) computeOperatorStatusConditions(oldConditions []configv1.ClusterOperatorStatusCondition,
+	ns *corev1.Namespace, dnses, dnsesAvailable int,
+	curVersions []configv1.OperandVersion) []configv1.ClusterOperatorStatusCondition {
 	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition *configv1.ClusterOperatorStatusCondition
 	for i := range oldConditions {
 		switch oldConditions[i].Type {
@@ -126,7 +174,7 @@ func computeOperatorStatusConditions(oldConditions []configv1.ClusterOperatorSta
 
 	conditions := []configv1.ClusterOperatorStatusCondition{
 		computeOperatorDegradedCondition(oldDegradedCondition, dnsesAvailable, dnses, ns),
-		computeOperatorProgressingCondition(oldProgressingCondition, dnsesAvailable, dnses),
+		r.computeOperatorProgressingCondition(oldProgressingCondition, dnsesAvailable, dnses, curVersions),
 		computeOperatorAvailableCondition(oldAvailableCondition, dnsesAvailable),
 	}
 
@@ -136,7 +184,7 @@ func computeOperatorStatusConditions(oldConditions []configv1.ClusterOperatorSta
 // computeOperatorDegradedCondition computes the operator's current Degraded status state.
 func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnsesAvailable, dnsesTotal int,
 	ns *corev1.Namespace) configv1.ClusterOperatorStatusCondition {
-	degradedCondition := &configv1.ClusterOperatorStatusCondition{
+	degradedCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorDegraded,
 	}
 	switch {
@@ -154,33 +202,57 @@ func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStat
 		degradedCondition.Message = "All desired DNS DaemonSets available and operand Namespace exists"
 	}
 
-	return setOperatorLastTransitionTime(degradedCondition, oldCondition)
+	setOperatorLastTransitionTime(&degradedCondition, oldCondition)
+	return degradedCondition
 }
 
 // computeOperatorProgressingCondition computes the operator's current Progressing status state.
-func computeOperatorProgressingCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnsesAvailable,
-	dnsesTotal int) configv1.ClusterOperatorStatusCondition {
-	progressingCondition := &configv1.ClusterOperatorStatusCondition{
+func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnsesAvailable,
+	dnsesTotal int, curVersions []configv1.OperandVersion) configv1.ClusterOperatorStatusCondition {
+	progressingCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorProgressing,
 	}
 
-	if dnsesAvailable == 0 || dnsesAvailable != dnsesTotal {
+	messages := []string{}
+	if (dnsesAvailable == 0) || (dnsesAvailable != dnsesTotal) {
+		messages = append(messages, "Not all DNS DaemonSets available")
+	}
+
+	for _, opv := range curVersions {
+		switch opv.Name {
+		case OperatorVersionName:
+			if opv.Version != r.OperatorReleaseVersion {
+				messages = append(messages, fmt.Sprintf("Moving to release version %q.", r.OperatorReleaseVersion))
+			}
+		case CoreDNSVersionName:
+			if opv.Version != r.CoreDNSImage {
+				messages = append(messages, fmt.Sprintf("Moving to coredns image version %q.", r.CoreDNSImage))
+			}
+		case OpenshiftCLIVersionName:
+			if opv.Version != r.OpenshiftCLIImage {
+				messages = append(messages, fmt.Sprintf("Moving to openshift-cli image version %q.", r.OpenshiftCLIImage))
+			}
+		}
+	}
+
+	if len(messages) != 0 {
 		progressingCondition.Status = configv1.ConditionTrue
 		progressingCondition.Reason = "Reconciling"
-		progressingCondition.Message = "Not all DNS DaemonSets available"
+		progressingCondition.Message = strings.Join(messages, "\n")
 	} else {
 		progressingCondition.Status = configv1.ConditionFalse
 		progressingCondition.Reason = "AsExpected"
 		progressingCondition.Message = "Desired and available number of DNS DaemonSets are equal"
 	}
 
-	return setOperatorLastTransitionTime(progressingCondition, oldCondition)
+	setOperatorLastTransitionTime(&progressingCondition, oldCondition)
+	return progressingCondition
 }
 
 // computeOperatorAvailableCondition computes the operator's current Available status state.
 func computeOperatorAvailableCondition(oldCondition *configv1.ClusterOperatorStatusCondition,
 	dnsesAvailable int) configv1.ClusterOperatorStatusCondition {
-	availableCondition := &configv1.ClusterOperatorStatusCondition{
+	availableCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorAvailable,
 	}
 	if dnsesAvailable > 0 {
@@ -193,7 +265,8 @@ func computeOperatorAvailableCondition(oldCondition *configv1.ClusterOperatorSta
 		availableCondition.Message = "No DNS DaemonSets available"
 	}
 
-	return setOperatorLastTransitionTime(availableCondition, oldCondition)
+	setOperatorLastTransitionTime(&availableCondition, oldCondition)
+	return availableCondition
 }
 
 // numDNSesAvailable returns the number of DNS resources from dnses with
@@ -214,15 +287,13 @@ func numDNSesAvailable(dnses []operatorv1.DNS) int {
 
 // setOperatorLastTransitionTime sets LastTransitionTime for the given condition.
 // If the condition has changed, it will assign a new timestamp otherwise keeps the old timestamp.
-func setOperatorLastTransitionTime(condition, oldCondition *configv1.ClusterOperatorStatusCondition) configv1.ClusterOperatorStatusCondition {
+func setOperatorLastTransitionTime(condition, oldCondition *configv1.ClusterOperatorStatusCondition) {
 	if oldCondition != nil && condition.Status == oldCondition.Status &&
 		condition.Reason == oldCondition.Reason && condition.Message == oldCondition.Message {
 		condition.LastTransitionTime = oldCondition.LastTransitionTime
 	} else {
 		condition.LastTransitionTime = metav1.Now()
 	}
-
-	return *condition
 }
 
 // operatorStatusesEqual compares two ClusterOperatorStatus values.  Returns true
