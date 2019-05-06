@@ -227,6 +227,9 @@ func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.
 	}
 
 	for _, opv := range curVersions {
+		if oldVersion, ok := oldVersionsMap[opv.Name]; ok && oldVersion != opv.Version {
+			messages = append(messages, fmt.Sprintf("Upgraded %s to %q.", opv.Name, opv.Version))
+		}
 		switch opv.Name {
 		case OperatorVersionName:
 			if opv.Version != r.OperatorReleaseVersion {
@@ -243,21 +246,19 @@ func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.
 				messages = append(messages, fmt.Sprintf("Moving to openshift-cli image version %q.", r.OpenshiftCLIImage))
 				progressing = true
 			}
-		default:
-			if oldVersion, ok := oldVersionsMap[opv.Name]; ok && oldVersion != opv.Version {
-				messages = append(messages, fmt.Sprintf("Upgraded %s to %q.", opv.Name, opv.Version))
-			}
 		}
 	}
 
 	if progressing {
 		progressingCondition.Status = configv1.ConditionTrue
 		progressingCondition.Reason = "Reconciling"
-		progressingCondition.Message = strings.Join(messages, "\n")
 	} else {
 		progressingCondition.Status = configv1.ConditionFalse
 		progressingCondition.Reason = "AsExpected"
-		progressingCondition.Message = "Desired and available number of DNS DaemonSets are equal"
+	}
+	progressingCondition.Message = "Desired and available number of DNS DaemonSets are equal"
+	if len(messages) > 0 {
+		progressingCondition.Message = strings.Join(messages, "\n")
 	}
 
 	setOperatorLastTransitionTime(&progressingCondition, oldCondition)
