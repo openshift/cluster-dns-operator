@@ -22,6 +22,7 @@ spec:
       serviceAccountName: dns-operator
       containers:
         - name: dns-operator
+          terminationMessagePolicy: FallbackToLogsOnError
           image: openshift/origin-cluster-dns-operator:latest
           command:
           - dns-operator

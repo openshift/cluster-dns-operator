@@ -10,6 +10,7 @@ spec:
       - name: dns
         # image is set at runtime
         imagePullPolicy: IfNotPresent
+        terminationMessagePolicy: FallbackToLogsOnError
         command: [ "coredns" ]
         args: [ "-conf", "/etc/coredns/Corefile" ]
         volumeMounts:
@@ -44,6 +45,7 @@ spec:
       - name: dns-node-resolver
         # image is set at runtime
         imagePullPolicy: IfNotPresent
+        terminationMessagePolicy: FallbackToLogsOnError
         securityContext:
           privileged: true
         volumeMounts:
