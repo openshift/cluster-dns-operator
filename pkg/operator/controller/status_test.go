@@ -19,14 +19,11 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 	type versions struct {
 		operator, coreDNSOperand, openshiftCLIOperand string
 	}
-	type dnsesCount struct {
-		available, total int
-	}
 
 	testCases := []struct {
 		description      string
 		noNamespace      bool
-		dnses            dnsesCount
+		dnses            dnsStatusConditionsCounts
 		reportedVersions versions
 		oldVersions      versions
 		curVersions      versions
@@ -35,101 +32,102 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 		{
 			description: "no operand namespace or dnses available",
 			noNamespace: true,
-			expected:    conditions{true, true, false},
+			expected:    conditions{available: false, progressing: true, degraded: true},
 		},
 		{
 			description: "0/0 dns resources available",
-			expected:    conditions{true, true, false},
+			dnses:       dnsStatusConditionsCounts{available: 0, progressing: 0, degraded: 0, total: 0},
+			expected:    conditions{available: false, progressing: true, degraded: true},
 		},
 		{
 			description: "1/2 dns resources available",
-			dnses:       dnsesCount{1, 2},
-			expected:    conditions{true, true, true},
+			dnses:       dnsStatusConditionsCounts{available: 1, progressing: 1, degraded: 1, total: 2},
+			expected:    conditions{available: true, progressing: true, degraded: true},
 		},
 		{
 			description: "2/2 dns resources available",
-			dnses:       dnsesCount{2, 2},
-			expected:    conditions{false, false, true},
+			dnses:       dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
+			expected:    conditions{available: true, progressing: false, degraded: false},
 		},
 		{
 			description:      "versions match",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
-			expected:         conditions{false, false, true},
+			expected:         conditions{available: true, progressing: false, degraded: false},
 		},
 		{
 			description:      "operator upgrade in progress",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 2, degraded: 2, total: 2},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v2", "dns-v1", "cli-v1"},
-			expected:         conditions{false, true, true},
+			expected:         conditions{available: true, progressing: true, degraded: true},
 		},
 		{
 			description:      "coredns upgrade in progress",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 2, degraded: 2, total: 2},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v2", "cli-v1"},
-			expected:         conditions{false, true, true},
+			expected:         conditions{available: true, progressing: true, degraded: true},
 		},
 		{
 			description:      "openshift-cli upgrade in progress",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 2, degraded: 2, total: 2},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v1", "cli-v2"},
-			expected:         conditions{false, true, true},
+			expected:         conditions{available: true, progressing: true, degraded: true},
 		},
 		{
 			description:      "operator, coredns and openshift-cli upgrade in progress",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 2, degraded: 2, total: 2},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
-			expected:         conditions{false, true, true},
+			expected:         conditions{available: true, progressing: true, degraded: true},
 		},
 		{
 			description:      "operator upgrade done",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
 			reportedVersions: versions{"v2", "dns-v1", "cli-v1"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v2", "dns-v1", "cli-v1"},
-			expected:         conditions{false, false, true},
+			expected:         conditions{available: true, progressing: false, degraded: false},
 		},
 		{
 			description:      "coredns upgrade done",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
 			reportedVersions: versions{"v1", "dns-v2", "cli-v1"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v2", "cli-v1"},
-			expected:         conditions{false, false, true},
+			expected:         conditions{available: true, progressing: false, degraded: false},
 		},
 		{
 			description:      "openshift-cli upgrade done",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v2"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v1", "cli-v2"},
-			expected:         conditions{false, false, true},
+			expected:         conditions{available: true, progressing: false, degraded: false},
 		},
 		{
 			description:      "operator, coredns and openshift-cli upgrade done",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
 			reportedVersions: versions{"v2", "dns-v2", "cli-v2"},
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
-			expected:         conditions{false, false, true},
+			expected:         conditions{available: true, progressing: false, degraded: false},
 		},
 		{
 			description:      "operator upgrade in progress, coredns upgrade done",
-			dnses:            dnsesCount{2, 2},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 2, degraded: 2, total: 2},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v2"},
 			oldVersions:      versions{"v1", "dns-v2", "cli-v2"},
 			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
-			expected:         conditions{false, true, true},
+			expected:         conditions{available: true, progressing: true, degraded: true},
 		},
 	}
 
@@ -200,14 +198,14 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 		}
 
 		conditions := r.computeOperatorStatusConditions([]configv1.ClusterOperatorStatusCondition{}, namespace,
-			tc.dnses.total, tc.dnses.available, oldVersions, reportedVersions)
+			tc.dnses, oldVersions, reportedVersions)
 		conditionsCmpOpts := []cmp.Option{
 			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
 			cmpopts.EquateEmpty(),
 			cmpopts.SortSlices(func(a, b configv1.ClusterOperatorStatusCondition) bool { return a.Type < b.Type }),
 		}
 		if !cmp.Equal(conditions, expectedConditions, conditionsCmpOpts...) {
-			t.Fatalf("%q: expected %#v, got %#v", tc.description, expectedConditions, conditions)
+			t.Errorf("%q: expected %#v, got %#v", tc.description, expectedConditions, conditions)
 		}
 	}
 }
@@ -472,83 +470,88 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 	}
 
 	testCases := []struct {
-		description       string
-		oldVersions       versions
-		curVersions       versions
-		allDNSesAvailable bool
-		expectedVersions  versions
+		description      string
+		oldVersions      versions
+		curVersions      versions
+		dnses            dnsStatusConditionsCounts
+		expectedVersions versions
 	}{
 		{
-			description:       "initialize versions, DNSes available",
-			oldVersions:       versions{UnknownVersionValue, UnknownVersionValue, UnknownVersionValue},
-			curVersions:       versions{"v1", "dns-v1", "cli-v1"},
-			allDNSesAvailable: true,
-			expectedVersions:  versions{"v1", "dns-v1", "cli-v1"},
+			description:      "initialize versions, DNSes available",
+			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue, UnknownVersionValue},
+			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
+			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
 		},
 		{
 			description:      "initialize versions, DNSes not all available",
 			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue, UnknownVersionValue},
 			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			dnses:            dnsStatusConditionsCounts{available: 0, progressing: 2, degraded: 2, total: 2},
 			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue, UnknownVersionValue},
 		},
 		{
-			description:       "update with no change",
-			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
-			curVersions:       versions{"v1", "dns-v1", "cli-v1"},
-			allDNSesAvailable: true,
-			expectedVersions:  versions{"v1", "dns-v1", "cli-v1"},
+			description:      "update with no change",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
+			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
 		},
 		{
 			description:      "update operator version, DNSes not all available",
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v2", "dns-v1", "cli-v1"},
+			dnses:            dnsStatusConditionsCounts{available: 0, progressing: 2, degraded: 2, total: 2},
 			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
 		},
 		{
-			description:       "update operator version, DNSes available",
-			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
-			curVersions:       versions{"v2", "dns-v1", "cli-v1"},
-			allDNSesAvailable: true,
-			expectedVersions:  versions{"v2", "dns-v1", "cli-v1"},
+			description:      "update operator version, DNSes available",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v2", "dns-v1", "cli-v1"},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
+			expectedVersions: versions{"v2", "dns-v1", "cli-v1"},
 		},
 		{
 			description:      "update coredns image, DNSes not all available",
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v2", "cli-v1"},
+			dnses:            dnsStatusConditionsCounts{available: 0, progressing: 2, degraded: 2, total: 2},
 			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
 		},
 		{
-			description:       "update coredns image, DNSes available",
-			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
-			curVersions:       versions{"v1", "dns-v2", "cli-v1"},
-			allDNSesAvailable: true,
-			expectedVersions:  versions{"v1", "dns-v2", "cli-v1"},
+			description:      "update coredns image, DNSes available",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v2", "cli-v1"},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
+			expectedVersions: versions{"v1", "dns-v2", "cli-v1"},
 		},
 		{
 			description:      "update openshift-cli image, DNSes not all available",
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v1", "cli-v2"},
+			dnses:            dnsStatusConditionsCounts{available: 0, progressing: 2, degraded: 2, total: 2},
 			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
 		},
 		{
-			description:       "update openshift-cli image, DNSes available",
-			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
-			curVersions:       versions{"v1", "dns-v1", "cli-v2"},
-			allDNSesAvailable: true,
-			expectedVersions:  versions{"v1", "dns-v1", "cli-v2"},
+			description:      "update openshift-cli image, DNSes available",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v1", "cli-v2"},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
+			expectedVersions: versions{"v1", "dns-v1", "cli-v2"},
 		},
 		{
 			description:      "update operator, coredns and openshift-cli image, DNSes not all available",
 			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
+			dnses:            dnsStatusConditionsCounts{available: 0, progressing: 2, degraded: 2, total: 2},
 			expectedVersions: versions{"v1", "dns-v1", "cli-v1"},
 		},
 		{
-			description:       "update operator, coredns and openshift-cli image, DNSes available",
-			oldVersions:       versions{"v1", "dns-v1", "cli-v1"},
-			curVersions:       versions{"v2", "dns-v2", "cli-v2"},
-			allDNSesAvailable: true,
-			expectedVersions:  versions{"v2", "dns-v2", "cli-v2"},
+			description:      "update operator, coredns and openshift-cli image, DNSes available",
+			oldVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
+			dnses:            dnsStatusConditionsCounts{available: 2, progressing: 0, degraded: 0, total: 2},
+			expectedVersions: versions{"v2", "dns-v2", "cli-v2"},
 		},
 	}
 
@@ -594,13 +597,13 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 				OpenshiftCLIImage:      tc.curVersions.openshiftCLIOperand,
 			},
 		}
-		versions := r.computeOperatorStatusVersions(oldVersions, tc.allDNSesAvailable)
+		versions := r.computeOperatorStatusVersions(oldVersions, tc.dnses)
 		versionsCmpOpts := []cmp.Option{
 			cmpopts.EquateEmpty(),
 			cmpopts.SortSlices(func(a, b configv1.OperandVersion) bool { return a.Name < b.Name }),
 		}
 		if !cmp.Equal(versions, expectedVersions, versionsCmpOpts...) {
-			t.Fatalf("%q: expected %v, got %v", tc.description, expectedVersions, versions)
+			t.Errorf("%q: expected %v, got %v", tc.description, expectedVersions, versions)
 		}
 	}
 }
