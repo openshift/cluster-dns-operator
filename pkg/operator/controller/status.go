@@ -31,6 +31,13 @@ const (
 	UnknownVersionValue     = "unknown"
 )
 
+type dnsStatusConditionsCounts struct {
+	available   int
+	progressing int
+	degraded    int
+	total       int
+}
+
 // syncOperatorStatus computes the operator's current status and therefrom
 // creates or updates the ClusterOperator resource for the operator.
 func (r *reconciler) syncOperatorStatus() error {
@@ -54,13 +61,9 @@ func (r *reconciler) syncOperatorStatus() error {
 	if err != nil {
 		return fmt.Errorf("failed to get operator state: %v", err)
 	}
-	dnsesTotal := len(dnses)
-	dnsesAvailable := numDNSesAvailable(dnses)
-	allDNSesAvailable := ((dnsesAvailable != 0) && (dnsesAvailable == dnsesTotal))
-
-	co.Status.Versions = r.computeOperatorStatusVersions(oldStatus.Versions, allDNSesAvailable)
-	co.Status.Conditions = r.computeOperatorStatusConditions(oldStatus.Conditions, ns, dnsesTotal,
-		dnsesAvailable, oldStatus.Versions, co.Status.Versions)
+	dnsStatusConditionsCounts := computeDNSStatusConditionCounts(dnses)
+	co.Status.Versions = r.computeOperatorStatusVersions(oldStatus.Versions, dnsStatusConditionsCounts)
+	co.Status.Conditions = r.computeOperatorStatusConditions(oldStatus.Conditions, ns, dnsStatusConditionsCounts, oldStatus.Versions, co.Status.Versions)
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(context.TODO(), co); err != nil {
@@ -132,11 +135,47 @@ func (r *reconciler) getOperatorState(nsName string) ([]operatorv1.DNS, *corev1.
 	return dnsList.Items, ns, nil
 }
 
+// computeDNSStatusConditionCounts computes for each status condition how many
+// DNSes have that condition.
+func computeDNSStatusConditionCounts(dnses []operatorv1.DNS) dnsStatusConditionsCounts {
+	dnsStatusConditionsCounts := dnsStatusConditionsCounts{}
+	for _, dns := range dnses {
+		var (
+			// Assume the DNS is unavailable, degraded, and
+			// progressing unless its conditions indicate otherwise.
+			available   = false
+			degraded    = true
+			progressing = true
+		)
+		for _, c := range dns.Status.Conditions {
+			switch {
+			case c.Type == operatorv1.OperatorStatusTypeAvailable && c.Status == operatorv1.ConditionTrue:
+				available = true
+			case c.Type == operatorv1.OperatorStatusTypeProgressing && c.Status == operatorv1.ConditionFalse:
+				progressing = false
+			case c.Type == operatorv1.OperatorStatusTypeDegraded && c.Status == operatorv1.ConditionFalse:
+				degraded = false
+			}
+		}
+		dnsStatusConditionsCounts.total++
+		if available {
+			dnsStatusConditionsCounts.available++
+		}
+		if degraded {
+			dnsStatusConditionsCounts.degraded++
+		}
+		if progressing {
+			dnsStatusConditionsCounts.progressing++
+		}
+	}
+	return dnsStatusConditionsCounts
+}
+
 // computeOperatorStatusVersions computes the operator's current versions.
-func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.OperandVersion, allDNSesAvailable bool) []configv1.OperandVersion {
+func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.OperandVersion, dnses dnsStatusConditionsCounts) []configv1.OperandVersion {
 	// We need to report old version until the operator fully transitions to the new version.
 	// https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusteroperator.md#version-reporting-during-an-upgrade
-	if !allDNSesAvailable {
+	if dnses.available != dnses.total {
 		return oldVersions
 	}
 
@@ -158,7 +197,7 @@ func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.Operan
 
 // computeOperatorStatusConditions computes the operator's current state.
 func (r *reconciler) computeOperatorStatusConditions(oldConditions []configv1.ClusterOperatorStatusCondition,
-	ns *corev1.Namespace, dnses, dnsesAvailable int,
+	ns *corev1.Namespace, dnses dnsStatusConditionsCounts,
 	oldVersions, curVersions []configv1.OperandVersion) []configv1.ClusterOperatorStatusCondition {
 	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition *configv1.ClusterOperatorStatusCondition
 	for i := range oldConditions {
@@ -173,17 +212,16 @@ func (r *reconciler) computeOperatorStatusConditions(oldConditions []configv1.Cl
 	}
 
 	conditions := []configv1.ClusterOperatorStatusCondition{
-		computeOperatorDegradedCondition(oldDegradedCondition, dnsesAvailable, dnses, ns),
-		r.computeOperatorProgressingCondition(oldProgressingCondition, dnsesAvailable, dnses, oldVersions, curVersions),
-		computeOperatorAvailableCondition(oldAvailableCondition, dnsesAvailable),
+		computeOperatorDegradedCondition(oldDegradedCondition, dnses, ns),
+		r.computeOperatorProgressingCondition(oldProgressingCondition, dnses, oldVersions, curVersions),
+		computeOperatorAvailableCondition(oldAvailableCondition, dnses),
 	}
 
 	return conditions
 }
 
 // computeOperatorDegradedCondition computes the operator's current Degraded status state.
-func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnsesAvailable, dnsesTotal int,
-	ns *corev1.Namespace) configv1.ClusterOperatorStatusCondition {
+func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnses dnsStatusConditionsCounts, ns *corev1.Namespace) configv1.ClusterOperatorStatusCondition {
 	degradedCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorDegraded,
 	}
@@ -192,7 +230,11 @@ func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStat
 		degradedCondition.Status = configv1.ConditionTrue
 		degradedCondition.Reason = "NoNamespace"
 		degradedCondition.Message = "Operand Namespace does not exist"
-	case dnsesAvailable == 0 || dnsesAvailable != dnsesTotal:
+	case dnses.available == 0:
+		degradedCondition.Status = configv1.ConditionTrue
+		degradedCondition.Reason = "NoDNS"
+		degradedCondition.Message = "No DNS resource exists"
+	case dnses.degraded > 0:
 		degradedCondition.Status = configv1.ConditionTrue
 		degradedCondition.Reason = "NotAllDNSesAvailable"
 		degradedCondition.Message = "Not all desired DNS DaemonSets available"
@@ -207,8 +249,7 @@ func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStat
 }
 
 // computeOperatorProgressingCondition computes the operator's current Progressing status state.
-func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnsesAvailable,
-	dnsesTotal int, oldVersions, curVersions []configv1.OperandVersion) configv1.ClusterOperatorStatusCondition {
+func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnses dnsStatusConditionsCounts, oldVersions, curVersions []configv1.OperandVersion) configv1.ClusterOperatorStatusCondition {
 	progressingCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorProgressing,
 	}
@@ -216,7 +257,11 @@ func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.
 	progressing := false
 
 	messages := []string{}
-	if (dnsesAvailable == 0) || (dnsesAvailable != dnsesTotal) {
+	if dnses.total == 0 {
+		messages = append(messages, "No DNS resource exists.")
+		progressing = true
+	}
+	if dnses.progressing > 0 {
 		messages = append(messages, "Not all DNS DaemonSets available.")
 		progressing = true
 	}
@@ -267,11 +312,11 @@ func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.
 
 // computeOperatorAvailableCondition computes the operator's current Available status state.
 func computeOperatorAvailableCondition(oldCondition *configv1.ClusterOperatorStatusCondition,
-	dnsesAvailable int) configv1.ClusterOperatorStatusCondition {
+	dnses dnsStatusConditionsCounts) configv1.ClusterOperatorStatusCondition {
 	availableCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorAvailable,
 	}
-	if dnsesAvailable > 0 {
+	if dnses.available > 0 {
 		availableCondition.Status = configv1.ConditionTrue
 		availableCondition.Reason = "AsExpected"
 		availableCondition.Message = "At least 1 DNS DaemonSet available"
@@ -283,22 +328,6 @@ func computeOperatorAvailableCondition(oldCondition *configv1.ClusterOperatorSta
 
 	setOperatorLastTransitionTime(&availableCondition, oldCondition)
 	return availableCondition
-}
-
-// numDNSesAvailable returns the number of DNS resources from dnses with
-// an Available status condition.
-func numDNSesAvailable(dnses []operatorv1.DNS) int {
-	var dnsesAvailable int
-	for _, dns := range dnses {
-		for _, c := range dns.Status.Conditions {
-			if c.Type == operatorv1.DNSAvailable && c.Status == operatorv1.ConditionTrue {
-				dnsesAvailable++
-				break
-			}
-		}
-	}
-
-	return dnsesAvailable
 }
 
 // setOperatorLastTransitionTime sets LastTransitionTime for the given condition.
