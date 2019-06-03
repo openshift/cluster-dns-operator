@@ -26,7 +26,6 @@ spec:
           image: openshift/origin-cluster-dns-operator:latest
           command:
           - dns-operator
-          terminationGracePeriodSeconds: 2
           env:
             - name: RELEASE_VERSION
               value: "0.0.1-snapshot"
@@ -37,6 +36,7 @@ spec:
           resources:
             requests:
               cpu: 10m
+      terminationGracePeriodSeconds: 2
       tolerations:
       - key: "node-role.kubernetes.io/master"
         operator: "Exists"
