@@ -37,16 +37,18 @@ type unstructuredClient struct {
 }
 
 // Create implements client.Client
-func (uc *unstructuredClient) Create(_ context.Context, obj runtime.Object) error {
+func (uc *unstructuredClient) Create(_ context.Context, obj runtime.Object, opts ...CreateOptionFunc) error {
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		return fmt.Errorf("unstructured client did not understand object: %T", obj)
 	}
+	createOpts := CreateOptions{}
+	createOpts.ApplyOptions(opts)
 	r, err := uc.getResourceInterface(u.GroupVersionKind(), u.GetNamespace())
 	if err != nil {
 		return err
 	}
-	i, err := r.Create(u, metav1.CreateOptions{})
+	i, err := r.Create(u, *createOpts.AsCreateOptions())
 	if err != nil {
 		return err
 	}
@@ -55,16 +57,18 @@ func (uc *unstructuredClient) Create(_ context.Context, obj runtime.Object) erro
 }
 
 // Update implements client.Client
-func (uc *unstructuredClient) Update(_ context.Context, obj runtime.Object) error {
+func (uc *unstructuredClient) Update(_ context.Context, obj runtime.Object, opts ...UpdateOptionFunc) error {
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		return fmt.Errorf("unstructured client did not understand object: %T", obj)
 	}
+	updateOpts := UpdateOptions{}
+	updateOpts.ApplyOptions(opts)
 	r, err := uc.getResourceInterface(u.GroupVersionKind(), u.GetNamespace())
 	if err != nil {
 		return err
 	}
-	i, err := r.Update(u, metav1.UpdateOptions{})
+	i, err := r.Update(u, *updateOpts.AsUpdateOptions())
 	if err != nil {
 		return err
 	}
@@ -85,6 +89,31 @@ func (uc *unstructuredClient) Delete(_ context.Context, obj runtime.Object, opts
 	deleteOpts := DeleteOptions{}
 	err = r.Delete(u.GetName(), deleteOpts.ApplyOptions(opts).AsDeleteOptions())
 	return err
+}
+
+// Patch implements client.Client
+func (uc *unstructuredClient) Patch(_ context.Context, obj runtime.Object, patch Patch, opts ...PatchOptionFunc) error {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		return fmt.Errorf("unstructured client did not understand object: %T", obj)
+	}
+	r, err := uc.getResourceInterface(u.GroupVersionKind(), u.GetNamespace())
+	if err != nil {
+		return err
+	}
+
+	data, err := patch.Data(obj)
+	if err != nil {
+		return err
+	}
+
+	patchOpts := &PatchOptions{}
+	i, err := r.Patch(u.GetName(), patch.Type(), data, *patchOpts.ApplyOptions(opts).AsPatchOptions())
+	if err != nil {
+		return err
+	}
+	u.Object = i.Object
+	return nil
 }
 
 // Get implements client.Client
@@ -131,7 +160,7 @@ func (uc *unstructuredClient) List(_ context.Context, obj runtime.Object, opts .
 	return nil
 }
 
-func (uc *unstructuredClient) UpdateStatus(_ context.Context, obj runtime.Object) error {
+func (uc *unstructuredClient) UpdateStatus(_ context.Context, obj runtime.Object, opts ...UpdateOptionFunc) error {
 	u, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		return fmt.Errorf("unstructured client did not understand object: %T", obj)
@@ -140,7 +169,30 @@ func (uc *unstructuredClient) UpdateStatus(_ context.Context, obj runtime.Object
 	if err != nil {
 		return err
 	}
-	i, err := r.UpdateStatus(u, metav1.UpdateOptions{})
+	i, err := r.UpdateStatus(u, *(&UpdateOptions{}).ApplyOptions(opts).AsUpdateOptions())
+	if err != nil {
+		return err
+	}
+	u.Object = i.Object
+	return nil
+}
+
+func (uc *unstructuredClient) PatchStatus(_ context.Context, obj runtime.Object, patch Patch, opts ...PatchOptionFunc) error {
+	u, ok := obj.(*unstructured.Unstructured)
+	if !ok {
+		return fmt.Errorf("unstructured client did not understand object: %T", obj)
+	}
+	r, err := uc.getResourceInterface(u.GroupVersionKind(), u.GetNamespace())
+	if err != nil {
+		return err
+	}
+
+	data, err := patch.Data(obj)
+	if err != nil {
+		return err
+	}
+
+	i, err := r.Patch(u.GetName(), patch.Type(), data, *(&PatchOptions{}).ApplyOptions(opts).AsPatchOptions(), "status")
 	if err != nil {
 		return err
 	}

@@ -36,14 +36,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/leaderelection"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/recorder"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 // Manager initializes shared dependencies such as Caches and Clients, and provides them to Runnables.
 // A Manager is required to create Controllers.
 type Manager interface {
-	// Add will set reqeusted dependencies on the component, and cause the component to be
+	// Add will set requested dependencies on the component, and cause the component to be
 	// started when Start is called.  Add will inject any dependencies for which the argument
-	// implements the inject interface - e.g. inject.Client
+	// implements the inject interface - e.g. inject.Client.
+	// Depending on if a Runnable implements LeaderElectionRunnable interface, a Runnable can be run in either
+	// non-leaderelection mode (always running) or leader election mode (managed by leader election if enabled).
 	Add(Runnable) error
 
 	// SetFields will set any dependencies on an object for which the object has implemented the inject
@@ -74,6 +77,14 @@ type Manager interface {
 
 	// GetRESTMapper returns a RESTMapper
 	GetRESTMapper() meta.RESTMapper
+
+	// GetAPIReader returns a reader that will be configured to use the API server.
+	// This should be used sparingly and only when the client does not fit your
+	// use case.
+	GetAPIReader() client.Reader
+
+	// GetWebhookServer returns a webhook.Server
+	GetWebhookServer() *webhook.Server
 }
 
 // Options are the arguments for creating a new Manager
@@ -104,6 +115,17 @@ type Options struct {
 	// will use for holding the leader lock.
 	LeaderElectionID string
 
+	// LeaseDuration is the duration that non-leader candidates will
+	// wait to force acquire leadership. This is measured against time of
+	// last observed ack. Default is 15 seconds.
+	LeaseDuration *time.Duration
+	// RenewDeadline is the duration that the acting master will retry
+	// refreshing leadership before giving up. Default is 10 seconds.
+	RenewDeadline *time.Duration
+	// RetryPeriod is the duration the LeaderElector clients should wait
+	// between tries of actions. Default is 2 seconds.
+	RetryPeriod *time.Duration
+
 	// Namespace if specified restricts the manager's cache to watch objects in
 	// the desired namespace Defaults to all namespaces
 	//
@@ -115,6 +137,13 @@ type Options struct {
 	// MetricsBindAddress is the TCP address that the controller should bind to
 	// for serving prometheus metrics
 	MetricsBindAddress string
+
+	// Port is the port that the webhook server serves at.
+	// It is used to set webhook.Server.Port.
+	Port int
+	// Host is the hostname that the webhook server binds to.
+	// It is used to set webhook.Server.Host.
+	Host string
 
 	// Functions to all for a user to customize the values that will be injected.
 
@@ -156,6 +185,13 @@ func (r RunnableFunc) Start(s <-chan struct{}) error {
 	return r(s)
 }
 
+// LeaderElectionRunnable knows if a Runnable needs to be run in the leader election mode.
+type LeaderElectionRunnable interface {
+	// NeedLeaderElection returns true if the Runnable needs to be run in the leader election mode.
+	// e.g. controllers need to be run in leader election mode, while webhook server doesn't.
+	NeedLeaderElection() bool
+}
+
 // New returns a new Manager for creating Controllers.
 func New(config *rest.Config, options Options) (Manager, error) {
 	// Initialize a rest.config if none was specified
@@ -175,6 +211,11 @@ func New(config *rest.Config, options Options) (Manager, error) {
 
 	// Create the cache for the cached read client and registering informers
 	cache, err := options.NewCache(config, cache.Options{Scheme: options.Scheme, Mapper: mapper, Resync: options.SyncPeriod, Namespace: options.Namespace})
+	if err != nil {
+		return nil, err
+	}
+
+	apiReader, err := client.New(config, client.Options{Scheme: options.Scheme, Mapper: mapper})
 	if err != nil {
 		return nil, err
 	}
@@ -217,12 +258,18 @@ func New(config *rest.Config, options Options) (Manager, error) {
 		cache:            cache,
 		fieldIndexes:     cache,
 		client:           writeObj,
+		apiReader:        apiReader,
 		recorderProvider: recorderProvider,
 		resourceLock:     resourceLock,
 		mapper:           mapper,
 		metricsListener:  metricsListener,
 		internalStop:     stop,
 		internalStopper:  stop,
+		port:             options.Port,
+		host:             options.Host,
+		leaseDuration:    *options.LeaseDuration,
+		renewDeadline:    *options.RenewDeadline,
+		retryPeriod:      *options.RetryPeriod,
 	}, nil
 }
 
@@ -277,6 +324,18 @@ func setOptionsDefaults(options Options) Options {
 
 	if options.newMetricsListener == nil {
 		options.newMetricsListener = metrics.NewListener
+	}
+	leaseDuration, renewDeadline, retryPeriod := defaultLeaseDuration, defaultRenewDeadline, defaultRetryPeriod
+	if options.LeaseDuration == nil {
+		options.LeaseDuration = &leaseDuration
+	}
+
+	if options.RenewDeadline == nil {
+		options.RenewDeadline = &renewDeadline
+	}
+
+	if options.RetryPeriod == nil {
+		options.RetryPeriod = &retryPeriod
 	}
 
 	return options
