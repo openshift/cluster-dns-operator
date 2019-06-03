@@ -126,16 +126,16 @@ spec:
       nodeSelector:
         beta.kubernetes.io/os: linux      
       volumes:
-       - name: config-volume
-         configMap:
-         # Name is set at runtime
-           items:
-           - key: Corefile
-             path: Corefile
-       - name: hosts-file
-         hostPath:
-           path: /etc/hosts
-           type: File
+      - name: config-volume
+        configMap:
+        # Name is set at runtime
+          items:
+          - key: Corefile
+            path: Corefile
+      - name: hosts-file
+        hostPath:
+          path: /etc/hosts
+          type: File
       tolerations:
       # tolerate all taints so that DNS is always present on all nodes
       - operator: Exists
