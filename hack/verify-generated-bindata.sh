@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-TMP_DIR=$(mktemp -d)
+TMP_DIR="$(mktemp -d)"
 
 function cleanup() {
     return_code=$?
@@ -10,6 +10,6 @@ function cleanup() {
 }
 trap "cleanup" EXIT
 
-OUTDIR=${TMP_DIR} ./hack/update-generated-bindata.sh
+OUTDIR="${TMP_DIR}" ./hack/update-generated-bindata.sh
 
-diff -Naup {.,${TMP_DIR}}/pkg/manifests/bindata.go
+diff -Naup {.,"${TMP_DIR}"}/pkg/manifests/bindata.go

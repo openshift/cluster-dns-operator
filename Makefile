@@ -8,30 +8,35 @@ BIN=$(lastword $(subst /, ,$(MAIN_PACKAGE)))
 
 IMAGE_TAG=openshift/origin-cluster-dns-operator
 
-ENVVAR=CGO_ENABLED=0
-GO_BUILD_RECIPE=go build -o $(BIN) $(MAIN_PACKAGE)
+GO=GO111MODULE=on GOFLAGS=-mod=vendor go
+GO_BUILD_RECIPE=CGO_ENABLED=0 $(GO) build -o $(BIN) $(MAIN_PACKAGE)
 
 .PHONY: build
 build:
 	$(GO_BUILD_RECIPE)
 
 .PHONY: generate
-generate: crd
+generate: bindata crd
+
+.PHONY: bindata
+bindata:
 	hack/update-generated-bindata.sh
 
-# Generate CRD from vendored API spec.
 .PHONY: crd
 crd:
-	go run ./vendor/github.com/openshift/library-go/cmd/crd-schema-gen/main.go --apis-dir vendor/github.com/openshift/api
+	hack/update-generated-crd.sh
 
-# Do not write the CRD, only compare and return (code 1 if dirty).
+.PHONY: verify-bindata
+verify-bindata:
+	hack/verify-generated-bindata.sh
+
 .PHONY: verify-crd
 verify-crd:
-	go run ./vendor/github.com/openshift/library-go/cmd/crd-schema-gen/main.go --apis-dir vendor/github.com/openshift/api --verify-only
+	hack/verify-generated-crd.sh
 
 .PHONY: test
 test:	verify
-	go test ./...
+	$(GO) test ./...
 
 .PHONY: release-local
 release-local:
@@ -39,12 +44,11 @@ release-local:
 
 .PHONY: test-e2e
 test-e2e:
-	KUBERNETES_CONFIG="$(KUBECONFIG)" go test -v -tags e2e ./...
+	KUBERNETES_CONFIG="$(KUBECONFIG)" $(GO) test -v -tags e2e ./...
 
 .PHONY: verify
-verify: verify-crd
+verify: verify-bindata verify-crd
 	hack/verify-gofmt.sh
-	hack/verify-generated-bindata.sh
 
 .PHONY: local-image
 local-image:
@@ -58,5 +62,5 @@ endif
 
 .PHONY: clean
 clean:
-	go clean
+	$(GO) clean
 	rm -f $(BIN)
