@@ -302,6 +302,8 @@ sigs.k8s.io/controller-tools v0.1.10 h1:onJbaVxkLKbLhy3BcLdesjkP6y+6WFVzg1BJv28B
 sigs.k8s.io/controller-tools v0.1.10/go.mod h1:6g08p9m9G/So3sBc1AOQifHfhxH/mb6Sc4z0LMI8XMw=
 sigs.k8s.io/controller-tools v0.2.0-beta.1 h1:NzQR/2ptWPHJbBwGTbNT2D+VnOnNLIJpMqQ7Y9EnPRU=
 sigs.k8s.io/controller-tools v0.2.0-beta.1/go.mod h1:gC5UAnK1jbxWnDaqTi0yxKIsRsRwshzeRtTUGbM9vos=
+sigs.k8s.io/controller-tools v0.2.0-beta.2 h1:ucniFzEuW7PFfFDuUxacdY4Fy4q065wPguVl+BE2/t0=
+sigs.k8s.io/controller-tools v0.2.0-beta.2/go.mod h1:gC5UAnK1jbxWnDaqTi0yxKIsRsRwshzeRtTUGbM9vos=
 sigs.k8s.io/testing_frameworks v0.1.1 h1:cP2l8fkA3O9vekpy5Ks8mmA0NW/F7yBdXf8brkWhVrs=
 sigs.k8s.io/testing_frameworks v0.1.1/go.mod h1:VVBKrHmJ6Ekkfz284YKhQePcdycOzNH9qL6ht1zEr/U=
 sigs.k8s.io/yaml v1.1.0 h1:4A07+ZFc2wgJwo8YNlQpr1rVlgUDlxXHhPJciaPY5gs=
