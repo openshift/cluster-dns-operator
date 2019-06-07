@@ -17,5 +17,5 @@ GO111MODULE=on GOFLAGS=-mod=vendor go run sigs.k8s.io/controller-tools/cmd/contr
 set +x
 
 if [[ -z "${SKIP_COPY+1}" ]]; then
-  cp "$OUTDIR/operator.openshift.io_dns.yaml" manifests/0000_70_dns-operator_00-custom-resource-definition.yaml
+  cp "$OUTDIR/operator.openshift.io_dnses.yaml" manifests/0000_70_dns-operator_00-custom-resource-definition.yaml
 fi
