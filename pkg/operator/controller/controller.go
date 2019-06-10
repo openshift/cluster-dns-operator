@@ -9,10 +9,7 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
-	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
 	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
-
-	"k8s.io/client-go/rest"
 
 	"github.com/sirupsen/logrus"
 
@@ -26,7 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
-	kclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -49,14 +47,10 @@ const (
 //
 // The controller will be pre-configured to watch for DNS resources.
 func New(mgr manager.Manager, config Config) (controller.Controller, error) {
-	kubeClient, err := operatorclient.NewClient(config.KubeConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kube client: %v", err)
-	}
-
 	reconciler := &reconciler{
 		Config: config,
-		client: kubeClient,
+		client: mgr.GetClient(),
+		cache:  mgr.GetCache(),
 	}
 	c, err := controller.New("operator-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
@@ -79,7 +73,6 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 
 // Config holds all the things necessary for the controller to run.
 type Config struct {
-	KubeConfig             *rest.Config
 	CoreDNSImage           string
 	OpenshiftCLIImage      string
 	OperatorReleaseVersion string
@@ -90,12 +83,8 @@ type Config struct {
 type reconciler struct {
 	Config
 
-	// client is the kube Client and it will refresh scheme/mapper fields if needed
-	// to detect some resources like ServiceMonitor which could get registered after
-	// the client creation.
-	// Since this controller is running in single threaded mode,
-	// we do not need to synchronize when changing rest scheme/mapper fields.
-	client kclient.Client
+	client client.Client
+	cache  cache.Cache
 }
 
 // Reconcile expects request to refer to a dns and will do all the work

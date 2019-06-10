@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
@@ -37,8 +38,12 @@ func main() {
 		OpenshiftCLIImage:      cliImage,
 	}
 
+	kubeConfig, err := config.GetConfig()
+	if err != nil {
+		logrus.Fatalf("failed to get kube config %v", err)
+	}
 	// Set up and start the operator.
-	op, err := operator.New(operatorConfig)
+	op, err := operator.New(operatorConfig, kubeConfig)
 	if err != nil {
 		logrus.Fatalf("failed to create operator: %v", err)
 	}

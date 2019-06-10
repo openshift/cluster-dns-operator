@@ -9,6 +9,7 @@ import (
 	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
+	operatorutil "github.com/openshift/cluster-dns-operator/pkg/util"
 
 	"github.com/sirupsen/logrus"
 
@@ -17,11 +18,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	kconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -35,15 +35,21 @@ type Operator struct {
 }
 
 // New creates (but does not start) a new operator from configuration.
-func New(config operatorconfig.Config) (*Operator, error) {
-	kubeConfig, err := kconfig.GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kube config: %v", err)
-	}
-	scheme := operatorclient.GetScheme()
+func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, error) {
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
-		Scheme:    scheme,
-		Namespace: "openshift-dns",
+		Scheme:         operatorclient.GetScheme(),
+		Namespace:      "openshift-dns",
+		MapperProvider: operatorutil.NewDynamicRESTMapper,
+		// Use a non-caching client everywhere. The default split client does not
+		// promise to invalidate the cache during writes (nor does it promise
+		// sequential create/get coherence), and we have code which (probably
+		// incorrectly) assumes a get immediately following a create/update will
+		// return the updated resource. All client consumers will need audited to
+		// ensure they are tolerant of stale data (or we need a cache or client that
+		// makes stronger coherence guarantees).
+		NewClient: func(_ cache.Cache, config *rest.Config, options client.Options) (client.Client, error) {
+			return client.New(config, options)
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create operator manager: %v", err)
@@ -51,7 +57,6 @@ func New(config operatorconfig.Config) (*Operator, error) {
 
 	// Create and register the operator controller with the operator manager.
 	cfg := operatorcontroller.Config{
-		KubeConfig:             kubeConfig,
 		CoreDNSImage:           config.CoreDNSImage,
 		OpenshiftCLIImage:      config.OpenshiftCLIImage,
 		OperatorReleaseVersion: config.OperatorReleaseVersion,
@@ -60,16 +65,12 @@ func New(config operatorconfig.Config) (*Operator, error) {
 		return nil, fmt.Errorf("failed to create operator controller: %v", err)
 	}
 
-	kubeClient, err := operatorclient.NewClient(kubeConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kube client: %v", err)
-	}
 	return &Operator{
 		manager: operatorManager,
 
 		// TODO: These are only needed for the default dns stuff, which
 		// should be refactored away.
-		client: kubeClient,
+		client: operatorManager.GetClient(),
 	}, nil
 }
 
@@ -77,21 +78,24 @@ func New(config operatorconfig.Config) (*Operator, error) {
 // synchronously until a message is received on the stop channel.
 // TODO: Move the default DNS logic elsewhere.
 func (o *Operator) Start(stop <-chan struct{}) error {
-	// Periodicaly ensure the default controller exists.
+	// Periodicaly ensure the default dns exists.
 	go wait.Until(func() {
-		if err := o.ensureDefaultDNS(); err != nil {
-			logrus.Errorf("failed to ensure default dns: %v", err)
+		if !o.manager.GetCache().WaitForCacheSync(stop) {
+			logrus.Error("failed to sync cache before ensuring default dns")
+			return
+		}
+		err := o.ensureDefaultDNS()
+		if err != nil {
+			logrus.Errorf("failed to ensure default dns %v", err)
 		}
 	}, 1*time.Minute, stop)
 
 	errChan := make(chan error)
-
-	// Start the manager.
 	go func() {
 		errChan <- o.manager.Start(stop)
 	}()
 
-	// Wait for the manager to exit or a stop signal.
+	// Wait for the manager to exit or an explicit stop.
 	select {
 	case <-stop:
 		return nil
