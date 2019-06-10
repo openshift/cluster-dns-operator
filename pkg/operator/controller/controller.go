@@ -39,6 +39,8 @@ const (
 	// DNSControllerFinalizer is applied to a DNS before being considered for processing;
 	// this ensures the operator has a chance to handle all states.
 	DNSControllerFinalizer = "dns.operator.openshift.io/dns-controller"
+
+	controllerName = "dns_controller"
 )
 
 // New creates the operator controller from configuration. This is the
@@ -52,7 +54,7 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 		client: mgr.GetClient(),
 		cache:  mgr.GetCache(),
 	}
-	c, err := controller.New("operator-controller", mgr, controller.Options{Reconciler: reconciler})
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return nil, err
 	}
