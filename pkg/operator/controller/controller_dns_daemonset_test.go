@@ -5,6 +5,9 @@ import (
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -56,6 +59,87 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 				}
 			default:
 				t.Errorf("unexpected daemonset container %q", c.Name)
+			}
+		}
+	}
+}
+
+func TestDaemonsetConfigChanged(t *testing.T) {
+	testCases := []struct {
+		description string
+		mutate      func(*appsv1.DaemonSet)
+		expect      bool
+	}{
+		{
+			description: "if nothing changes",
+			mutate:      func(_ *appsv1.DaemonSet) {},
+			expect:      false,
+		},
+		{
+			description: "if .uid changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.UID = "2"
+			},
+			expect: false,
+		},
+		{
+			description: "if .spec.template.spec.nodeSelector changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				ns := map[string]string{"kubernetes.io/os": "linux"}
+				daemonset.Spec.Template.Spec.NodeSelector = ns
+			},
+			expect: true,
+		},
+		{
+			description: "if the dns-node-resolver container image is changed",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[1].Image = "openshift/origin-cli:latest"
+			},
+			expect: true,
+		},
+		{
+			description: "if the dns container image is changed",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[0].Image = "openshift/origin-coredns:latest"
+			},
+			expect: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		original := appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "dns-original",
+				Namespace: "openshift-dns",
+				UID:       "1",
+			},
+			Spec: appsv1.DaemonSetSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "dns",
+								Image: "openshift/origin-coredns:v4.0",
+							},
+							{
+								Name:  "dns-node-resolver",
+								Image: "openshift/origin-cli:v4.0",
+							},
+						},
+						NodeSelector: map[string]string{
+							"beta.kubernetes.io/os": "linux",
+						},
+					},
+				},
+			},
+		}
+		mutated := original.DeepCopy()
+		tc.mutate(mutated)
+		if changed, updated := daemonsetConfigChanged(&original, mutated); changed != tc.expect {
+			t.Errorf("%s, expect daemonsetConfigChanged to be %t, got %t", tc.description, tc.expect, changed)
+		} else if changed {
+			if changedAgain, _ := daemonsetConfigChanged(mutated, updated); changedAgain {
+				t.Errorf("%s, daemonsetConfigChanged does not behave as a fixed point function", tc.description)
 			}
 		}
 	}

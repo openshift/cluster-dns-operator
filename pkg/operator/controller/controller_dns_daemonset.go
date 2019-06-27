@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
@@ -155,6 +158,7 @@ func (r *reconciler) updateDNSDaemonSet(current, desired *appsv1.DaemonSet) erro
 func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.DaemonSet) {
 	changed := false
 	updated := current.DeepCopy()
+
 	for _, name := range []string{"dns", "dns-node-resolver"} {
 		var curIndex int
 		var curImage, expImage string
@@ -184,6 +188,11 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		}
 	}
 	// TODO: Also check Env and Volume sources?
+
+	if !cmp.Equal(current.Spec.Template.Spec.NodeSelector, expected.Spec.Template.Spec.NodeSelector, cmpopts.EquateEmpty()) {
+		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
+		changed = true
+	}
 
 	if !changed {
 		return false, nil
