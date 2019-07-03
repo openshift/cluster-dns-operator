@@ -15,7 +15,7 @@ spec:
     spec:
       dnsPolicy: Default
       nodeSelector:
-        beta.kubernetes.io/os: linux
+        kubernetes.io/os: linux
         node-role.kubernetes.io/master: ''
       restartPolicy: Always
       priorityClassName: system-cluster-critical

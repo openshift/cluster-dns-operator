@@ -124,7 +124,7 @@ spec:
             cpu: 10m
       dnsPolicy: Default
       nodeSelector:
-        beta.kubernetes.io/os: linux      
+        kubernetes.io/os: linux      
       volumes:
       - name: config-volume
         configMap:
