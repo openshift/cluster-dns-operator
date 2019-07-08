@@ -364,7 +364,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 			Controller: &trueVar,
 		}
 
-		if _, err := r.ensureDNSConfigMap(dns, clusterDomain, daemonsetRef); err != nil {
+		if _, err := r.ensureDNSConfigMap(dns, clusterDomain); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
 		}
 		if svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
