@@ -13,3 +13,13 @@ rules:
   verbs:
   - list
   - watch
+- apiGroups:
+  - "toleration.scheduling.openshift.io"
+  resources:
+  - ["*"]
+  resourceNames:
+  - "NoSchedule:"
+  - "NoExecute:"  
+  verbs:
+  - exists
+  - equal    
