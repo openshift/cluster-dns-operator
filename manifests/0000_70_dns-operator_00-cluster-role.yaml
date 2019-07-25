@@ -74,3 +74,16 @@ rules:
   - clusteroperators/status
   verbs:
   - update
+
+- apiGroups:
+  - "toleration.scheduling.openshift.io"
+  resources:
+  - node-role.kubernetes.io/master
+  - node.kubernetes.io/unreachable
+  - node.kubernetes.io/not-ready
+  resourceNames:
+  - "NoSchedule:"
+  - "NoExecute:"  
+  verbs:
+  - exists
+  - equal    
