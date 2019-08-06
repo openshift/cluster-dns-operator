@@ -48,3 +48,4 @@ spec:
       - key: "node.kubernetes.io/not-ready"
         operator: "Exists"
         effect: "NoExecute"
+        tolerationSeconds: 120
