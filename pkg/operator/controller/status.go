@@ -332,8 +332,8 @@ func computeOperatorAvailableCondition(oldCondition *configv1.ClusterOperatorSta
 		availableCondition.Message = "At least 1 DNS DaemonSet available"
 	} else {
 		availableCondition.Status = configv1.ConditionFalse
-		availableCondition.Reason = "DNSUnavailable"
-		availableCondition.Message = "No DNS DaemonSets available"
+		availableCondition.Reason = "NoDaemonSetsAvailable"
+		availableCondition.Message = "No DNS DaemonSets are available"
 	}
 
 	setOperatorLastTransitionTime(&availableCondition, oldCondition)
