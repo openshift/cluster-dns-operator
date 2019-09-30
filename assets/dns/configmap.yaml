@@ -12,7 +12,9 @@ data:
             fallthrough in-addr.arpa ip6.arpa
         }
         prometheus :9153
-        forward . /etc/resolv.conf
+        forward . /etc/resolv.conf {
+            policy sequential
+        }
         cache 30
         reload
     }
