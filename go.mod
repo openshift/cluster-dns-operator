@@ -12,7 +12,7 @@ require (
 	github.com/kevinburke/go-bindata v3.11.0+incompatible
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 
-	github.com/openshift/api v3.9.1-0.20191001124347-8033e226059b+incompatible
+	github.com/openshift/api v3.9.1-0.20191002145753-bb291c9def6c+incompatible
 	github.com/sirupsen/logrus v1.4.2
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
 
