@@ -71,14 +71,12 @@ func (r *reconciler) syncOperatorStatus() error {
 			Resource: "namespaces",
 			Name:     ns.Name,
 		},
-	}
-	for _, dns := range dnses {
-		related = append(related, configv1.ObjectReference{
+		{
 			Group:    operatorv1.GroupName,
 			Resource: "DNS",
-			Name:     dns.Name,
-		})
+		},
 	}
+
 	co.Status.RelatedObjects = related
 
 	dnsStatusConditionsCounts := computeDNSStatusConditionCounts(dnses)
