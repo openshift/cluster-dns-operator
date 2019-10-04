@@ -76,7 +76,6 @@ func (r *reconciler) syncOperatorStatus() error {
 			Resource: "DNS",
 		},
 	}
-
 	co.Status.RelatedObjects = related
 
 	dnsStatusConditionsCounts := computeDNSStatusConditionCounts(dnses)
