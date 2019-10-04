@@ -15,6 +15,14 @@ GO_BUILD_RECIPE=CGO_ENABLED=0 $(GO) build -o $(BIN) $(MAIN_PACKAGE)
 build:
 	$(GO_BUILD_RECIPE)
 
+.PHONY: buildconfig
+buildconfig:
+	hack/create-buildconfig.sh
+
+.PHONY: cluster-build
+cluster-build:
+	hack/start-build.sh
+
 .PHONY: generate
 generate: bindata crd
 
