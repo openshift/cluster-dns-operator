@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: dns-operator-build
+  annotations:
+    description: "Template for building the dns operator."
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    name: dns-operator
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    name: dns-operator
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: dns-operator:latest
+    source:
+      git:
+        uri: ${GIT_URL}
+        ref: ${GIT_BRANCH}
+      type: Git
+    strategy:
+      dockerStrategy:
+        dockerfilePath: Dockerfile
+      type: Docker
+parameters:
+- description: 'URL for the dns operator Git repository'
+  name: GIT_URL
+  value: https://github.com/openshift/cluster-dns-operator
+- description: 'Git branch'
+  name: GIT_BRANCH
+  value: master
