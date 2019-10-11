@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -56,12 +57,27 @@ func TestDNSStatusConditions(t *testing.T) {
 		{
 			description: "daemonset pod available on 1/2 nodes",
 			inputs:      testInputs{true, 1, 2},
-			outputs:     testOutputs{true, true, true},
+			outputs:     testOutputs{false, true, true},
 		},
 		{
 			description: "daemonset pod available on 2/2 nodes",
 			inputs:      testInputs{true, 2, 2},
 			outputs:     testOutputs{false, false, true},
+		},
+		{
+			description: "daemonset pod available on 1/3 nodes",
+			inputs:      testInputs{true, 1, 3},
+			outputs:     testOutputs{true, true, true},
+		},
+		{
+			description: "daemonset pod available on 2/3 nodes",
+			inputs:      testInputs{true, 2, 3},
+			outputs:     testOutputs{false, true, true},
+		},
+		{
+			description: "daemonset pod available on 0/1 nodes",
+			inputs:      testInputs{true, 0, 1},
+			outputs:     testOutputs{true, true, false},
 		},
 	}
 
@@ -74,9 +90,17 @@ func TestDNSStatusConditions(t *testing.T) {
 		if tc.inputs.haveClusterIP {
 			clusterIP = "1.2.3.4"
 		}
+		maxUnavailable := intstr.FromInt(1)
 		ds := &appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: fmt.Sprintf("dns-%d", i+1),
+			},
+			Spec: appsv1.DaemonSetSpec{
+				UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &maxUnavailable,
+					},
+				},
 			},
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: tc.inputs.desire,
@@ -133,7 +157,7 @@ func TestDNSStatusConditions(t *testing.T) {
 			}
 		}
 		if !gotExpected {
-			t.Fatalf("%q: expected %#v, got %#v", tc.description,
+			t.Fatalf("%q:\nexpected %#v\ngot %#v", tc.description,
 				expected, actual)
 		}
 	}
