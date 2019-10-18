@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/sirupsen/logrus"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 
@@ -24,6 +25,7 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 		if err := r.client.Status().Update(context.TODO(), updated); err != nil {
 			return fmt.Errorf("failed to update dns status: %v", err)
 		}
+		logrus.Infof("updated DNS %s status: old: %#v, new: %#v", dns.ObjectMeta.Name, dns.Status, updated.Status)
 	}
 
 	return nil
