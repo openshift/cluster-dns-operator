@@ -61,6 +61,7 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 	degradedCondition := &operatorv1.OperatorCondition{
 		Type: operatorv1.OperatorStatusTypeDegraded,
 	}
+	numberUnavailable := ds.Status.DesiredNumberScheduled - ds.Status.NumberAvailable
 	switch {
 	case len(clusterIP) == 0 && ds.Status.NumberAvailable == 0:
 		degradedCondition.Status = operatorv1.ConditionTrue
@@ -70,14 +71,18 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "NoClusterIP"
 		degradedCondition.Message = "No ClusterIP assigned to DNS Service"
+	case ds.Status.DesiredNumberScheduled == 0:
+		degradedCondition.Status = operatorv1.ConditionTrue
+		degradedCondition.Reason = "NoPodsDesired"
+		degradedCondition.Message = "No CoreDNS pods are desired (this could mean nodes are tainted)"
 	case ds.Status.NumberAvailable == 0:
 		degradedCondition.Status = operatorv1.ConditionTrue
-		degradedCondition.Reason = "DaemonSetUnavailable"
-		degradedCondition.Message = "DaemonSet pod not running on any Nodes"
-	case ds.Status.NumberAvailable != ds.Status.DesiredNumberScheduled:
+		degradedCondition.Reason = "NoPodsAvailable"
+		degradedCondition.Message = "No CoreDNS pods are available"
+	case numberUnavailable > ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntVal:
 		degradedCondition.Status = operatorv1.ConditionTrue
-		degradedCondition.Reason = "DaemonSetDegraded"
-		degradedCondition.Message = "Not all Nodes running DaemonSet pod"
+		degradedCondition.Reason = "MaxUnavailableExceeded"
+		degradedCondition.Message = fmt.Sprintf("Too many unavailable CoreDNS pods (%d > %d max unavailable)", numberUnavailable, ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntVal)
 	default:
 		degradedCondition.Status = operatorv1.ConditionFalse
 		degradedCondition.Reason = "AsExpected"
