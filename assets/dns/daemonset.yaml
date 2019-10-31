@@ -137,5 +137,6 @@ spec:
           path: /etc/hosts
           type: File
       tolerations:
-      # tolerate all taints so that DNS is always present on all nodes
-      - operator: Exists
+      # DNS needs to run everywhere.
+      - key: "node-role.kubernetes.io/master"
+        operator: Exists
