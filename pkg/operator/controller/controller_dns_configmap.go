@@ -1,9 +1,10 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"strings"
+	"text/template"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
@@ -20,13 +21,41 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Servers -}}
+# {{.Name}}
+{{range .Zones}}{{.}}:5353 {{end}}{
+    {{with .ForwardPlugin -}}
+    forward .{{range .Upstreams}} {{.}}{{end}}
+    {{- end}}
+}
+{{end -}}
+.:5353 {
+    errors
+    health
+    kubernetes {{.ClusterDomain}} in-addr.arpa ip6.arpa {
+        pods insecure
+        upstream
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus :9153
+    forward . /etc/resolv.conf {
+        policy sequential
+    }
+    cache 30
+    reload
+}
+`))
+
 // ensureDNSConfigMap ensures that a configmap exists for a given DNS.
 func (r *reconciler) ensureDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.ConfigMap, error) {
 	current, err := r.currentDNSConfigMap(dns)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get configmap: %v", err)
 	}
-	desired := desiredDNSConfigMap(dns, clusterDomain)
+	desired, err := desiredDNSConfigMap(dns, clusterDomain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build configmap: %v", err)
+	}
 
 	switch {
 	case desired != nil && current == nil:
@@ -57,22 +86,39 @@ func (r *reconciler) currentDNSConfigMap(dns *operatorv1.DNS) (*corev1.ConfigMap
 	return current, nil
 }
 
-func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) *corev1.ConfigMap {
-	cm := manifests.DNSConfigMap()
+func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.ConfigMap, error) {
+	if len(clusterDomain) == 0 {
+		clusterDomain = "cluster.local"
+	}
+
+	corefileParameters := struct {
+		ClusterDomain string
+		Servers       interface{}
+	}{
+		ClusterDomain: clusterDomain,
+		Servers:       dns.Spec.Servers,
+	}
+	corefile := new(bytes.Buffer)
+	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {
+		return nil, err
+	}
 
 	name := DNSConfigMapName(dns)
-	cm.Namespace = name.Namespace
-	cm.Name = name.Name
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name.Name,
+			Namespace: name.Namespace,
+			Labels: map[string]string{
+				manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
+			},
+		},
+		Data: map[string]string{
+			"Corefile": corefile.String(),
+		},
+	}
 	cm.SetOwnerReferences([]metav1.OwnerReference{dnsOwnerRef(dns)})
 
-	cm.Labels = map[string]string{
-		manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
-	}
-
-	if len(clusterDomain) > 0 {
-		cm.Data["Corefile"] = strings.Replace(cm.Data["Corefile"], "cluster.local", clusterDomain, -1)
-	}
-	return cm
+	return cm, nil
 }
 
 func corefileChanged(current, expected *corev1.ConfigMap) (bool, *corev1.ConfigMap) {

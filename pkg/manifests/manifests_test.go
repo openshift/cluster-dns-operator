@@ -10,7 +10,6 @@ func TestManifests(t *testing.T) {
 	DNSClusterRoleBinding()
 	DNSNamespace()
 	DNSDaemonSet()
-	DNSConfigMap()
 	DNSService()
 
 	MetricsClusterRole()

@@ -16,7 +16,6 @@ const (
 	DNSServiceAccountAsset     = "assets/dns/service-account.yaml"
 	DNSClusterRoleAsset        = "assets/dns/cluster-role.yaml"
 	DNSClusterRoleBindingAsset = "assets/dns/cluster-role-binding.yaml"
-	DNSConfigMapAsset          = "assets/dns/configmap.yaml"
 	DNSDaemonSetAsset          = "assets/dns/daemonset.yaml"
 	DNSServiceAsset            = "assets/dns/service.yaml"
 
@@ -65,14 +64,6 @@ func DNSClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 		panic(err)
 	}
 	return crb
-}
-
-func DNSConfigMap() *corev1.ConfigMap {
-	cm, err := NewConfigMap(MustAssetReader(DNSConfigMapAsset))
-	if err != nil {
-		panic(err)
-	}
-	return cm
 }
 
 func DNSDaemonSet() *appsv1.DaemonSet {
