@@ -1,21 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-OUTDIR="${OUTDIR:-}"
-if [[ -z "$OUTDIR" ]]; then
-  OUTDIR="$(mktemp -d)"
-fi
-
-# Generating against the github.com/openshift/api/operator/v1 will currently
-# generate some failures until other types' markers and structures are updated
-# to be compatible with the latest metadata expectations. For now, generate the
-# minimal set of type files we know are needed for the dns types.
-set -x
-GO111MODULE=on GOFLAGS=-mod=vendor go run sigs.k8s.io/controller-tools/cmd/controller-gen crd:trivialVersions=true \
-  paths=./vendor/github.com/openshift/api/operator/v1/doc.go\;./vendor/github.com/openshift/api/operator/v1/types.go\;./vendor/github.com/openshift/api/operator/v1/types_dns.go \
-  output:crd:dir="$OUTDIR"
-set +x
+VENDORED_CRD='vendor/github.com/openshift/api/operator/v1/0000_70_dns-operator_00-custom-resource-definition.yaml'
+LOCAL_CRD='manifests/0000_70_dns-operator_00-custom-resource-definition.yaml'
 
 if [[ -z "${SKIP_COPY+1}" ]]; then
-  cp "$OUTDIR/operator.openshift.io_dnses.yaml" manifests/0000_70_dns-operator_00-custom-resource-definition.yaml
+  if ! cmp -s "$LOCAL_CRD" "$VENDORED_CRD"; then
+    cp -f "$VENDORED_CRD" "$LOCAL_CRD"
+  fi
 fi
