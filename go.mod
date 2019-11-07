@@ -21,5 +21,4 @@ require (
 	k8s.io/client-go v0.0.0-20190918160344-1fbdaa4c8d90
 
 	sigs.k8s.io/controller-runtime v0.3.1-0.20191011155846-b2bc3490f2e3
-	sigs.k8s.io/controller-tools v0.2.2-0.20190919191502-76a25b63325a
 )
