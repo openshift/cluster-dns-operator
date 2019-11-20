@@ -12,6 +12,7 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
+	"github.com/openshift/cluster-dns-operator/pkg/operator/controller/metrics"
 
 	"github.com/sirupsen/logrus"
 
@@ -61,6 +62,8 @@ func (r *reconciler) syncOperatorStatus() error {
 	if err != nil {
 		return fmt.Errorf("failed to get operator state: %v", err)
 	}
+
+	metrics.Update(dnses)
 
 	related := []configv1.ObjectReference{
 		{
