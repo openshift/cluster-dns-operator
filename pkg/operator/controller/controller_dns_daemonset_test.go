@@ -64,6 +64,13 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 	}
 }
 
+var toleration = corev1.Toleration{
+	Key:      "foo",
+	Value:    "bar",
+	Operator: corev1.TolerationOpExists,
+	Effect:   corev1.TaintEffectNoExecute,
+}
+
 func TestDaemonsetConfigChanged(t *testing.T) {
 	testCases := []struct {
 		description string
@@ -87,6 +94,13 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				ns := map[string]string{"kubernetes.io/os": "linux"}
 				daemonset.Spec.Template.Spec.NodeSelector = ns
+			},
+			expect: true,
+		},
+		{
+			description: "if .spec.template.spec.tolerations changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Tolerations = []corev1.Toleration{toleration}
 			},
 			expect: true,
 		},
