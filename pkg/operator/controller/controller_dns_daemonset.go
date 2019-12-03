@@ -193,9 +193,40 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
 		changed = true
 	}
+	if !cmp.Equal(current.Spec.Template.Spec.Tolerations, expected.Spec.Template.Spec.Tolerations, cmpopts.EquateEmpty(), cmpopts.SortSlices(cmpTolerations)) {
+		updated.Spec.Template.Spec.Tolerations = expected.Spec.Template.Spec.Tolerations
+		changed = true
+	}
 
 	if !changed {
 		return false, nil
 	}
 	return true, updated
+}
+
+// cmpTolerations compares two Tolerations values and returns a Boolean
+// indicating whether they are equal.
+func cmpTolerations(a, b corev1.Toleration) bool {
+	if a.Key != b.Key {
+		return false
+	}
+	if a.Value != b.Value {
+		return false
+	}
+	if a.Operator != b.Operator {
+		return false
+	}
+	if a.Effect != b.Effect {
+		return false
+	}
+	if a.Effect == corev1.TaintEffectNoExecute {
+		if (a.TolerationSeconds == nil) != (b.TolerationSeconds == nil) {
+			return false
+		}
+		// Field is ignored unless effect is NoExecute.
+		if a.TolerationSeconds != nil && *a.TolerationSeconds != *b.TolerationSeconds {
+			return false
+		}
+	}
+	return true
 }
