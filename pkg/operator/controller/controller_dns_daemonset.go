@@ -194,6 +194,21 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		changed = true
 	}
 
+	// Detect changes to container commands
+	if len(current.Spec.Template.Spec.Containers) != len(expected.Spec.Template.Spec.Containers) {
+		updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
+		changed = true
+	} else {
+		for i, a := range current.Spec.Template.Spec.Containers {
+			b := expected.Spec.Template.Spec.Containers[i]
+			if !cmp.Equal(a.Command, b.Command, cmpopts.EquateEmpty()) {
+				updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
+				changed = true
+				break
+			}
+		}
+	}
+
 	if !changed {
 		return false, nil
 	}

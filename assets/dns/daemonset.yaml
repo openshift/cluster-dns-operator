@@ -75,7 +75,7 @@ spec:
           #!/bin/bash
           set -uo pipefail
 
-          trap 'kill $(jobs -p); exit 0' TERM
+          trap 'jobs -p | xargs kill || true; wait; exit 0' TERM
 
           OPENSHIFT_MARKER="openshift-generated-node-resolver"
           HOSTS_FILE="/etc/hosts"
