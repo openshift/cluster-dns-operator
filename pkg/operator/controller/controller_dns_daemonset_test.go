@@ -118,6 +118,20 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			},
 			expect: true,
 		},
+		{
+			description: "if a container command length changed",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[1].Command = append(daemonset.Spec.Template.Spec.Containers[1].Command, "--foo")
+			},
+			expect: true,
+		},
+		{
+			description: "if a container command contents changed",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[0].Command[1] = "c"
+			},
+			expect: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -134,10 +148,18 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 							{
 								Name:  "dns",
 								Image: "openshift/origin-coredns:v4.0",
+								Command: []string{
+									"a",
+									"b",
+								},
 							},
 							{
 								Name:  "dns-node-resolver",
 								Image: "openshift/origin-cli:v4.0",
+								Command: []string{
+									"c",
+									"d",
+								},
 							},
 						},
 						NodeSelector: map[string]string{
