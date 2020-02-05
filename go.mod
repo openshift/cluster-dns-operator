@@ -13,6 +13,7 @@ require (
 
 	github.com/openshift/api v3.9.1-0.20191105205100-610e47be70db+incompatible
 	github.com/sirupsen/logrus v1.4.2
+	github.com/spf13/cobra v0.0.5
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
 
 	// kubernetes-1.16.0
