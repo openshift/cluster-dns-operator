@@ -146,10 +146,6 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 				Name:    CoreDNSVersionName,
 				Version: tc.oldVersions.coreDNSOperand,
 			},
-			{
-				Name:    OpenshiftCLIVersionName,
-				Version: tc.oldVersions.openshiftCLIOperand,
-			},
 		}
 		reportedVersions := []configv1.OperandVersion{
 			{
@@ -160,16 +156,11 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 				Name:    CoreDNSVersionName,
 				Version: tc.reportedVersions.coreDNSOperand,
 			},
-			{
-				Name:    OpenshiftCLIVersionName,
-				Version: tc.reportedVersions.openshiftCLIOperand,
-			},
 		}
 		r := &reconciler{
 			Config: Config{
 				OperatorReleaseVersion: tc.curVersions.operator,
 				CoreDNSImage:           tc.curVersions.coreDNSOperand,
-				OpenshiftCLIImage:      tc.curVersions.openshiftCLIOperand,
 			},
 		}
 
@@ -570,10 +561,6 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 				Name:    CoreDNSVersionName,
 				Version: tc.oldVersions.coreDNSOperand,
 			},
-			{
-				Name:    OpenshiftCLIVersionName,
-				Version: tc.oldVersions.openshiftCLIOperand,
-			},
 		}
 		expectedVersions = []configv1.OperandVersion{
 			{
@@ -584,17 +571,12 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 				Name:    CoreDNSVersionName,
 				Version: tc.expectedVersions.coreDNSOperand,
 			},
-			{
-				Name:    OpenshiftCLIVersionName,
-				Version: tc.expectedVersions.openshiftCLIOperand,
-			},
 		}
 
 		r := &reconciler{
 			Config: Config{
 				OperatorReleaseVersion: tc.curVersions.operator,
 				CoreDNSImage:           tc.curVersions.coreDNSOperand,
-				OpenshiftCLIImage:      tc.curVersions.openshiftCLIOperand,
 			},
 		}
 		versions := r.computeOperatorStatusVersions(oldVersions, tc.dnses)

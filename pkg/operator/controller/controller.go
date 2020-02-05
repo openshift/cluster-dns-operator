@@ -76,7 +76,7 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 // Config holds all the things necessary for the controller to run.
 type Config struct {
 	CoreDNSImage           string
-	OpenshiftCLIImage      string
+	OperatorImage          string
 	OperatorReleaseVersion string
 }
 

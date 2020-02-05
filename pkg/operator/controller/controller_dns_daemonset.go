@@ -21,7 +21,7 @@ import (
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
 func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (*appsv1.DaemonSet, error) {
-	desired, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, r.CoreDNSImage, r.OpenshiftCLIImage)
+	desired, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, r.CoreDNSImage, r.OperatorImage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build dns daemonset: %v", err)
 	}
@@ -60,7 +60,7 @@ func (r *reconciler) ensureDNSDaemonSetDeleted(dns *operatorv1.DNS) error {
 }
 
 // desiredDNSDaemonSet returns the desired dns daemonset.
-func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage string) (*appsv1.DaemonSet, error) {
+func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSImage, operatorImage string) (*appsv1.DaemonSet, error) {
 	daemonset := manifests.DNSDaemonSet()
 	name := DNSDaemonSetName(dns)
 	daemonset.Name = name.Name
@@ -94,7 +94,7 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 		case "dns":
 			daemonset.Spec.Template.Spec.Containers[i].Image = coreDNSImage
 		case "dns-node-resolver":
-			daemonset.Spec.Template.Spec.Containers[i].Image = openshiftCLIImage
+			daemonset.Spec.Template.Spec.Containers[i].Image = operatorImage
 			envs := []corev1.EnvVar{}
 			if len(clusterIP) > 0 {
 				envs = append(envs, corev1.EnvVar{

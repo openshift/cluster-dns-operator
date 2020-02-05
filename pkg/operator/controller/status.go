@@ -25,10 +25,9 @@ import (
 const (
 	DNSOperatorName = "dns"
 
-	OperatorVersionName     = "operator"
-	CoreDNSVersionName      = "coredns"
-	OpenshiftCLIVersionName = "openshift-cli"
-	UnknownVersionValue     = "unknown"
+	OperatorVersionName = "operator"
+	CoreDNSVersionName  = "coredns"
+	UnknownVersionValue = "unknown"
 )
 
 type dnsStatusConditionsCounts struct {
@@ -100,10 +99,6 @@ func initializeClusterOperator(co *configv1.ClusterOperator) {
 		},
 		{
 			Name:    CoreDNSVersionName,
-			Version: UnknownVersionValue,
-		},
-		{
-			Name:    OpenshiftCLIVersionName,
 			Version: UnknownVersionValue,
 		},
 	}
@@ -194,10 +189,6 @@ func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.Operan
 		{
 			Name:    CoreDNSVersionName,
 			Version: r.CoreDNSImage,
-		},
-		{
-			Name:    OpenshiftCLIVersionName,
-			Version: r.OpenshiftCLIImage,
 		},
 	}
 }
@@ -291,11 +282,6 @@ func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.
 		case CoreDNSVersionName:
 			if opv.Version != r.CoreDNSImage {
 				messages = append(messages, fmt.Sprintf("Moving to coredns image version %q.", r.CoreDNSImage))
-				progressing = true
-			}
-		case OpenshiftCLIVersionName:
-			if opv.Version != r.OpenshiftCLIImage {
-				messages = append(messages, fmt.Sprintf("Moving to openshift-cli image version %q.", r.OpenshiftCLIImage))
 				progressing = true
 			}
 		}

@@ -26,13 +26,14 @@ spec:
         image: openshift/origin-cluster-dns-operator:latest
         command:
         - dns-operator
+        - start
         env:
         - name: RELEASE_VERSION
           value: "0.0.1-snapshot"
         - name: IMAGE
           value: openshift/origin-coredns:v4.0
-        - name: OPENSHIFT_CLI_IMAGE
-          value: openshift/origin-cli:v4.0
+        - name: OPERATOR_IMAGE
+          value: openshift/origin-cluster-dns-operator:latest
         resources:
           requests:
             cpu: 10m

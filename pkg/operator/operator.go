@@ -58,7 +58,7 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 	// Create and register the operator controller with the operator manager.
 	cfg := operatorcontroller.Config{
 		CoreDNSImage:           config.CoreDNSImage,
-		OpenshiftCLIImage:      config.OpenshiftCLIImage,
+		OperatorImage:          config.OperatorImage,
 		OperatorReleaseVersion: config.OperatorReleaseVersion,
 	}
 	if _, err := operatorcontroller.New(operatorManager, cfg); err != nil {
