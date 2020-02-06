@@ -89,18 +89,22 @@ spec:
           while true; do
             declare -A svc_ips
             for svc in "${services[@]}"; do
-              # Fetch service IP from cluster dns if present
-              ips=($(dig -t A @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"))
-
-              if [[ "$?" -eq 0 && "${#ips[@]}" -ne 0 ]]; then
-                svc_ips["${svc}"]="${ips[@]}"
-              else
-                # Try IPv6
-                ips=($(dig -t AAAA @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"))
+              # Fetch service IP from cluster dns if present. We make several tries
+              # to do it: IPv4, IPv6, IPv4 over TCP and IPv6 over TCP. The two last ones
+              # are for deployments with Kuryr on older OpenStack (OSP13) - those do not
+              # support UDP loadbalancers and require reaching DNS through TCP.
+              cmds=('dig -t A @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"'
+                    'dig -t AAAA @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"'
+                    'dig -t A +tcp @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"'
+                    'dig -t AAAA +tcp @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"')
+              for i in ${!cmds[*]}
+              do
+                ips=($(eval "${cmds[i]}"))
                 if [[ "$?" -eq 0 && "${#ips[@]}" -ne 0 ]]; then
                   svc_ips["${svc}"]="${ips[@]}"
+                  break
                 fi
-              fi
+              done
             done
 
             # Update /etc/hosts only if we get valid service IPs
