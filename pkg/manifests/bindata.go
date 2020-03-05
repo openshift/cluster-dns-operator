@@ -2,7 +2,6 @@
 // sources:
 // assets/dns/cluster-role-binding.yaml (223B)
 // assets/dns/cluster-role.yaml (210B)
-// assets/dns/configmap.yaml (434B)
 // assets/dns/daemonset.yaml (5.389kB)
 // assets/dns/metrics/cluster-role-binding.yaml (279B)
 // assets/dns/metrics/cluster-role.yaml (246B)
@@ -116,26 +115,6 @@ func assetsDnsClusterRoleYaml() (*asset, error) {
 
 	info := bindataFileInfo{name: "assets/dns/cluster-role.yaml", size: 210, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
 	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x37, 0xb2, 0x0, 0x7d, 0x4a, 0xd9, 0xf, 0x8, 0x44, 0xe7, 0xab, 0x82, 0xe4, 0x50, 0x94, 0xaa, 0x4e, 0xfd, 0xa0, 0x63, 0xba, 0x18, 0xcf, 0xeb, 0xa6, 0xe4, 0x2d, 0x4, 0x35, 0xd5, 0xc7, 0xd}}
-	return a, nil
-}
-
-var _assetsDnsConfigmapYaml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x6c\x4e\xcd\x4e\xf3\x30\x10\xbc\xe7\x29\x46\xfa\xce\x5f\x4a\x15\x15\x89\x5c\x7b\xe6\xca\x7d\xb1\x27\x8d\x55\xc7\x36\xeb\x75\x11\x02\xde\x1d\xb5\x95\x82\x2a\x3a\xa7\xf9\xd3\xec\x1e\x43\xf2\x23\xf6\x39\x4d\xe1\xf0\x2c\xa5\x93\x12\x5e\xa8\x35\xe4\x34\xe2\xb4\xed\xfe\x21\xc9\x42\x48\xf2\x17\x52\x8b\x38\x42\x94\xa8\x34\x88\x41\x5b\xb2\xb0\xb0\xf3\x62\x32\x76\xc0\x3e\x2b\xa7\x10\x39\xe2\xab\x03\x80\x7e\xdc\x0d\xbb\x01\x9f\x17\x71\x06\x55\xb3\xd6\x55\xce\x94\x68\xf3\x2a\x8f\xed\x95\x9a\x68\xac\x70\xb1\x55\xa3\xf6\x31\x3b\x89\x08\xe9\xbf\x78\xaf\xbd\x68\x11\x84\xf2\x78\x25\xbf\xb3\x67\x94\xec\x2b\x42\xaa\x74\x4d\x79\x93\xb4\x52\x4d\x29\xcb\x8d\x39\x49\x8c\x36\x6b\x6e\x87\xf9\xfe\xfc\xda\xfe\x5e\x59\xd1\xbc\xd0\x66\xb6\x8a\xf1\x69\xbb\x1b\xd6\x60\xca\xfa\x2e\xea\xd1\x63\x43\x73\x1b\x65\xcd\xf1\xd4\xbb\x9c\xa6\x3f\x4f\xc6\xe0\x3e\x50\xf9\xd6\x98\x2c\x48\xbc\x73\xc5\x89\x9b\x89\xe1\x61\x35\x94\x31\x8b\xef\xae\xad\x9f\x00\x00\x00\xff\xff\x08\x52\xc6\xab\xb2\x01\x00\x00")
-
-func assetsDnsConfigmapYamlBytes() ([]byte, error) {
-	return bindataRead(
-		_assetsDnsConfigmapYaml,
-		"assets/dns/configmap.yaml",
-	)
-}
-
-func assetsDnsConfigmapYaml() (*asset, error) {
-	bytes, err := assetsDnsConfigmapYamlBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "assets/dns/configmap.yaml", size: 434, mode: os.FileMode(420), modTime: time.Unix(1, 0)}
-	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x8c, 0x76, 0xcf, 0x25, 0x4e, 0xbd, 0x12, 0xda, 0x28, 0x18, 0x55, 0x70, 0xc2, 0x65, 0xe, 0x94, 0x40, 0x52, 0x25, 0x71, 0x45, 0xb8, 0xdf, 0xfe, 0x66, 0x8a, 0xa6, 0x6c, 0xa6, 0x90, 0xc7, 0x29}}
 	return a, nil
 }
 
@@ -394,8 +373,6 @@ var _bindata = map[string]func() (*asset, error){
 
 	"assets/dns/cluster-role.yaml": assetsDnsClusterRoleYaml,
 
-	"assets/dns/configmap.yaml": assetsDnsConfigmapYaml,
-
 	"assets/dns/daemonset.yaml": assetsDnsDaemonsetYaml,
 
 	"assets/dns/metrics/cluster-role-binding.yaml": assetsDnsMetricsClusterRoleBindingYaml,
@@ -458,7 +435,6 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		"dns": {nil, map[string]*bintree{
 			"cluster-role-binding.yaml": {assetsDnsClusterRoleBindingYaml, map[string]*bintree{}},
 			"cluster-role.yaml":         {assetsDnsClusterRoleYaml, map[string]*bintree{}},
-			"configmap.yaml":            {assetsDnsConfigmapYaml, map[string]*bintree{}},
 			"daemonset.yaml":            {assetsDnsDaemonsetYaml, map[string]*bintree{}},
 			"metrics": {nil, map[string]*bintree{
 				"cluster-role-binding.yaml": {assetsDnsMetricsClusterRoleBindingYaml, map[string]*bintree{}},
