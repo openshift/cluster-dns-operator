@@ -17,3 +17,6 @@ spec:
     port: 9153
     targetPort: metrics
     protocol: TCP
+  topologyKeys:
+    - "kubernetes.io/hostname"
+    - "*"
