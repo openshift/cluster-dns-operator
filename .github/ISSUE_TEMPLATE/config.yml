@@ -1,0 +1,10 @@
+contact_links:
+- name: File a Bugzilla report
+  url: https://bugzilla.redhat.com/enter_bug.cgi?product=OpenShift%20Container%20Platform&component=DNS
+  about: Please use Bugzilla to report issues.
+- name: DNS Operator in OpenShift Container Platform
+  url: https://docs.openshift.com/container-platform/latest/networking/dns-operator.html
+  about: Refer to the OpenShift Container Platform documentation for information about the DNS Operator in OpenShift Container Platform.
+- name: DNS Operator in OKD
+  url: https://docs.okd.io/latest/networking/dns-operator.html
+  about: Refer to the OKD documentation for information about the DNS Operator in OKD.
