@@ -50,7 +50,7 @@ spec:
           limits:
             memory: 512Mi
           requests:
-            cpu: 100m
+            cpu: 50m
             memory: 70Mi
       - name: dns-node-resolver
         # image is set at runtime
@@ -131,7 +131,7 @@ spec:
           done
         resources:
           requests:
-            cpu: 10m
+            cpu: 5m
       dnsPolicy: Default
       nodeSelector:
         kubernetes.io/os: linux      
