@@ -1,24 +1,29 @@
 module github.com/openshift/cluster-dns-operator
 
-go 1.12
+go 1.13
 
 require (
 	github.com/apparentlymart/go-cidr v1.0.0
 	github.com/go-logr/zapr v0.1.1 // indirect
-	github.com/golang/groupcache v0.0.0-20190129154638-5b532d6fd5ef // indirect
 	github.com/google/go-cmp v0.3.0
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/kevinburke/go-bindata v3.11.0+incompatible
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 
-	github.com/openshift/api v3.9.1-0.20191105205100-610e47be70db+incompatible
-	github.com/sirupsen/logrus v1.4.2
-	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
+	github.com/openshift/api v0.0.0-20200324173355-9b3bdf846ea1
 
-	// kubernetes-1.16.0
-	k8s.io/api v0.0.0-20190918155943-95b840bb6a1f
-	k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655
-	k8s.io/client-go v0.0.0-20190918160344-1fbdaa4c8d90
+	github.com/sirupsen/logrus v1.4.2
+
+	k8s.io/api v0.18.0-rc.1
+	k8s.io/apimachinery v0.18.0-rc.1
+	k8s.io/client-go v0.18.0-rc.1
 
 	sigs.k8s.io/controller-runtime v0.3.1-0.20191011155846-b2bc3490f2e3
+)
+
+replace (
+	// Remove when https://github.com/kubernetes-sigs/controller-runtime/pull/836 merges.
+	sigs.k8s.io/controller-runtime => github.com/munnerz/controller-runtime v0.1.8-0.20200318092001-e22ac1073450
+	// Remove when https://github.com/kubernetes-sigs/controller-tools/pull/424 merges.
+	sigs.k8s.io/controller-tools => github.com/munnerz/controller-tools v0.1.10-0.20200323145043-a2d268fbf03d
 )
