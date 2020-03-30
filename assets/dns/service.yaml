@@ -17,6 +17,7 @@ spec:
     port: 9153
     targetPort: metrics
     protocol: TCP
-  topologyKeys:
-    - "kubernetes.io/hostname"
-    - "*"
+  # TODO: Uncomment when service topology feature gate is enabled.
+  #topologyKeys:
+  #  - "kubernetes.io/hostname"
+  #  - "*"
