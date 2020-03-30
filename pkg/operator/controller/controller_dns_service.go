@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
@@ -21,16 +23,20 @@ func (r *reconciler) ensureDNSService(dns *operatorv1.DNS, clusterIP string, dae
 	if err != nil {
 		return nil, err
 	}
-	if current != nil {
-		return current, nil
-	}
-
 	desired := desiredDNSService(dns, clusterIP, daemonsetRef)
-	if err := r.client.Create(context.TODO(), desired); err != nil {
-		return nil, fmt.Errorf("failed to create dns service: %v", err)
+
+	switch {
+	case desired != nil && current == nil:
+		if err := r.client.Create(context.TODO(), desired); err != nil {
+			return nil, fmt.Errorf("failed to create dns service: %v", err)
+		}
+		logrus.Infof("created dns service: %s/%s", desired.Namespace, desired.Name)
+	case desired != nil && current != nil:
+		if err := r.updateDNSService(current, desired); err != nil {
+			return nil, err
+		}
 	}
-	logrus.Infof("created dns service: %s/%s", desired.Namespace, desired.Name)
-	return desired, nil
+	return r.currentDNSService(dns)
 }
 
 func (r *reconciler) currentDNSService(dns *operatorv1.DNS) (*corev1.Service, error) {
@@ -63,4 +69,40 @@ func desiredDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav
 		s.Spec.ClusterIP = clusterIP
 	}
 	return s
+}
+
+func (r *reconciler) updateDNSService(current, desired *corev1.Service) error {
+	changed, updated := serviceChanged(current, desired)
+	if !changed {
+		return nil
+	}
+
+	if err := r.client.Update(context.TODO(), updated); err != nil {
+		return fmt.Errorf("failed to update dns service %s/%s: %v", updated.Namespace, updated.Name, err)
+	}
+	logrus.Infof("updated dns service: %s/%s", updated.Namespace, updated.Name)
+	return nil
+}
+
+func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
+	serviceCmpOpts := []cmp.Option{
+		// Ignore fields that the API, other controllers, or user may
+		// have modified.
+		//
+		// TODO: Remove TopologyKeys when the service topology feature gate is enabled.
+		cmpopts.IgnoreFields(corev1.ServiceSpec{}, "ClusterIP", "TopologyKeys"),
+		cmpopts.EquateEmpty(),
+	}
+	if cmp.Equal(current.Spec, expected.Spec, serviceCmpOpts...) {
+		return false, nil
+	}
+
+	updated := current.DeepCopy()
+	updated.Spec = expected.Spec
+
+	// Preserve fields that the API, other controllers, or user may have
+	// modified.
+	updated.Spec.ClusterIP = current.Spec.ClusterIP
+
+	return true, updated
 }
