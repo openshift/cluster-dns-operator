@@ -16,6 +16,7 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 	clusterIP := "172.30.77.10"
 	coreDNSImage := "quay.io/openshift/coredns:test"
 	openshiftCLIImage := "openshift/origin-cli:test"
+	kubeRBACProxyImage := "quay.io/openshift/origin-kube-rbac-proxy:test"
 
 	dns := &operatorv1.DNS{
 		ObjectMeta: metav1.ObjectMeta{
@@ -23,12 +24,12 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 		},
 	}
 
-	if ds, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage); err != nil {
+	if ds, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage); err != nil {
 		t.Errorf("invalid dns daemonset: %v", err)
 	} else {
 		// Validate the daemonset
-		if len(ds.Spec.Template.Spec.Containers) != 2 {
-			t.Errorf("expected number of daemonset containers 2, got %d", len(ds.Spec.Template.Spec.Containers))
+		if len(ds.Spec.Template.Spec.Containers) != 3 {
+			t.Errorf("expected number of daemonset containers 3, got %d", len(ds.Spec.Template.Spec.Containers))
 		}
 		for _, c := range ds.Spec.Template.Spec.Containers {
 			switch c.Name {
@@ -56,6 +57,10 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 					t.Errorf("CLUSTER_DOMAIN env for dns node resolver image not found")
 				} else if clusterDomain != domain {
 					t.Errorf("expected CLUSTER_DOMAIN env for dns node resolver image %q, got %q", clusterDomain, domain)
+				}
+			case "kube-rbac-proxy":
+				if e, a := kubeRBACProxyImage, c.Image; e != a {
+					t.Errorf("expected daemonset kube rbac proxy image %q, got %q", e, a)
 				}
 			default:
 				t.Errorf("unexpected daemonset container %q", c.Name)
@@ -101,6 +106,17 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			description: "if .spec.template.spec.tolerations changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				daemonset.Spec.Template.Spec.Tolerations = []corev1.Toleration{toleration}
+			},
+			expect: true,
+		},
+		{
+			description: "if .spec.template.spec.volumes changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Volumes = []corev1.Volume{
+					{
+						Name: "test",
+					},
+				}
 			},
 			expect: true,
 		},

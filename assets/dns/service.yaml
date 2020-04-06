@@ -1,6 +1,6 @@
 kind: Service
 apiVersion: v1
-# name, namespace and labels are set at runtime
+# name, namespace,labels and annotations are set at runtime
 spec:
   # clusterIP will be automatically managed.
   # selector is set at runtime
@@ -14,7 +14,7 @@ spec:
     targetPort: dns-tcp
     protocol: TCP
   - name: metrics
-    port: 9153
+    port: 9154
     targetPort: metrics
     protocol: TCP
   # TODO: Uncomment when service topology feature gate is enabled.

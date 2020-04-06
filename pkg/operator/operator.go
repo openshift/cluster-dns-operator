@@ -59,6 +59,7 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 	cfg := operatorcontroller.Config{
 		CoreDNSImage:           config.CoreDNSImage,
 		OpenshiftCLIImage:      config.OpenshiftCLIImage,
+		KubeRBACProxyImage:     config.KubeRBACProxyImage,
 		OperatorReleaseVersion: config.OperatorReleaseVersion,
 	}
 	if _, err := operatorcontroller.New(operatorManager, cfg); err != nil {

@@ -78,6 +78,7 @@ type Config struct {
 	CoreDNSImage           string
 	OpenshiftCLIImage      string
 	OperatorReleaseVersion string
+	KubeRBACProxyImage     string
 }
 
 // reconciler handles the actual dns reconciliation logic in response to

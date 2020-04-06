@@ -21,7 +21,7 @@ import (
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
 func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (*appsv1.DaemonSet, error) {
-	desired, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, r.CoreDNSImage, r.OpenshiftCLIImage)
+	desired, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, r.CoreDNSImage, r.OpenshiftCLIImage, r.KubeRBACProxyImage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build dns daemonset: %v", err)
 	}
@@ -60,7 +60,7 @@ func (r *reconciler) ensureDNSDaemonSetDeleted(dns *operatorv1.DNS) error {
 }
 
 // desiredDNSDaemonSet returns the desired dns daemonset.
-func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage string) (*appsv1.DaemonSet, error) {
+func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) (*appsv1.DaemonSet, error) {
 	daemonset := manifests.DNSDaemonSet()
 	name := DNSDaemonSetName(dns)
 	daemonset.Name = name.Name
@@ -79,10 +79,15 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 	coreFileVolumeFound := false
 	for i := range daemonset.Spec.Template.Spec.Volumes {
 		// TODO: remove hardcoding of volume name
-		if daemonset.Spec.Template.Spec.Volumes[i].Name == "config-volume" {
+		switch daemonset.Spec.Template.Spec.Volumes[i].Name {
+		case "config-volume":
 			daemonset.Spec.Template.Spec.Volumes[i].ConfigMap.Name = DNSConfigMapName(dns).Name
 			coreFileVolumeFound = true
 			break
+		case "metrics-tls":
+			daemonset.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{
+				SecretName: DNSMetricsSecretName(dns),
+			}
 		}
 	}
 	if !coreFileVolumeFound {
@@ -113,6 +118,8 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 				daemonset.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{}
 			}
 			daemonset.Spec.Template.Spec.Containers[i].Env = append(daemonset.Spec.Template.Spec.Containers[i].Env, envs...)
+		case "kube-rbac-proxy":
+			daemonset.Spec.Template.Spec.Containers[i].Image = kubeRBACProxyImage
 		}
 	}
 	return daemonset, nil
@@ -187,7 +194,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 			changed = true
 		}
 	}
-	// TODO: Also check Env and Volume sources?
+	// TODO: Also check Env?
 
 	if !cmp.Equal(current.Spec.Template.Spec.NodeSelector, expected.Spec.Template.Spec.NodeSelector, cmpopts.EquateEmpty()) {
 		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
@@ -195,6 +202,10 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	}
 	if !cmp.Equal(current.Spec.Template.Spec.Tolerations, expected.Spec.Template.Spec.Tolerations, cmpopts.EquateEmpty(), cmpopts.SortSlices(cmpTolerations)) {
 		updated.Spec.Template.Spec.Tolerations = expected.Spec.Template.Spec.Tolerations
+		changed = true
+	}
+	if !cmp.Equal(current.Spec.Template.Spec.Volumes, expected.Spec.Template.Spec.Volumes, cmpopts.EquateEmpty()) {
+		updated.Spec.Template.Spec.Volumes = expected.Spec.Template.Spec.Volumes
 		changed = true
 	}
 

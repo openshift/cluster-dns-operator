@@ -69,6 +69,24 @@ func TestDNSServiceChanged(t *testing.T) {
 			},
 			expect: false,
 		},
+		{
+			description: "if service.beta.openshift.io/serving-cert-secret-name annotation changes",
+			mutate: func(service *corev1.Service) {
+				service.ObjectMeta.Annotations = map[string]string{
+					"service.beta.openshift.io/serving-cert-secret-name": "foo",
+				}
+			},
+			expect: true,
+		},
+		{
+			description: "if service.beta.openshift.io/serving-cert-signed-by annotation is set",
+			mutate: func(service *corev1.Service) {
+				service.ObjectMeta.Annotations = map[string]string{
+					"service.beta.openshift.io/serving-cert-signed-by": "foo",
+				}
+			},
+			expect: false,
+		},
 	}
 
 	for _, tc := range testCases {

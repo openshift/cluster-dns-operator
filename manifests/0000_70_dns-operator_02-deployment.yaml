@@ -33,6 +33,8 @@ spec:
           value: openshift/origin-coredns:v4.0
         - name: OPENSHIFT_CLI_IMAGE
           value: openshift/origin-cli:v4.0
+        - name: KUBE_RBAC_PROXY_IMAGE
+          value: quay.io/openshift/origin-kube-rbac-proxy:latest
         resources:
           requests:
             cpu: 10m

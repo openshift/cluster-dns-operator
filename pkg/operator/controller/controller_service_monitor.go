@@ -54,7 +54,7 @@ func desiredServiceMonitor(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRe
 						"bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
 						"interval":        "30s",
 						"port":            "metrics",
-						"scheme":          "http",
+						"scheme":          "https",
 						"path":            "/metrics",
 						"tlsConfig": map[string]interface{}{
 							"caFile":     "/etc/prometheus/configmaps/serving-certs-ca-bundle/service-ca.crt",
