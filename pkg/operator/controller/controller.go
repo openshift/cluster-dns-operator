@@ -254,15 +254,8 @@ func (r *reconciler) ensureDNSNamespace() error {
 		logrus.Infof("created dns namespace: %s", ns.Name)
 	}
 
-	cr := manifests.DNSClusterRole()
-	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: cr.Name}, cr); err != nil {
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to get dns cluster role %s: %v", cr.Name, err)
-		}
-		if err := r.client.Create(context.TODO(), cr); err != nil {
-			return fmt.Errorf("failed to create dns cluster role %s: %v", cr.Name, err)
-		}
-		logrus.Infof("created dns cluster role: %s", cr.Name)
+	if _, err := r.ensureDNSClusterRole(); err != nil {
+		return fmt.Errorf("failed to ensure dns cluster role for %s: %v", manifests.DNSClusterRole().Name, err)
 	}
 
 	crb := manifests.DNSClusterRoleBinding()
