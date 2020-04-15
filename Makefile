@@ -34,16 +34,8 @@ bindata:
 crd:
 	hack/update-generated-crd.sh
 
-.PHONY: verify-bindata
-verify-bindata:
-	hack/verify-generated-bindata.sh
-
-.PHONY: verify-crd
-verify-crd:
-	hack/verify-generated-crd.sh
-
 .PHONY: test
-test:	verify
+test:
 	$(GO) test ./...
 
 .PHONY: release-local
@@ -55,8 +47,11 @@ test-e2e:
 	KUBERNETES_CONFIG="$(KUBECONFIG)" $(GO) test -v -tags e2e ./...
 
 .PHONY: verify
-verify: verify-bindata verify-crd
+verify:
 	hack/verify-gofmt.sh
+	hack/verify-generated-crd.sh
+	hack/verify-generated-bindata.sh
+	hack/verify-deps.sh
 
 .PHONY: local-image
 local-image:
