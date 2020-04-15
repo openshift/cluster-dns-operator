@@ -237,7 +237,7 @@ func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStat
 		degradedCondition.Status = configv1.ConditionTrue
 		degradedCondition.Reason = "NoNamespace"
 		degradedCondition.Message = "Operand Namespace does not exist"
-	case dnses.available == 0:
+	case dnses.total == 0:
 		degradedCondition.Status = configv1.ConditionTrue
 		degradedCondition.Reason = "NoDNS"
 		degradedCondition.Message = "No DNS resource exists"
