@@ -11,4 +11,8 @@ type Config struct {
 
 	// OpenshiftCLIImage is the openshift client image to manage.
 	OpenshiftCLIImage string
+
+	// KubeRBACProxyImage is the kube-rbac-proxy image to to use
+	// to secure the metrics endpoint.
+	KubeRBACProxyImage string
 }

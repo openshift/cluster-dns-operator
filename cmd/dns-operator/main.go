@@ -32,10 +32,16 @@ func main() {
 		logrus.Fatalf("OPENSHIFT_CLI_IMAGE environment variable is required")
 	}
 
+	kubeRBACProxyImage := os.Getenv("KUBE_RBAC_PROXY_IMAGE")
+	if len(kubeRBACProxyImage) == 0 {
+		logrus.Fatalf("KUBE_RBAC_PROXY_IMAGE environment variable is required")
+	}
+
 	operatorConfig := operatorconfig.Config{
 		OperatorReleaseVersion: releaseVersion,
 		CoreDNSImage:           coreDNSImage,
 		OpenshiftCLIImage:      cliImage,
+		KubeRBACProxyImage:     kubeRBACProxyImage,
 	}
 
 	kubeConfig, err := config.GetConfig()

@@ -59,6 +59,10 @@ func desiredDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav
 	s.Name = name.Name
 	s.SetOwnerReferences([]metav1.OwnerReference{dnsOwnerRef(dns)})
 
+	s.Annotations = map[string]string{
+		MetricsServingCertAnnotation: DNSMetricsSecretName(dns),
+	}
+
 	s.Labels = map[string]string{
 		manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
 	}
@@ -93,12 +97,19 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 		cmpopts.IgnoreFields(corev1.ServiceSpec{}, "ClusterIP", "TopologyKeys"),
 		cmpopts.EquateEmpty(),
 	}
-	if cmp.Equal(current.Spec, expected.Spec, serviceCmpOpts...) {
+
+	servingCertAnnotationKey := "service.beta.openshift.io/serving-cert-secret-name"
+	currentServingCertAnnotation := current.ObjectMeta.Annotations[servingCertAnnotationKey]
+	expectedServingCertAnnotation := expected.ObjectMeta.Annotations[servingCertAnnotationKey]
+	annotationMatches := currentServingCertAnnotation == expectedServingCertAnnotation
+
+	if cmp.Equal(current.Spec, expected.Spec, serviceCmpOpts...) && annotationMatches {
 		return false, nil
 	}
 
 	updated := current.DeepCopy()
 	updated.Spec = expected.Spec
+	updated.ObjectMeta.Annotations = expected.ObjectMeta.Annotations
 
 	// Preserve fields that the API, other controllers, or user may have
 	// modified.

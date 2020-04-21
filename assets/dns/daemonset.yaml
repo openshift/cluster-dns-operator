@@ -24,9 +24,6 @@ spec:
         - containerPort: 5353
           name: dns-tcp
           protocol: TCP
-        - containerPort: 9153
-          name: metrics
-          protocol: TCP
         readinessProbe:
           httpGet:
             path: /health
@@ -52,6 +49,26 @@ spec:
           requests:
             cpu: 50m
             memory: 70Mi
+      - name: kube-rbac-proxy
+        # image is set at runtime
+        args:
+        - --logtostderr
+        - --secure-listen-address=:9154
+        - --tls-cipher-suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_128_CBC_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+        - --upstream=http://127.0.0.1:9153/
+        - --tls-cert-file=/etc/tls/private/tls.crt
+        - --tls-private-key-file=/etc/tls/private/tls.key
+        ports:
+        - containerPort: 9154
+          name: metrics
+        resources:
+          requests:
+            cpu: 10m
+            memory: 40Mi
+        volumeMounts:
+        - mountPath: /etc/tls/private
+          name: metrics-tls
+          readOnly: true
       - name: dns-node-resolver
         # image is set at runtime
         imagePullPolicy: IfNotPresent
@@ -146,6 +163,8 @@ spec:
         hostPath:
           path: /etc/hosts
           type: File
+      - name: metrics-tls
+        # secretName is set at runtime
       tolerations:
       # DNS needs to run everywhere.
       - key: "node-role.kubernetes.io/master"

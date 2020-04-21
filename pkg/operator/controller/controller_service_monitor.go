@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"github.com/sirupsen/logrus"
@@ -24,14 +26,18 @@ func (r *reconciler) ensureServiceMonitor(dns *operatorv1.DNS, svc *corev1.Servi
 		return nil, err
 	}
 
-	if desired != nil && current == nil {
+	switch {
+	case desired != nil && current == nil:
 		if err := r.client.Create(context.TODO(), desired); err != nil {
 			return nil, fmt.Errorf("failed to create servicemonitor %s/%s: %v", desired.GetNamespace(), desired.GetName(), err)
 		}
 		logrus.Infof("created servicemonitor %s/%s", desired.GetNamespace(), desired.GetName())
-		return desired, nil
+	case desired != nil && current != nil:
+		if err := r.updateDNSServiceMonitor(current, desired); err != nil {
+			return nil, err
+		}
 	}
-	return current, nil
+	return r.currentServiceMonitor(dns)
 }
 
 func desiredServiceMonitor(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRef metav1.OwnerReference) *unstructured.Unstructured {
@@ -49,12 +55,12 @@ func desiredServiceMonitor(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRe
 					},
 				},
 				"selector": map[string]interface{}{},
-				"endpoints": []map[string]interface{}{
-					{
+				"endpoints": []interface{}{
+					map[string]interface{}{
 						"bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
 						"interval":        "30s",
 						"port":            "metrics",
-						"scheme":          "http",
+						"scheme":          "https",
 						"path":            "/metrics",
 						"tlsConfig": map[string]interface{}{
 							"caFile":     "/etc/prometheus/configmaps/serving-certs-ca-bundle/service-ca.crt",
@@ -88,4 +94,28 @@ func (r *reconciler) currentServiceMonitor(dns *operatorv1.DNS) (*unstructured.U
 		return nil, err
 	}
 	return sm, nil
+}
+
+func (r *reconciler) updateDNSServiceMonitor(current, desired *unstructured.Unstructured) error {
+	changed, updated := serviceMonitorChanged(current, desired)
+	if !changed {
+		return nil
+	}
+
+	if err := r.client.Update(context.TODO(), updated); err != nil {
+		return fmt.Errorf("failed to update dns servicemonitor %s/%s: %v", updated.GetNamespace(), updated.GetName(), err)
+	}
+	logrus.Infof("updated dns servicemonitor: %s/%s", updated.GetNamespace(), updated.GetName())
+	return nil
+}
+
+func serviceMonitorChanged(current, expected *unstructured.Unstructured) (bool, *unstructured.Unstructured) {
+	if cmp.Equal(current.Object["spec"], expected.Object["spec"], cmpopts.EquateEmpty()) {
+		return false, nil
+	}
+
+	updated := current.DeepCopy()
+	updated.Object["spec"] = expected.Object["spec"]
+
+	return true, updated
 }
