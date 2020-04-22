@@ -166,7 +166,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	changed := false
 	updated := current.DeepCopy()
 
-	for _, name := range []string{"dns", "dns-node-resolver"} {
+	for _, name := range []string{"dns", "dns-node-resolver", "kube-rbac-proxy"} {
 		var curIndex int
 		var curImage, expImage string
 

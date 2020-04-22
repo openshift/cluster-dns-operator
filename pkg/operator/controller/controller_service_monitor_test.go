@@ -20,13 +20,13 @@ func TestDNSServiceMonitorChanged(t *testing.T) {
 		{
 			description: "if spec.endpoints.scheme changes",
 			mutate: func(serviceMonitor *unstructured.Unstructured) {
-				serviceMonitor.Object["spec"] = map[string]interface{}{
-					"selector": map[string]interface{}{},
-					"endpoints": []interface{}{
-						map[string]interface{}{
-							"scheme": "http",
-						},
-					},
+				spec := serviceMonitor.Object["spec"].(map[string]interface{})
+				endpoints := spec["endpoints"].([]interface{})
+				for x := range endpoints {
+					setting := endpoints[x].(map[string]interface{})
+					if setting["scheme"] != nil {
+						setting["scheme"] = "http"
+					}
 				}
 			},
 			expect: true,

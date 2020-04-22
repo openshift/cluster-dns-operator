@@ -135,6 +135,13 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: true,
 		},
 		{
+			description: "if the kube rbac proxy image is changed",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[2].Image = "openshift/origin-kube-rbac-proxy:latest"
+			},
+			expect: true,
+		},
+		{
 			description: "if a container command length changed",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				daemonset.Spec.Template.Spec.Containers[1].Command = append(daemonset.Spec.Template.Spec.Containers[1].Command, "--foo")
@@ -175,6 +182,14 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 								Command: []string{
 									"c",
 									"d",
+								},
+							},
+							{
+								Name:  "kube-rbac-proxy",
+								Image: "openshift/origin-kube-rbac-proxy:v4.0",
+								Command: []string{
+									"e",
+									"f",
 								},
 							},
 						},
