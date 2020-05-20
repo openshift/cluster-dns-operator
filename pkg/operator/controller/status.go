@@ -269,7 +269,7 @@ func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.
 		progressing = true
 	}
 	if dnses.progressing > 0 {
-		messages = append(messages, "Not all DNS DaemonSets available.")
+		messages = append(messages, "At least 1 DNS DaemonSet is progressing.")
 		progressing = true
 	}
 
