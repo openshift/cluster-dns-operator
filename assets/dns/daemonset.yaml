@@ -166,6 +166,5 @@ spec:
       - name: metrics-tls
         # secretName is set at runtime
       tolerations:
-      # DNS needs to run everywhere.
-      - key: "node-role.kubernetes.io/master"
-        operator: Exists
+      # DNS needs to run everywhere. Tolerate all taints
+      - operator: Exists
