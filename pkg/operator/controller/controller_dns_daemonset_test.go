@@ -166,9 +166,42 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			},
 			expect: true,
 		},
+		{
+			description: "if the config-volume default mode value is defaulted",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				newVal := volumeDefaultMode
+				daemonset.Spec.Template.Spec.Volumes[0].ConfigMap.DefaultMode = &newVal
+			},
+			expect: false,
+		},
+		{
+			description: "if the config-volume default mode value changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				newVal := int32(0)
+				daemonset.Spec.Template.Spec.Volumes[0].ConfigMap.DefaultMode = &newVal
+			},
+			expect: true,
+		},
+		{
+			description: "if the metrics-tls default mode value is defaulted",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				newVal := volumeDefaultMode
+				daemonset.Spec.Template.Spec.Volumes[2].Secret.DefaultMode = &newVal
+			},
+			expect: false,
+		},
+		{
+			description: "if the metrics-tls default mode value changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				newVal := int32(0)
+				daemonset.Spec.Template.Spec.Volumes[2].Secret.DefaultMode = &newVal
+			},
+			expect: true,
+		},
 	}
 
 	for _, tc := range testCases {
+		hostPathFile := corev1.HostPathFile
 		original := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dns-original",
@@ -206,6 +239,35 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 						},
 						NodeSelector: map[string]string{
 							"beta.kubernetes.io/os": "linux",
+						},
+						Volumes: []corev1.Volume{
+							{
+								Name: "config-volume",
+								VolumeSource: corev1.VolumeSource{
+									ConfigMap: &corev1.ConfigMapVolumeSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "dns-default",
+										},
+									},
+								},
+							},
+							{
+								Name: "hosts-file",
+								VolumeSource: corev1.VolumeSource{
+									HostPath: &corev1.HostPathVolumeSource{
+										Path: "/etc/hosts",
+										Type: &hostPathFile,
+									},
+								},
+							},
+							{
+								Name: "metrics-tls",
+								VolumeSource: corev1.VolumeSource{
+									Secret: &corev1.SecretVolumeSource{
+										SecretName: "dns-default-metrics-tls",
+									},
+								},
+							},
 						},
 					},
 				},
