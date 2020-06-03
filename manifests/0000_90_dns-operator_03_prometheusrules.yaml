@@ -1,0 +1,24 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dns
+  namespace: openshift-dns-operator
+  labels:
+    role: alert-rules
+spec:
+  groups:
+    - name: openshift-dns.rules
+      rules:
+      - alert: CoreDNSPanicking
+        expr: coredns_panic_count_total > 0
+        labels:
+          severity: warning
+        annotations:
+          message: "{{ $value }} CoreDNS panics observed on {{ $labels.instance }}"
+      - alert: CoreDNSHealthCheckSlow
+        expr: histogram_quantile(.95, sum(rate(coredns_health_request_duration_seconds_bucket[5m])) by (instance, le)) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          message: "CoreDNS Health Checks are slowing down (instance {{ $labels.instance }})"
