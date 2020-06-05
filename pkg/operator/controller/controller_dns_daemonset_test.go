@@ -155,6 +155,17 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			},
 			expect: true,
 		},
+		{
+			description: "if an unexpected additional container is added",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				containers := daemonset.Spec.Template.Spec.Containers
+				daemonset.Spec.Template.Spec.Containers = append(containers, corev1.Container{
+					Name:  "foo",
+					Image: "bar",
+				})
+			},
+			expect: true,
+		},
 	}
 
 	for _, tc := range testCases {
