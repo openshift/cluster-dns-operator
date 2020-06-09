@@ -20,23 +20,23 @@ import (
 )
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
-func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (*appsv1.DaemonSet, error) {
+func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (bool, *appsv1.DaemonSet, error) {
+	haveDS, current, err := r.currentDNSDaemonSet(dns)
+	if err != nil {
+		return false, nil, err
+	}
 	desired, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, r.CoreDNSImage, r.OpenshiftCLIImage, r.KubeRBACProxyImage)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build dns daemonset: %v", err)
-	}
-	current, err := r.currentDNSDaemonSet(dns)
-	if err != nil {
-		return nil, err
+		return haveDS, current, fmt.Errorf("failed to build dns daemonset: %v", err)
 	}
 	switch {
-	case desired != nil && current == nil:
+	case !haveDS:
 		if err := r.createDNSDaemonSet(desired); err != nil {
-			return nil, err
+			return false, nil, err
 		}
-	case desired != nil && current != nil:
+	case haveDS:
 		if err := r.updateDNSDaemonSet(current, desired); err != nil {
-			return nil, err
+			return true, current, err
 		}
 	}
 	return r.currentDNSDaemonSet(dns)
@@ -126,15 +126,15 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 }
 
 // currentDNSDaemonSet returns the current dns daemonset.
-func (r *reconciler) currentDNSDaemonSet(dns *operatorv1.DNS) (*appsv1.DaemonSet, error) {
+func (r *reconciler) currentDNSDaemonSet(dns *operatorv1.DNS) (bool, *appsv1.DaemonSet, error) {
 	daemonset := &appsv1.DaemonSet{}
 	if err := r.client.Get(context.TODO(), DNSDaemonSetName(dns), daemonset); err != nil {
 		if errors.IsNotFound(err) {
-			return nil, nil
+			return false, nil, nil
 		}
-		return nil, err
+		return false, nil, err
 	}
-	return daemonset, nil
+	return true, daemonset, nil
 }
 
 // createDNSDaemonSet creates a dns daemonset.

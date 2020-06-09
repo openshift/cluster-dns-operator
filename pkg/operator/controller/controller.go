@@ -254,7 +254,7 @@ func (r *reconciler) ensureDNSNamespace() error {
 		logrus.Infof("created dns namespace: %s", ns.Name)
 	}
 
-	if _, err := r.ensureDNSClusterRole(); err != nil {
+	if _, _, err := r.ensureDNSClusterRole(); err != nil {
 		return fmt.Errorf("failed to ensure dns cluster role for %s: %v", manifests.DNSClusterRole().Name, err)
 	}
 
@@ -329,7 +329,7 @@ func (r *reconciler) ensureMetricsIntegration(dns *operatorv1.DNS, svc *corev1.S
 		logrus.Infof("created dns metrics role binding %s/%s", mrb.Namespace, mrb.Name)
 	}
 
-	if _, err := r.ensureServiceMonitor(dns, svc, daemonsetRef); err != nil {
+	if _, _, err := r.ensureServiceMonitor(dns, svc, daemonsetRef); err != nil {
 		return fmt.Errorf("failed to ensure servicemonitor for %s: %v", dns.Name, err)
 	}
 
@@ -346,7 +346,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	}
 
 	errs := []error{}
-	if daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
+	if _, daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
 	} else {
 		trueVar := true
@@ -358,10 +358,10 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 			Controller: &trueVar,
 		}
 
-		if _, err := r.ensureDNSConfigMap(dns, clusterDomain); err != nil {
+		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
 		}
-		if svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
+		if _, svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create service for dns %s: %v", dns.Name, err))
 		} else if err := r.ensureMetricsIntegration(dns, svc, daemonsetRef); err != nil {
 			errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))

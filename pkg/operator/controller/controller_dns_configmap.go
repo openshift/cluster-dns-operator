@@ -47,26 +47,26 @@ var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Se
 `))
 
 // ensureDNSConfigMap ensures that a configmap exists for a given DNS.
-func (r *reconciler) ensureDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.ConfigMap, error) {
-	current, err := r.currentDNSConfigMap(dns)
+func (r *reconciler) ensureDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (bool, *corev1.ConfigMap, error) {
+	haveCM, current, err := r.currentDNSConfigMap(dns)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get configmap: %v", err)
+		return false, nil, fmt.Errorf("failed to get configmap: %v", err)
 	}
 	desired, err := desiredDNSConfigMap(dns, clusterDomain)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build configmap: %v", err)
+		return haveCM, current, fmt.Errorf("failed to build configmap: %v", err)
 	}
 
 	switch {
-	case desired != nil && current == nil:
+	case !haveCM:
 		if err := r.client.Create(context.TODO(), desired); err != nil {
-			return nil, fmt.Errorf("failed to create configmap: %v", err)
+			return false, nil, fmt.Errorf("failed to create configmap: %v", err)
 		}
 		logrus.Infof("created configmap: %s", desired.Name)
-	case desired != nil && current != nil:
+	case haveCM:
 		if needsUpdate, updated := corefileChanged(current, desired); needsUpdate {
 			if err := r.client.Update(context.TODO(), updated); err != nil {
-				return nil, fmt.Errorf("failed to update configmap: %v", err)
+				return true, current, fmt.Errorf("failed to update configmap: %v", err)
 			}
 			logrus.Infof("updated configmap; old: %#v, new: %#v", current, updated)
 		}
@@ -74,16 +74,16 @@ func (r *reconciler) ensureDNSConfigMap(dns *operatorv1.DNS, clusterDomain strin
 	return r.currentDNSConfigMap(dns)
 }
 
-func (r *reconciler) currentDNSConfigMap(dns *operatorv1.DNS) (*corev1.ConfigMap, error) {
+func (r *reconciler) currentDNSConfigMap(dns *operatorv1.DNS) (bool, *corev1.ConfigMap, error) {
 	current := &corev1.ConfigMap{}
 	err := r.client.Get(context.TODO(), DNSConfigMapName(dns), current)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return nil, nil
+			return false, nil, nil
 		}
-		return nil, err
+		return false, nil, err
 	}
-	return current, nil
+	return true, current, nil
 }
 
 func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.ConfigMap, error) {

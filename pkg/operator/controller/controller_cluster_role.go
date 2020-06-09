@@ -15,37 +15,37 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func (r *reconciler) ensureDNSClusterRole() (*rbacv1.ClusterRole, error) {
-	current, err := r.currentDNSClusterRole()
+func (r *reconciler) ensureDNSClusterRole() (bool, *rbacv1.ClusterRole, error) {
+	haveCR, current, err := r.currentDNSClusterRole()
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
 	desired := desiredDNSClusterRole()
 
 	switch {
-	case desired != nil && current == nil:
+	case !haveCR:
 		if err := r.client.Create(context.TODO(), desired); err != nil {
-			return nil, fmt.Errorf("failed to create dns cluster role: %v", err)
+			return false, nil, fmt.Errorf("failed to create dns cluster role: %v", err)
 		}
 		logrus.Infof("created dns cluster role: %s/%s", desired.Namespace, desired.Name)
-	case desired != nil && current != nil:
+	case haveCR:
 		if err := r.updateDNSClusterRole(current, desired); err != nil {
-			return nil, err
+			return true, current, err
 		}
 	}
 	return r.currentDNSClusterRole()
 }
 
-func (r *reconciler) currentDNSClusterRole() (*rbacv1.ClusterRole, error) {
+func (r *reconciler) currentDNSClusterRole() (bool, *rbacv1.ClusterRole, error) {
 	current := &rbacv1.ClusterRole{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{Name: manifests.DNSClusterRole().Name}, current)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return nil, nil
+			return false, nil, nil
 		}
-		return nil, err
+		return false, nil, err
 	}
-	return current, nil
+	return true, current, nil
 }
 
 func desiredDNSClusterRole() *rbacv1.ClusterRole {
