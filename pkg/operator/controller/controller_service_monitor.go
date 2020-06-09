@@ -18,23 +18,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func (r *reconciler) ensureServiceMonitor(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRef metav1.OwnerReference) (*unstructured.Unstructured, error) {
+func (r *reconciler) ensureServiceMonitor(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRef metav1.OwnerReference) (bool, *unstructured.Unstructured, error) {
 	desired := desiredServiceMonitor(dns, svc, daemonsetRef)
 
-	current, err := r.currentServiceMonitor(dns)
+	haveSM, current, err := r.currentServiceMonitor(dns)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
 
 	switch {
-	case desired != nil && current == nil:
+	case !haveSM:
 		if err := r.client.Create(context.TODO(), desired); err != nil {
-			return nil, fmt.Errorf("failed to create servicemonitor %s/%s: %v", desired.GetNamespace(), desired.GetName(), err)
+			return false, nil, fmt.Errorf("failed to create servicemonitor %s/%s: %v", desired.GetNamespace(), desired.GetName(), err)
 		}
 		logrus.Infof("created servicemonitor %s/%s", desired.GetNamespace(), desired.GetName())
-	case desired != nil && current != nil:
+	case haveSM:
 		if err := r.updateDNSServiceMonitor(current, desired); err != nil {
-			return nil, err
+			return true, current, err
 		}
 	}
 	return r.currentServiceMonitor(dns)
@@ -80,7 +80,7 @@ func desiredServiceMonitor(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRe
 	return sm
 }
 
-func (r *reconciler) currentServiceMonitor(dns *operatorv1.DNS) (*unstructured.Unstructured, error) {
+func (r *reconciler) currentServiceMonitor(dns *operatorv1.DNS) (bool, *unstructured.Unstructured, error) {
 	sm := &unstructured.Unstructured{}
 	sm.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "monitoring.coreos.com",
@@ -89,11 +89,11 @@ func (r *reconciler) currentServiceMonitor(dns *operatorv1.DNS) (*unstructured.U
 	})
 	if err := r.client.Get(context.TODO(), DNSServiceMonitorName(dns), sm); err != nil {
 		if errors.IsNotFound(err) {
-			return nil, nil
+			return false, nil, nil
 		}
-		return nil, err
+		return false, nil, err
 	}
-	return sm, nil
+	return true, sm, nil
 }
 
 func (r *reconciler) updateDNSServiceMonitor(current, desired *unstructured.Unstructured) error {

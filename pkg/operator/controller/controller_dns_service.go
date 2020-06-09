@@ -18,37 +18,37 @@ import (
 )
 
 // ensureDNSService ensures that a service exists for a given DNS.
-func (r *reconciler) ensureDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav1.OwnerReference) (*corev1.Service, error) {
-	current, err := r.currentDNSService(dns)
+func (r *reconciler) ensureDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav1.OwnerReference) (bool, *corev1.Service, error) {
+	haveService, current, err := r.currentDNSService(dns)
 	if err != nil {
-		return nil, err
+		return false, nil, err
 	}
 	desired := desiredDNSService(dns, clusterIP, daemonsetRef)
 
 	switch {
-	case desired != nil && current == nil:
+	case !haveService:
 		if err := r.client.Create(context.TODO(), desired); err != nil {
-			return nil, fmt.Errorf("failed to create dns service: %v", err)
+			return false, nil, fmt.Errorf("failed to create dns service: %v", err)
 		}
 		logrus.Infof("created dns service: %s/%s", desired.Namespace, desired.Name)
-	case desired != nil && current != nil:
+	case haveService:
 		if err := r.updateDNSService(current, desired); err != nil {
-			return nil, err
+			return true, current, err
 		}
 	}
 	return r.currentDNSService(dns)
 }
 
-func (r *reconciler) currentDNSService(dns *operatorv1.DNS) (*corev1.Service, error) {
+func (r *reconciler) currentDNSService(dns *operatorv1.DNS) (bool, *corev1.Service, error) {
 	current := &corev1.Service{}
 	err := r.client.Get(context.TODO(), DNSServiceName(dns), current)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return nil, nil
+			return false, nil, nil
 		}
-		return nil, err
+		return false, nil, err
 	}
-	return current, nil
+	return true, current, nil
 }
 
 func desiredDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav1.OwnerReference) *corev1.Service {
