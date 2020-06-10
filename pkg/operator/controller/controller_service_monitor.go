@@ -32,12 +32,15 @@ func (r *reconciler) ensureServiceMonitor(dns *operatorv1.DNS, svc *corev1.Servi
 			return false, nil, fmt.Errorf("failed to create servicemonitor %s/%s: %v", desired.GetNamespace(), desired.GetName(), err)
 		}
 		logrus.Infof("created servicemonitor %s/%s", desired.GetNamespace(), desired.GetName())
+		return r.currentServiceMonitor(dns)
 	case haveSM:
-		if err := r.updateDNSServiceMonitor(current, desired); err != nil {
+		if updated, err := r.updateDNSServiceMonitor(current, desired); err != nil {
 			return true, current, err
+		} else if updated {
+			return r.currentServiceMonitor(dns)
 		}
 	}
-	return r.currentServiceMonitor(dns)
+	return true, current, nil
 }
 
 func desiredServiceMonitor(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRef metav1.OwnerReference) *unstructured.Unstructured {
@@ -96,17 +99,17 @@ func (r *reconciler) currentServiceMonitor(dns *operatorv1.DNS) (bool, *unstruct
 	return true, sm, nil
 }
 
-func (r *reconciler) updateDNSServiceMonitor(current, desired *unstructured.Unstructured) error {
+func (r *reconciler) updateDNSServiceMonitor(current, desired *unstructured.Unstructured) (bool, error) {
 	changed, updated := serviceMonitorChanged(current, desired)
 	if !changed {
-		return nil
+		return false, nil
 	}
 
 	if err := r.client.Update(context.TODO(), updated); err != nil {
-		return fmt.Errorf("failed to update dns servicemonitor %s/%s: %v", updated.GetNamespace(), updated.GetName(), err)
+		return false, fmt.Errorf("failed to update dns servicemonitor %s/%s: %v", updated.GetNamespace(), updated.GetName(), err)
 	}
 	logrus.Infof("updated dns servicemonitor: %s/%s", updated.GetNamespace(), updated.GetName())
-	return nil
+	return true, nil
 }
 
 func serviceMonitorChanged(current, expected *unstructured.Unstructured) (bool, *unstructured.Unstructured) {

@@ -63,15 +63,15 @@ func (r *reconciler) ensureDNSConfigMap(dns *operatorv1.DNS, clusterDomain strin
 			return false, nil, fmt.Errorf("failed to create configmap: %v", err)
 		}
 		logrus.Infof("created configmap: %s", desired.Name)
+		return r.currentDNSConfigMap(dns)
 	case haveCM:
-		if needsUpdate, updated := corefileChanged(current, desired); needsUpdate {
-			if err := r.client.Update(context.TODO(), updated); err != nil {
-				return true, current, fmt.Errorf("failed to update configmap: %v", err)
-			}
-			logrus.Infof("updated configmap; old: %#v, new: %#v", current, updated)
+		if updated, err := r.updateDNSConfigMap(current, desired); err != nil {
+			return true, current, err
+		} else if updated {
+			return r.currentDNSConfigMap(dns)
 		}
 	}
-	return r.currentDNSConfigMap(dns)
+	return true, current, nil
 }
 
 func (r *reconciler) currentDNSConfigMap(dns *operatorv1.DNS) (bool, *corev1.ConfigMap, error) {
@@ -119,6 +119,19 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.Con
 	cm.SetOwnerReferences([]metav1.OwnerReference{dnsOwnerRef(dns)})
 
 	return cm, nil
+}
+
+func (r *reconciler) updateDNSConfigMap(current, desired *corev1.ConfigMap) (bool, error) {
+	changed, updated := corefileChanged(current, desired)
+	if !changed {
+		return false, nil
+	}
+
+	if err := r.client.Update(context.TODO(), updated); err != nil {
+		return false, fmt.Errorf("failed to update configmap: %v", err)
+	}
+	logrus.Infof("updated configmap; old: %#v, new: %#v", current, updated)
+	return true, nil
 }
 
 func corefileChanged(current, expected *corev1.ConfigMap) (bool, *corev1.ConfigMap) {
