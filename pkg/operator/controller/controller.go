@@ -346,8 +346,10 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	}
 
 	errs := []error{}
-	if _, daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
+	if haveDS, daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
+	} else if !haveDS {
+		errs = append(errs, fmt.Errorf("failed to get daemonset for dns %s", dns.Name))
 	} else {
 		trueVar := true
 		daemonsetRef := metav1.OwnerReference{
@@ -361,8 +363,10 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
 		}
-		if _, svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
+		if haveSvc, svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create service for dns %s: %v", dns.Name, err))
+		} else if !haveSvc {
+			errs = append(errs, fmt.Errorf("failed to get service for dns %s", dns.Name))
 		} else if err := r.ensureMetricsIntegration(dns, svc, daemonsetRef); err != nil {
 			errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))
 		}

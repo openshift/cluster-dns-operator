@@ -34,12 +34,15 @@ func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterD
 		if err := r.createDNSDaemonSet(desired); err != nil {
 			return false, nil, err
 		}
+		return r.currentDNSDaemonSet(dns)
 	case haveDS:
-		if err := r.updateDNSDaemonSet(current, desired); err != nil {
+		if updated, err := r.updateDNSDaemonSet(current, desired); err != nil {
 			return true, current, err
+		} else if updated {
+			return r.currentDNSDaemonSet(dns)
 		}
 	}
-	return r.currentDNSDaemonSet(dns)
+	return true, current, nil
 }
 
 // ensureDNSDaemonSetDeleted ensures deletion of daemonset and related resources
@@ -147,17 +150,17 @@ func (r *reconciler) createDNSDaemonSet(daemonset *appsv1.DaemonSet) error {
 }
 
 // updateDNSDaemonSet updates a dns daemonset.
-func (r *reconciler) updateDNSDaemonSet(current, desired *appsv1.DaemonSet) error {
+func (r *reconciler) updateDNSDaemonSet(current, desired *appsv1.DaemonSet) (bool, error) {
 	changed, updated := daemonsetConfigChanged(current, desired)
 	if !changed {
-		return nil
+		return false, nil
 	}
 
 	if err := r.client.Update(context.TODO(), updated); err != nil {
-		return fmt.Errorf("failed to update dns daemonset %s/%s: %v", updated.Namespace, updated.Name, err)
+		return false, fmt.Errorf("failed to update dns daemonset %s/%s: %v", updated.Namespace, updated.Name, err)
 	}
 	logrus.Infof("updated dns daemonset: %s/%s", updated.Namespace, updated.Name)
-	return nil
+	return true, nil
 }
 
 // daemonsetConfigChanged checks if current config matches the expected config

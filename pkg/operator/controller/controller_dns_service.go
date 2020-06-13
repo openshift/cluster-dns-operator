@@ -31,12 +31,15 @@ func (r *reconciler) ensureDNSService(dns *operatorv1.DNS, clusterIP string, dae
 			return false, nil, fmt.Errorf("failed to create dns service: %v", err)
 		}
 		logrus.Infof("created dns service: %s/%s", desired.Namespace, desired.Name)
+		return r.currentDNSService(dns)
 	case haveService:
-		if err := r.updateDNSService(current, desired); err != nil {
+		if updated, err := r.updateDNSService(current, desired); err != nil {
 			return true, current, err
+		} else if updated {
+			return r.currentDNSService(dns)
 		}
 	}
-	return r.currentDNSService(dns)
+	return true, current, nil
 }
 
 func (r *reconciler) currentDNSService(dns *operatorv1.DNS) (bool, *corev1.Service, error) {
@@ -75,17 +78,17 @@ func desiredDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav
 	return s
 }
 
-func (r *reconciler) updateDNSService(current, desired *corev1.Service) error {
+func (r *reconciler) updateDNSService(current, desired *corev1.Service) (bool, error) {
 	changed, updated := serviceChanged(current, desired)
 	if !changed {
-		return nil
+		return false, nil
 	}
 
 	if err := r.client.Update(context.TODO(), updated); err != nil {
-		return fmt.Errorf("failed to update dns service %s/%s: %v", updated.Namespace, updated.Name, err)
+		return false, fmt.Errorf("failed to update dns service %s/%s: %v", updated.Namespace, updated.Name, err)
 	}
 	logrus.Infof("updated dns service: %s/%s", updated.Namespace, updated.Name)
-	return nil
+	return true, nil
 }
 
 func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {

@@ -28,12 +28,15 @@ func (r *reconciler) ensureDNSClusterRole() (bool, *rbacv1.ClusterRole, error) {
 			return false, nil, fmt.Errorf("failed to create dns cluster role: %v", err)
 		}
 		logrus.Infof("created dns cluster role: %s/%s", desired.Namespace, desired.Name)
+		return r.currentDNSClusterRole()
 	case haveCR:
-		if err := r.updateDNSClusterRole(current, desired); err != nil {
+		if updated, err := r.updateDNSClusterRole(current, desired); err != nil {
 			return true, current, err
+		} else if updated {
+			return r.currentDNSClusterRole()
 		}
 	}
-	return r.currentDNSClusterRole()
+	return true, current, nil
 }
 
 func (r *reconciler) currentDNSClusterRole() (bool, *rbacv1.ClusterRole, error) {
@@ -53,17 +56,17 @@ func desiredDNSClusterRole() *rbacv1.ClusterRole {
 	return cr
 }
 
-func (r *reconciler) updateDNSClusterRole(current, desired *rbacv1.ClusterRole) error {
+func (r *reconciler) updateDNSClusterRole(current, desired *rbacv1.ClusterRole) (bool, error) {
 	changed, updated := clusterRoleChanged(current, desired)
 	if !changed {
-		return nil
+		return false, nil
 	}
 
 	if err := r.client.Update(context.TODO(), updated); err != nil {
-		return fmt.Errorf("failed to update dns cluster role %s/%s: %v", updated.Namespace, updated.Name, err)
+		return false, fmt.Errorf("failed to update dns cluster role %s/%s: %v", updated.Namespace, updated.Name, err)
 	}
 	logrus.Infof("updated dns cluster role: %s/%s", updated.Namespace, updated.Name)
-	return nil
+	return true, nil
 }
 
 func clusterRoleChanged(current, expected *rbacv1.ClusterRole) (bool, *rbacv1.ClusterRole) {
