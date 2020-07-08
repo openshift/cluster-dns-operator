@@ -42,6 +42,13 @@ func TestDNSServiceChanged(t *testing.T) {
 			expect: true,
 		},
 		{
+			description: "if .spec.type is defaulted",
+			mutate: func(service *corev1.Service) {
+				service.Spec.Type = corev1.ServiceTypeClusterIP
+			},
+			expect: false,
+		},
+		{
 			description: "if .spec.type changes",
 			mutate: func(service *corev1.Service) {
 				service.Spec.Type = corev1.ServiceTypeNodePort
@@ -49,7 +56,14 @@ func TestDNSServiceChanged(t *testing.T) {
 			expect: true,
 		},
 		{
-			description: "if .spec.sessionAffinity changes",
+			description: "if .spec.sessionAffinity is defaulted",
+			mutate: func(service *corev1.Service) {
+				service.Spec.SessionAffinity = corev1.ServiceAffinityNone
+			},
+			expect: false,
+		},
+		{
+			description: "if .spec.sessionAffinity is set to a non-default value",
 			mutate: func(service *corev1.Service) {
 				service.Spec.SessionAffinity = corev1.ServiceAffinityClientIP
 			},
@@ -96,10 +110,7 @@ func TestDNSServiceChanged(t *testing.T) {
 				Namespace: "openshift-dns",
 				UID:       "1",
 			},
-			Spec: corev1.ServiceSpec{
-				Type:            corev1.ServiceTypeClusterIP,
-				SessionAffinity: corev1.ServiceAffinityNone,
-			},
+			Spec: corev1.ServiceSpec{},
 		}
 		mutated := original.DeepCopy()
 		tc.mutate(mutated)

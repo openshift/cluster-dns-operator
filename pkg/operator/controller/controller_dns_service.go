@@ -98,6 +98,8 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 		//
 		// TODO: Remove TopologyKeys when the service topology feature gate is enabled.
 		cmpopts.IgnoreFields(corev1.ServiceSpec{}, "ClusterIP", "TopologyKeys"),
+		cmp.Comparer(cmpServiceAffinity),
+		cmp.Comparer(cmpServiceType),
 		cmpopts.EquateEmpty(),
 	}
 
@@ -119,4 +121,24 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 	updated.Spec.ClusterIP = current.Spec.ClusterIP
 
 	return true, updated
+}
+
+func cmpServiceAffinity(a, b corev1.ServiceAffinity) bool {
+	if len(a) == 0 {
+		a = corev1.ServiceAffinityNone
+	}
+	if len(b) == 0 {
+		b = corev1.ServiceAffinityNone
+	}
+	return a == b
+}
+
+func cmpServiceType(a, b corev1.ServiceType) bool {
+	if len(a) == 0 {
+		a = corev1.ServiceTypeClusterIP
+	}
+	if len(b) == 0 {
+		b = corev1.ServiceTypeClusterIP
+	}
+	return a == b
 }

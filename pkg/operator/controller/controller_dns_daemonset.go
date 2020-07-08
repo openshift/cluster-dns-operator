@@ -207,7 +207,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		updated.Spec.Template.Spec.Tolerations = expected.Spec.Template.Spec.Tolerations
 		changed = true
 	}
-	if !cmp.Equal(current.Spec.Template.Spec.Volumes, expected.Spec.Template.Spec.Volumes, cmpopts.EquateEmpty()) {
+	if !cmp.Equal(current.Spec.Template.Spec.Volumes, expected.Spec.Template.Spec.Volumes, cmpopts.EquateEmpty(), cmp.Comparer(cmpConfigMapVolumeSource), cmp.Comparer(cmpSecretVolumeSource)) {
 		updated.Spec.Template.Spec.Volumes = expected.Spec.Template.Spec.Volumes
 		changed = true
 	}
@@ -231,6 +231,62 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		return false, nil
 	}
 	return true, updated
+}
+
+// volumeDefaultMode is the default mode value that the API uses for configmap
+// and secret volume sources.  Decimal 420 is octal 0644, which is u=rw,g=r,o=r.
+const volumeDefaultMode = int32(420)
+
+// cmpConfigMapVolumeSource compares two configmap volume source values and
+// returns a Boolean indicating whether they are equal.
+func cmpConfigMapVolumeSource(a, b corev1.ConfigMapVolumeSource) bool {
+	if a.LocalObjectReference != b.LocalObjectReference {
+		return false
+	}
+	if !cmp.Equal(a.Items, b.Items, cmpopts.EquateEmpty()) {
+		return false
+	}
+	aDefaultMode := volumeDefaultMode
+	if a.DefaultMode != nil {
+		aDefaultMode = *a.DefaultMode
+	}
+	bDefaultMode := volumeDefaultMode
+	if b.DefaultMode != nil {
+		bDefaultMode = *b.DefaultMode
+	}
+	if aDefaultMode != bDefaultMode {
+		return false
+	}
+	if !cmp.Equal(a.Optional, b.Optional, cmpopts.EquateEmpty()) {
+		return false
+	}
+	return true
+}
+
+// cmpSecretVolumeSource compares two secret volume source values and returns a
+// Boolean indicating whether they are equal.
+func cmpSecretVolumeSource(a, b corev1.SecretVolumeSource) bool {
+	if a.SecretName != b.SecretName {
+		return false
+	}
+	if !cmp.Equal(a.Items, b.Items, cmpopts.EquateEmpty()) {
+		return false
+	}
+	aDefaultMode := volumeDefaultMode
+	if a.DefaultMode != nil {
+		aDefaultMode = *a.DefaultMode
+	}
+	bDefaultMode := volumeDefaultMode
+	if b.DefaultMode != nil {
+		bDefaultMode = *b.DefaultMode
+	}
+	if aDefaultMode != bDefaultMode {
+		return false
+	}
+	if !cmp.Equal(a.Optional, b.Optional, cmpopts.EquateEmpty()) {
+		return false
+	}
+	return true
 }
 
 // cmpTolerations compares two Tolerations values and returns a Boolean
