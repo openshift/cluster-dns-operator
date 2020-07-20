@@ -23,3 +23,14 @@ spec:
           severity: warning
         annotations:
           message: "CoreDNS Health Checks are slowing down (instance {{ $labels.instance }})"
+      - alert: CoreDNSErrorsHigh
+        expr: |
+          (sum(rate(coredns_dns_response_rcode_count_total{rcode="SERVFAIL"}[5m]))
+            /
+          sum(rate(coredns_dns_response_rcode_count_total[5m])))
+          > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          message: "CoreDNS is returning SERVFAIL for {{ $value | humanizePercentage }} of requests."
