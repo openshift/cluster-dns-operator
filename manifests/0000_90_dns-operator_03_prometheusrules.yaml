@@ -10,7 +10,8 @@ spec:
     - name: openshift-dns.rules
       rules:
       - alert: CoreDNSPanicking
-        expr: coredns_panic_count_total > 0
+        expr: increase(coredns_panic_count_total[10m]) > 0
+        for: 5m
         labels:
           severity: warning
         annotations:
