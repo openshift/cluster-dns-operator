@@ -34,3 +34,17 @@ spec:
           severity: warning
         annotations:
           message: "CoreDNS is returning SERVFAIL for {{ $value | humanizePercentage }} of requests."
+      - alert: CoreDNSForwardHealthcheckFailureCount
+        expr: rate(coredns_forward_healthcheck_failure_count_total[10s]) > 3
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          message: '{{ $value }} CoreDNS health checks are failing to upstream server {{ $labels.to }} on {{ $labels.instance }}'
+      - alert: CoreDNSForwardHealthcheckBrokenCount
+        expr: rate(coredns_forward_healthcheck_broken_count_total[5s]) > 3
+        for: 15s
+        labels:
+          severity: warning
+        annotations:
+          message: '{{ $value }} CoreDNS health checks are failing for all upstream servers on {{ $labels.instance }}'
