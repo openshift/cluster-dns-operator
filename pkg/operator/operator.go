@@ -9,6 +9,7 @@ import (
 	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
+	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
 
 	"github.com/sirupsen/logrus"
 
@@ -38,6 +39,9 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
 		Scheme:    operatorclient.GetScheme(),
 		Namespace: "openshift-dns",
+		NewCache: cache.MultiNamespacedCacheBuilder([]string{
+			config.OperatorNamespace,
+			operatorcontroller.DefaultOperandNamespace}),
 		// Use a non-caching client everywhere. The default split client does not
 		// promise to invalidate the cache during writes (nor does it promise
 		// sequential create/get coherence), and we have code which (probably
@@ -54,7 +58,8 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 	}
 
 	// Create and register the operator controller with the operator manager.
-	cfg := operatorcontroller.Config{
+	cfg := operatorconfig.Config{
+		OperatorNamespace:      config.OperatorNamespace,
 		CoreDNSImage:           config.CoreDNSImage,
 		OpenshiftCLIImage:      config.OpenshiftCLIImage,
 		KubeRBACProxyImage:     config.KubeRBACProxyImage,
@@ -62,6 +67,11 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 	}
 	if _, err := operatorcontroller.New(operatorManager, cfg); err != nil {
 		return nil, fmt.Errorf("failed to create operator controller: %v", err)
+	}
+
+	// Set up the status controller.
+	if _, err := statuscontroller.New(operatorManager, cfg); err != nil {
+		return nil, fmt.Errorf("failed to create status controller: %v", err)
 	}
 
 	return &Operator{
