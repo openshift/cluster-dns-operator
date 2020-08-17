@@ -9,7 +9,6 @@ import (
 	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
-	operatorutil "github.com/openshift/cluster-dns-operator/pkg/util"
 
 	"github.com/sirupsen/logrus"
 
@@ -37,9 +36,8 @@ type Operator struct {
 // New creates (but does not start) a new operator from configuration.
 func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, error) {
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
-		Scheme:         operatorclient.GetScheme(),
-		Namespace:      "openshift-dns",
-		MapperProvider: operatorutil.NewDynamicRESTMapper,
+		Scheme:    operatorclient.GetScheme(),
+		Namespace: "openshift-dns",
 		// Use a non-caching client everywhere. The default split client does not
 		// promise to invalidate the cache during writes (nor does it promise
 		// sequential create/get coherence), and we have code which (probably
