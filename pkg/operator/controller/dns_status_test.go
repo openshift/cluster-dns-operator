@@ -27,6 +27,11 @@ func TestDNSStatusConditions(t *testing.T) {
 		{
 			description: "no cluster ip, 0/0 pods available",
 			inputs:      testInputs{false, 0, 0},
+			outputs:     testOutputs{true, true, false},
+		},
+		{
+			description: "cluster ip, 0/0 pods available",
+			inputs:      testInputs{true, 0, 0},
 			outputs:     testOutputs{true, false, false},
 		},
 		{
@@ -42,7 +47,7 @@ func TestDNSStatusConditions(t *testing.T) {
 		{
 			description: "no cluster ip, 2/2 pods available",
 			inputs:      testInputs{false, 2, 2},
-			outputs:     testOutputs{true, false, false},
+			outputs:     testOutputs{true, true, false},
 		},
 		{
 			description: "daemonset pod available on 0/0 nodes",

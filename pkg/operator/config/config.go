@@ -6,6 +6,9 @@ type Config struct {
 	// OperatorReleaseVersion is the current version of the operator.
 	OperatorReleaseVersion string
 
+	// OperatorNamespace is the namespace that the operator runs in.
+	OperatorNamespace string
+
 	// CoreDNSImage is the CoreDNS image to manage.
 	CoreDNSImage string
 

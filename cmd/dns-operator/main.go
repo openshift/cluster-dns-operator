@@ -5,7 +5,7 @@ import (
 
 	"github.com/openshift/cluster-dns-operator/pkg/operator"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
-	"github.com/openshift/cluster-dns-operator/pkg/operator/controller"
+	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
 
 	"github.com/sirupsen/logrus"
 
@@ -14,14 +14,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
 
+const operatorNamespace = "openshift-dns-operator"
+
 func main() {
 	metrics.DefaultBindAddress = ":60000"
 
 	// Collect operator configuration.
 	releaseVersion := os.Getenv("RELEASE_VERSION")
 	if len(releaseVersion) == 0 {
-		releaseVersion = controller.UnknownVersionValue
-		logrus.Infof("RELEASE_VERSION environment variable is missing, defaulting to %q", controller.UnknownVersionValue)
+		releaseVersion = statuscontroller.UnknownVersionValue
+		logrus.Infof("RELEASE_VERSION environment variable is missing, defaulting to %q", statuscontroller.UnknownVersionValue)
 	}
 	coreDNSImage := os.Getenv("IMAGE")
 	if len(coreDNSImage) == 0 {
@@ -38,6 +40,7 @@ func main() {
 	}
 
 	operatorConfig := operatorconfig.Config{
+		OperatorNamespace:      operatorNamespace,
 		OperatorReleaseVersion: releaseVersion,
 		CoreDNSImage:           coreDNSImage,
 		OpenshiftCLIImage:      cliImage,

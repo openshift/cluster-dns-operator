@@ -15,12 +15,36 @@ const (
 	// MetricsServingCertAnnotation is the annotation needed to generate
 	// the certificates for secure DNS metrics.
 	MetricsServingCertAnnotation = "service.beta.openshift.io/serving-cert-secret-name"
+
+	// DefaultOperandNamespace is the default namespace name of operands.
+	DefaultOperandNamespace = "openshift-dns"
+
+	// DefaultOperatorName is the default name of dns cluster operator.
+	DefaultOperatorName = "dns"
+
+	// DefaultDNSName is the default name of dns resource.
+	DefaultDNSName = "default"
 )
+
+// DNSClusterOperatorName returns the namespaced name of the ClusterOperator
+// resource for the operator.
+func DNSClusterOperatorName() types.NamespacedName {
+	return types.NamespacedName{
+		Name: DefaultOperatorName,
+	}
+}
+
+// DefaultDNSNamespaceName returns the namespaced name of the default DNS resource.
+func DefaultDNSNamespaceName() types.NamespacedName {
+	return types.NamespacedName{
+		Name: DefaultDNSName,
+	}
+}
 
 // DNSDaemonSetName returns the namespaced name for the dns daemonset.
 func DNSDaemonSetName(dns *operatorv1.DNS) types.NamespacedName {
 	return types.NamespacedName{
-		Namespace: "openshift-dns",
+		Namespace: DefaultOperandNamespace,
 		Name:      "dns-" + dns.Name,
 	}
 }

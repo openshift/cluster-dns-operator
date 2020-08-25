@@ -11,6 +11,8 @@ IMAGE_TAG=openshift/origin-cluster-dns-operator
 GO=GO111MODULE=on GOFLAGS=-mod=vendor go
 GO_BUILD_RECIPE=CGO_ENABLED=0 $(GO) build -o $(BIN) $(MAIN_PACKAGE)
 
+TEST ?= .*
+
 .PHONY: build
 build:
 	$(GO_BUILD_RECIPE)
@@ -44,7 +46,7 @@ release-local:
 
 .PHONY: test-e2e
 test-e2e:
-	KUBERNETES_CONFIG="$(KUBECONFIG)" $(GO) test -v -tags e2e ./...
+	$(GO) test -timeout 1h -count 1 -v -tags e2e -run "$(TEST)" ./test/e2e
 
 .PHONY: verify
 verify:
@@ -62,6 +64,10 @@ else
 	@echo "  - Building with docker ... "
 	docker build -t $(IMAGE_TAG) .
 endif
+
+.PHONY: run-local
+run-local: build
+	hack/run-local.sh
 
 .PHONY: clean
 clean:

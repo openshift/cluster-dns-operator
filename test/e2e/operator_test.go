@@ -13,6 +13,7 @@ import (
 
 	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
+	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -44,6 +45,15 @@ const (
 `
 )
 
+var (
+	dnsName = types.NamespacedName{Name: operatorcontroller.DefaultDNSName}
+	opName  = types.NamespacedName{Name: operatorcontroller.DefaultOperatorName}
+
+	defaultAvailableDNSConditions = []operatorv1.OperatorCondition{
+		{Type: operatorv1.OperatorStatusTypeAvailable, Status: operatorv1.ConditionTrue},
+	}
+)
+
 func getClient() (client.Client, error) {
 	// Get a kube client.
 	kubeConfig, err := config.GetConfig()
@@ -65,7 +75,7 @@ func TestOperatorAvailable(t *testing.T) {
 
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		co := &configv1.ClusterOperator{}
-		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DNSOperatorName}, co); err != nil {
+		if err := cl.Get(context.TODO(), opName, co); err != nil {
 			return false, nil
 		}
 
@@ -100,68 +110,26 @@ func TestDefaultDNSExists(t *testing.T) {
 	}
 }
 
-func TestVersionReporting(t *testing.T) {
+func TestOperatorSteadyConditions(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
 		t.Fatal(err)
 	}
+	expected := []configv1.ClusterOperatorStatusCondition{
+		{Type: configv1.OperatorAvailable, Status: configv1.ConditionTrue},
+	}
+	if err := waitForClusterOperatorConditions(cl, 10*time.Second, expected...); err != nil {
+		t.Errorf("did not get expected available condition: %v", err)
+	}
+}
 
-	deployment := &appsv1.Deployment{}
-	namespacedName := types.NamespacedName{Namespace: "openshift-dns-operator", Name: "dns-operator"}
-	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
-		if err := cl.Get(context.TODO(), namespacedName, deployment); err != nil {
-			return false, nil
-		}
-		return true, nil
-	})
+func TestDefaultDNSSteadyConditions(t *testing.T) {
+	cl, err := getClient()
 	if err != nil {
-		t.Errorf("failed to get deployment: %v", err)
+		t.Fatal(err)
 	}
-
-	var curVersion string
-	for _, env := range deployment.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "RELEASE_VERSION" {
-			curVersion = env.Value
-			break
-		}
-	}
-	if len(curVersion) == 0 {
-		t.Errorf("env RELEASE_VERSION not found in the operator deployment")
-	}
-
-	newVersion := "0.0.1-test"
-	setVersion(deployment, newVersion)
-	if err := cl.Update(context.TODO(), deployment); err != nil {
-		t.Fatalf("failed to update dns operator to new version: %v", err)
-	}
-	defer func() {
-		if err := cl.Get(context.TODO(), namespacedName, deployment); err != nil {
-			t.Fatalf("failed to get latest deployment: %v", err)
-		}
-		setVersion(deployment, curVersion)
-		if err := cl.Update(context.TODO(), deployment); err != nil {
-			t.Fatalf("failed to restore dns operator to old release version: %v", err)
-		}
-	}()
-
-	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
-		co := &configv1.ClusterOperator{}
-		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DNSOperatorName}, co); err != nil {
-			return false, nil
-		}
-
-		for _, v := range co.Status.Versions {
-			if v.Name == "operator" {
-				if v.Version == newVersion {
-					return true, nil
-				}
-				break
-			}
-		}
-		return false, nil
-	})
-	if err != nil {
-		t.Errorf("failed to observe updated version reported in dns clusteroperator status: %v", err)
+	if err := waitForDNSConditions(cl, 10*time.Second, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("did not get expected conditions: %v", err)
 	}
 }
 
@@ -269,17 +237,17 @@ func TestDNSForwarding(t *testing.T) {
 
 	// Get the CoreDNS image used by the test upstream resolver.
 	co := &configv1.ClusterOperator{}
-	if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DNSOperatorName}, co); err != nil {
-		t.Fatalf("failed to get clusteroperator %s: %v", operatorcontroller.DNSOperatorName, err)
+	if err := cl.Get(context.TODO(), opName, co); err != nil {
+		t.Fatalf("failed to get clusteroperator %s: %v", opName, err)
 	}
 	var (
 		coreImage      string
 		coreImageFound bool
 	)
 	for _, ver := range co.Status.Versions {
-		if ver.Name == operatorcontroller.CoreDNSVersionName {
+		if ver.Name == statuscontroller.CoreDNSVersionName {
 			if len(ver.Version) == 0 {
-				t.Fatalf("clusteroperator %s has empty coredns version", operatorcontroller.DNSOperatorName)
+				t.Fatalf("clusteroperator %s has empty coredns version", opName)
 			}
 			coreImageFound = true
 			coreImage = ver.Version
@@ -287,7 +255,7 @@ func TestDNSForwarding(t *testing.T) {
 		}
 	}
 	if !coreImageFound {
-		t.Fatalf("version %s not found for clusteroperator %s", operatorcontroller.CoreDNSVersionName, operatorcontroller.DNSOperatorName)
+		t.Fatalf("version %s not found for clusteroperator %s", statuscontroller.CoreDNSVersionName, opName)
 	}
 
 	// Create the upstream resolver Pod.
@@ -391,7 +359,7 @@ func TestDNSForwarding(t *testing.T) {
 		cliImageFound bool
 	)
 	for _, ver := range co.Status.Versions {
-		if ver.Name == operatorcontroller.OpenshiftCLIVersionName {
+		if ver.Name == statuscontroller.OpenshiftCLIVersionName {
 			if len(ver.Version) == 0 {
 				break
 			}
@@ -401,7 +369,7 @@ func TestDNSForwarding(t *testing.T) {
 		}
 	}
 	if !cliImageFound {
-		t.Fatalf("failed to find the %s version for clusteroperator %s", operatorcontroller.OpenshiftCLIVersionName, co.Name)
+		t.Fatalf("failed to find the %s version for clusteroperator %s", statuscontroller.OpenshiftCLIVersionName, co.Name)
 	}
 
 	// Create the client Pod.

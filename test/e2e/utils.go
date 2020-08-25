@@ -3,13 +3,23 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
+	"reflect"
 	"strings"
 	"time"
 
+	configv1 "github.com/openshift/api/config/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
+
+	"github.com/openshift/cluster-dns-operator/pkg/operator/controller"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
@@ -227,4 +237,55 @@ func buildContainer(name, image string, cmd []string) corev1.Container {
 		Image:   image,
 		Command: cmd,
 	}
+}
+
+func waitForClusterOperatorConditions(cl client.Client, timeout time.Duration, conditions ...configv1.ClusterOperatorStatusCondition) error {
+	return wait.PollImmediate(1*time.Second, timeout, func() (bool, error) {
+		co := &configv1.ClusterOperator{}
+		if err := cl.Get(context.TODO(), controller.DNSClusterOperatorName(), co); err != nil {
+			return false, err
+		}
+
+		expected := clusterOperatorConditionMap(conditions...)
+		current := clusterOperatorConditionMap(co.Status.Conditions...)
+		return conditionsMatchExpected(expected, current), nil
+	})
+}
+
+func waitForDNSConditions(cl client.Client, timeout time.Duration, name types.NamespacedName, conditions ...operatorv1.OperatorCondition) error {
+	return wait.PollImmediate(1*time.Second, timeout, func() (bool, error) {
+		dns := &operatorv1.DNS{}
+		if err := cl.Get(context.TODO(), name, dns); err != nil {
+			return false, err
+		}
+		expected := operatorConditionMap(conditions...)
+		current := operatorConditionMap(dns.Status.Conditions...)
+		return conditionsMatchExpected(expected, current), nil
+	})
+}
+
+func clusterOperatorConditionMap(conditions ...configv1.ClusterOperatorStatusCondition) map[string]string {
+	conds := map[string]string{}
+	for _, cond := range conditions {
+		conds[string(cond.Type)] = string(cond.Status)
+	}
+	return conds
+}
+
+func operatorConditionMap(conditions ...operatorv1.OperatorCondition) map[string]string {
+	conds := map[string]string{}
+	for _, cond := range conditions {
+		conds[cond.Type] = string(cond.Status)
+	}
+	return conds
+}
+
+func conditionsMatchExpected(expected, actual map[string]string) bool {
+	filtered := map[string]string{}
+	for k := range actual {
+		if _, comparable := expected[k]; comparable {
+			filtered[k] = actual[k]
+		}
+	}
+	return reflect.DeepEqual(expected, filtered)
 }

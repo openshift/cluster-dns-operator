@@ -49,7 +49,7 @@ func computeDNSStatusConditions(oldConditions []operatorv1.OperatorCondition, cl
 
 	conditions := []operatorv1.OperatorCondition{
 		computeDNSDegradedCondition(oldDegradedCondition, clusterIP, ds),
-		computeDNSProgressingCondition(oldProgressingCondition, ds),
+		computeDNSProgressingCondition(oldProgressingCondition, clusterIP, ds),
 		computeDNSAvailableCondition(oldAvailableCondition, clusterIP, ds),
 	}
 
@@ -67,12 +67,12 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 	switch {
 	case len(clusterIP) == 0 && ds.Status.NumberAvailable == 0:
 		degradedCondition.Status = operatorv1.ConditionTrue
-		degradedCondition.Reason = "NoClusterIPAndDaemonSet"
-		degradedCondition.Message = "No ClusterIP assigned to DNS Service and no DaemonSet pods running"
+		degradedCondition.Reason = "NoServiceIPAndNoDaemonSetPods"
+		degradedCondition.Message = "No IP assigned to DNS service and no DaemonSet pods running"
 	case len(clusterIP) == 0:
 		degradedCondition.Status = operatorv1.ConditionTrue
-		degradedCondition.Reason = "NoClusterIP"
-		degradedCondition.Message = "No ClusterIP assigned to DNS Service"
+		degradedCondition.Reason = "NoServiceIP"
+		degradedCondition.Message = "No IP assigned to DNS service"
 	case ds.Status.DesiredNumberScheduled == 0:
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "NoPodsDesired"
@@ -88,7 +88,7 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 	default:
 		degradedCondition.Status = operatorv1.ConditionFalse
 		degradedCondition.Reason = "AsExpected"
-		degradedCondition.Message = "ClusterIP assigned to DNS Service and minimum DaemonSet pods running"
+		degradedCondition.Message = "IP assigned to DNS service and minimum DaemonSet pods running"
 	}
 
 	return setDNSLastTransitionTime(degradedCondition, oldCondition)
@@ -96,19 +96,29 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 
 // computeDNSProgressingCondition computes the dns Progressing status condition
 // based on the status of ds.
-func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, ds *appsv1.DaemonSet) operatorv1.OperatorCondition {
+func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, clusterIP string, ds *appsv1.DaemonSet) operatorv1.OperatorCondition {
 	progressingCondition := &operatorv1.OperatorCondition{
 		Type: operatorv1.OperatorStatusTypeProgressing,
 	}
-	if ds.Status.NumberAvailable == ds.Status.DesiredNumberScheduled {
-		progressingCondition.Status = operatorv1.ConditionFalse
-		progressingCondition.Reason = "AsExpected"
-		progressingCondition.Message = "All expected Nodes running DaemonSet pod"
-	} else {
+	switch {
+	case len(clusterIP) == 0 && ds.Status.NumberAvailable != ds.Status.DesiredNumberScheduled:
+		progressingCondition.Status = operatorv1.ConditionTrue
+		progressingCondition.Reason = "Reconciling"
+		progressingCondition.Message = fmt.Sprintf("No IP assigned to DNS service and %d Nodes running a DaemonSet pod, want %d",
+			ds.Status.NumberAvailable, ds.Status.DesiredNumberScheduled)
+	case len(clusterIP) == 0:
+		progressingCondition.Status = operatorv1.ConditionTrue
+		progressingCondition.Reason = "Reconciling"
+		progressingCondition.Message = "No IP assigned to DNS service"
+	case ds.Status.NumberAvailable != ds.Status.DesiredNumberScheduled:
 		progressingCondition.Status = operatorv1.ConditionTrue
 		progressingCondition.Reason = "Reconciling"
 		progressingCondition.Message = fmt.Sprintf("%d Nodes running a DaemonSet pod, want %d",
 			ds.Status.NumberAvailable, ds.Status.DesiredNumberScheduled)
+	default:
+		progressingCondition.Status = operatorv1.ConditionFalse
+		progressingCondition.Reason = "AsExpected"
+		progressingCondition.Message = "All expected Nodes running DaemonSet pod and IP assigned to DNS service"
 	}
 
 	return setDNSLastTransitionTime(progressingCondition, oldCondition)
@@ -123,12 +133,12 @@ func computeDNSAvailableCondition(oldCondition *operatorv1.OperatorCondition, cl
 	switch {
 	case len(clusterIP) == 0 && ds.Status.NumberAvailable == 0:
 		availableCondition.Status = operatorv1.ConditionFalse
-		availableCondition.Reason = "NoClusterIPAndDaemonSet"
-		availableCondition.Message = "No ClusterIP assigned to DNS Service and no running DaemonSet pods"
+		availableCondition.Reason = "NoServiceIPAndNoDaemonSetPods"
+		availableCondition.Message = "No IP assigned to DNS service and no running DaemonSet pods"
 	case len(clusterIP) == 0:
 		availableCondition.Status = operatorv1.ConditionFalse
-		availableCondition.Reason = "NoDNSService"
-		availableCondition.Message = "No ClusterIP assigned to DNS Service"
+		availableCondition.Reason = "NoServiceIP"
+		availableCondition.Message = "No IP assigned to DNS service"
 	case ds.Status.NumberAvailable == 0:
 		availableCondition.Status = operatorv1.ConditionFalse
 		availableCondition.Reason = "DaemonSetUnavailable"
@@ -136,7 +146,7 @@ func computeDNSAvailableCondition(oldCondition *operatorv1.OperatorCondition, cl
 	default:
 		availableCondition.Status = operatorv1.ConditionTrue
 		availableCondition.Reason = "AsExpected"
-		availableCondition.Message = "Minimum number of Nodes running DaemonSet pod"
+		availableCondition.Message = "Minimum number of Nodes running DaemonSet pod and IP assigned to DNS service"
 	}
 
 	return setDNSLastTransitionTime(availableCondition, oldCondition)

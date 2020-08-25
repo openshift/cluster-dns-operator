@@ -9,6 +9,7 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
+	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
 
 	"github.com/sirupsen/logrus"
@@ -48,7 +49,7 @@ const (
 // DNS resources.
 //
 // The controller will be pre-configured to watch for DNS resources.
-func New(mgr manager.Manager, config Config) (controller.Controller, error) {
+func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controller, error) {
 	reconciler := &reconciler{
 		Config: config,
 		client: mgr.GetClient(),
@@ -73,18 +74,10 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	return c, nil
 }
 
-// Config holds all the things necessary for the controller to run.
-type Config struct {
-	CoreDNSImage           string
-	OpenshiftCLIImage      string
-	OperatorReleaseVersion string
-	KubeRBACProxyImage     string
-}
-
 // reconciler handles the actual dns reconciliation logic in response to
 // events.
 type reconciler struct {
-	Config
+	operatorconfig.Config
 
 	client client.Client
 	cache  cache.Cache
@@ -152,11 +145,6 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 				errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
 			}
 		}
-	}
-
-	// TODO: Should this be another controller?
-	if err := r.syncOperatorStatus(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to sync operator status: %v", err))
 	}
 
 	// Log in case of errors as the controller's logs get eaten.
