@@ -76,6 +76,7 @@ func TestOperatorAvailable(t *testing.T) {
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		co := &configv1.ClusterOperator{}
 		if err := cl.Get(context.TODO(), opName, co); err != nil {
+			t.Logf("failed to get DNS cluster operator %s: %v", opName.Name, err)
 			return false, nil
 		}
 
@@ -100,7 +101,8 @@ func TestDefaultDNSExists(t *testing.T) {
 
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		dns := &operatorv1.DNS{}
-		if err := cl.Get(context.TODO(), types.NamespacedName{Name: "default"}, dns); err != nil {
+		if err := cl.Get(context.TODO(), dnsName, dns); err != nil {
+			t.Logf("failed to get DNS operator %s: %v", dnsName.Name, err)
 			return false, nil
 		}
 		return true, nil
@@ -118,7 +120,7 @@ func TestOperatorSteadyConditions(t *testing.T) {
 	expected := []configv1.ClusterOperatorStatusCondition{
 		{Type: configv1.OperatorAvailable, Status: configv1.ConditionTrue},
 	}
-	if err := waitForClusterOperatorConditions(cl, 10*time.Second, expected...); err != nil {
+	if err := waitForClusterOperatorConditions(t, cl, 10*time.Second, expected...); err != nil {
 		t.Errorf("did not get expected available condition: %v", err)
 	}
 }
@@ -128,7 +130,7 @@ func TestDefaultDNSSteadyConditions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := waitForDNSConditions(cl, 10*time.Second, dnsName, defaultAvailableDNSConditions...); err != nil {
+	if err := waitForDNSConditions(t, cl, 10*time.Second, dnsName, defaultAvailableDNSConditions...); err != nil {
 		t.Errorf("did not get expected conditions: %v", err)
 	}
 }
@@ -143,6 +145,7 @@ func TestCoreDNSImageUpgrade(t *testing.T) {
 	namespacedName := types.NamespacedName{Namespace: "openshift-dns-operator", Name: "dns-operator"}
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		if err := cl.Get(context.TODO(), namespacedName, deployment); err != nil {
+			t.Logf("failed to get deployment %s/%s: %v", namespacedName.Namespace, namespacedName.Name, err)
 			return false, nil
 		}
 		return true, nil
@@ -180,6 +183,7 @@ func TestCoreDNSImageUpgrade(t *testing.T) {
 	err = wait.PollImmediate(1*time.Second, 3*time.Minute, func() (bool, error) {
 		podList := &corev1.PodList{}
 		if err := cl.List(context.TODO(), podList, client.InNamespace("openshift-dns")); err != nil {
+			t.Logf("failed to get pod list in openshift-dns namespace: %v", err)
 			return false, nil
 		}
 
@@ -270,8 +274,10 @@ func TestDNSForwarding(t *testing.T) {
 	}()
 
 	// Wait for the upstream resolver Pod to be ready.
+	name := types.NamespacedName{Namespace: upstreamResolver.Namespace, Name: upstreamResolver.Name}
 	err = wait.PollImmediate(1*time.Second, 2*time.Minute, func() (bool, error) {
-		if err := cl.Get(context.TODO(), types.NamespacedName{Namespace: upstreamResolver.Namespace, Name: upstreamResolver.Name}, upstreamResolver); err != nil {
+		if err := cl.Get(context.TODO(), name, upstreamResolver); err != nil {
+			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
 			return false, nil
 		}
 		for _, cond := range upstreamResolver.Status.Conditions {
@@ -383,8 +389,10 @@ func TestDNSForwarding(t *testing.T) {
 		}
 	}()
 	// Wait for the client Pod to be ready.
+	name = types.NamespacedName{Namespace: testClient.Namespace, Name: testClient.Name}
 	err = wait.PollImmediate(1*time.Second, 60*time.Second, func() (bool, error) {
-		if err := cl.Get(context.TODO(), types.NamespacedName{Namespace: testClient.Namespace, Name: testClient.Name}, testClient); err != nil {
+		if err := cl.Get(context.TODO(), name, testClient); err != nil {
+			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
 			return false, nil
 		}
 		for _, cond := range testClient.Status.Conditions {
