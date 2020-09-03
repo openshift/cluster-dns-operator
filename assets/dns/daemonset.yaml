@@ -127,7 +127,7 @@ spec:
             # Update /etc/hosts only if we get valid service IPs
             # We will not update /etc/hosts when there is coredns service outage or api unavailability
             # Stale entries could exist in /etc/hosts if the service is deleted
-            if [[ "${#svc_ips[@]}" -ne 0 ]]; then
+            if [[ -n "${svc_ips[*]}" ]]; then
               # Build a new hosts file from /etc/hosts with our custom entries filtered out
               grep -v "# ${OPENSHIFT_MARKER}" "${HOSTS_FILE}" > "${TEMP_FILE}"
 
