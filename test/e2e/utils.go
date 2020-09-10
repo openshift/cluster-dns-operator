@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"reflect"
 	"strings"
+	"testing"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -239,11 +240,13 @@ func buildContainer(name, image string, cmd []string) corev1.Container {
 	}
 }
 
-func waitForClusterOperatorConditions(cl client.Client, timeout time.Duration, conditions ...configv1.ClusterOperatorStatusCondition) error {
+func waitForClusterOperatorConditions(t *testing.T, cl client.Client, timeout time.Duration, conditions ...configv1.ClusterOperatorStatusCondition) error {
 	return wait.PollImmediate(1*time.Second, timeout, func() (bool, error) {
 		co := &configv1.ClusterOperator{}
-		if err := cl.Get(context.TODO(), controller.DNSClusterOperatorName(), co); err != nil {
-			return false, err
+		coName := controller.DNSClusterOperatorName()
+		if err := cl.Get(context.TODO(), coName, co); err != nil {
+			t.Logf("failed to get DNS cluster operator %s: %v", coName.Name, err)
+			return false, nil
 		}
 
 		expected := clusterOperatorConditionMap(conditions...)
@@ -252,11 +255,12 @@ func waitForClusterOperatorConditions(cl client.Client, timeout time.Duration, c
 	})
 }
 
-func waitForDNSConditions(cl client.Client, timeout time.Duration, name types.NamespacedName, conditions ...operatorv1.OperatorCondition) error {
+func waitForDNSConditions(t *testing.T, cl client.Client, timeout time.Duration, name types.NamespacedName, conditions ...operatorv1.OperatorCondition) error {
 	return wait.PollImmediate(1*time.Second, timeout, func() (bool, error) {
 		dns := &operatorv1.DNS{}
 		if err := cl.Get(context.TODO(), name, dns); err != nil {
-			return false, err
+			t.Logf("failed to get DNS operator %s: %v", name.Name, err)
+			return false, nil
 		}
 		expected := operatorConditionMap(conditions...)
 		current := operatorConditionMap(dns.Status.Conditions...)
