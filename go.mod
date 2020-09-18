@@ -14,9 +14,9 @@ require (
 
 	github.com/sirupsen/logrus v1.4.2
 
-	k8s.io/api v0.18.0-rc.1
-	k8s.io/apimachinery v0.18.0-rc.1
-	k8s.io/client-go v0.18.0-rc.1
+	k8s.io/api v0.18.9
+	k8s.io/apimachinery v0.18.9
+	k8s.io/client-go v0.18.9
 
 	sigs.k8s.io/controller-runtime v0.3.1-0.20191011155846-b2bc3490f2e3
 )
