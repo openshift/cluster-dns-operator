@@ -5,6 +5,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -90,6 +91,46 @@ func TestOperatorAvailable(t *testing.T) {
 	})
 	if err != nil {
 		t.Errorf("did not get expected available condition: %v", err)
+	}
+}
+
+func TestClusterOperatorStatusRelatedObjects(t *testing.T) {
+	cl, err := getClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []configv1.ObjectReference{
+		{
+			Resource: "namespaces",
+			Name:     "openshift-dns-operator",
+		},
+		{
+			Group:    operatorv1.GroupName,
+			Resource: "dnses",
+			Name:     "default",
+		},
+		{
+			Resource: "namespaces",
+			Name:     "openshift-dns",
+		},
+	}
+
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		co := &configv1.ClusterOperator{}
+		if err := cl.Get(context.TODO(), opName, co); err != nil {
+			t.Logf("failed to get DNS cluster operator %s: %v", opName.Name, err)
+			return false, nil
+		}
+
+		if reflect.DeepEqual(expected, co.Status.RelatedObjects) {
+			return true, nil
+		}
+
+		return false, nil
+	})
+	if err != nil {
+		t.Errorf("did not get expected status related objects: %v", err)
 	}
 }
 

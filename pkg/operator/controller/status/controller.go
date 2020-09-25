@@ -104,7 +104,7 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 	related := []configv1.ObjectReference{
 		{
 			Resource: "namespaces",
-			Name:     operatorcontroller.DNSClusterOperatorName().Name,
+			Name:     r.Config.OperatorNamespace,
 		},
 		{
 			Group:    operatorv1.GroupName,
