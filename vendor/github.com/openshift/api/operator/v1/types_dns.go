@@ -42,6 +42,13 @@ type DNSSpec struct {
 	//
 	// +optional
 	Servers []Server `json:"servers,omitempty"`
+	// globalCache is an int32 that defines the maximum cache TTL in seconds.
+	// All records except zone transfers and metadata records will be cached.
+	//
+	// If this field is nil, the default 30 seconds will be used.
+	//
+	// +optional
+	GlobalCache uint32 `json:"globalCache,omitempty"`
 }
 
 // Server defines the schema for a server that runs per instance of CoreDNS.

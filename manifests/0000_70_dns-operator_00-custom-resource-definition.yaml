@@ -38,6 +38,13 @@ spec:
           description: spec is the specification of the desired behavior of the DNS.
           type: object
           properties:
+            globalCache:
+                description: "globalCache is an int32 that defines the maximum cache
+                  TTL in seconds. \n All records except zone transfers and metadata
+                  records will be cached. \n If this field is nil, the default 30
+                  seconds will be used."
+                type: integer
+                format: int32
             servers:
               description: "servers is a list of DNS resolvers that provide name query
                 delegation for one or more subdomains outside the scope of the cluster

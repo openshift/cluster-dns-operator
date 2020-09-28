@@ -15,6 +15,7 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 			Name: DefaultDNSController,
 		},
 		Spec: operatorv1.DNSSpec{
+			GlobalCache: 900,
 			Servers: []operatorv1.Server{
 				{
 					Name:  "foo",
@@ -53,7 +54,7 @@ bar.com:5353 example.com:5353 {
     forward . /etc/resolv.conf {
         policy sequential
     }
-    cache 30
+    cache 900
     reload
 }
 `

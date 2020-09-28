@@ -41,7 +41,7 @@ var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Se
     forward . /etc/resolv.conf {
         policy sequential
     }
-    cache 30
+    cache {{.GlobalCache}}
     reload
 }
 `))
@@ -91,12 +91,21 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.Con
 		clusterDomain = "cluster.local"
 	}
 
+	var globalCache uint32
+	if dns.Spec.GlobalCache == 0 {
+		globalCache = 30
+	} else {
+		globalCache = dns.Spec.GlobalCache
+	}
+
 	corefileParameters := struct {
 		ClusterDomain string
 		Servers       interface{}
+		GlobalCache   uint32
 	}{
 		ClusterDomain: clusterDomain,
 		Servers:       dns.Spec.Servers,
+		GlobalCache:   globalCache,
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {
