@@ -167,7 +167,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: true,
 		},
 		{
-			description: "if the config-volume default mode value is defaulted",
+			description: "if the " + configVolume + " default mode value is defaulted",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				newVal := volumeDefaultMode
 				daemonset.Spec.Template.Spec.Volumes[0].ConfigMap.DefaultMode = &newVal
@@ -175,7 +175,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: false,
 		},
 		{
-			description: "if the config-volume default mode value changes",
+			description: "if the " + configVolume + " default mode value changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				newVal := int32(0)
 				daemonset.Spec.Template.Spec.Volumes[0].ConfigMap.DefaultMode = &newVal
@@ -183,7 +183,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: true,
 		},
 		{
-			description: "if the metrics-tls default mode value is defaulted",
+			description: "if the " + metricsTls + " default mode value is defaulted",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				newVal := volumeDefaultMode
 				daemonset.Spec.Template.Spec.Volumes[2].Secret.DefaultMode = &newVal
@@ -191,7 +191,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: false,
 		},
 		{
-			description: "if the metrics-tls default mode value changes",
+			description: "if the " + metricsTls + " default mode value changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				newVal := int32(0)
 				daemonset.Spec.Template.Spec.Volumes[2].Secret.DefaultMode = &newVal
@@ -242,7 +242,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 						},
 						Volumes: []corev1.Volume{
 							{
-								Name: "config-volume",
+								Name: configVolume,
 								VolumeSource: corev1.VolumeSource{
 									ConfigMap: &corev1.ConfigMapVolumeSource{
 										LocalObjectReference: corev1.LocalObjectReference{
@@ -261,10 +261,10 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 								},
 							},
 							{
-								Name: "metrics-tls",
+								Name: metricsTls,
 								VolumeSource: corev1.VolumeSource{
 									Secret: &corev1.SecretVolumeSource{
-										SecretName: "dns-default-metrics-tls",
+										SecretName: "dns-default-" + metricsTls,
 									},
 								},
 							},

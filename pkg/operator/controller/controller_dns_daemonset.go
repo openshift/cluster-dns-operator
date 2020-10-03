@@ -62,6 +62,12 @@ func (r *reconciler) ensureDNSDaemonSetDeleted(dns *operatorv1.DNS) error {
 	return nil
 }
 
+const (
+    configVolume string = "config-volume"
+    metricsTls   string = "metrics-tls"
+    // values are still hardcoded in manifests and assets folders
+)
+
 // desiredDNSDaemonSet returns the desired dns daemonset.
 func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) (*appsv1.DaemonSet, error) {
 	daemonset := manifests.DNSDaemonSet()
@@ -81,23 +87,21 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 
 	coreFileVolumeFound := false
 	for i := range daemonset.Spec.Template.Spec.Volumes {
-		// TODO: remove hardcoding of volume name
 		switch daemonset.Spec.Template.Spec.Volumes[i].Name {
-		case "config-volume":
+		case configVolume:
 			daemonset.Spec.Template.Spec.Volumes[i].ConfigMap.Name = DNSConfigMapName(dns).Name
 			coreFileVolumeFound = true
 			break
-		case "metrics-tls":
+		case metricsTls:
 			daemonset.Spec.Template.Spec.Volumes[i].Secret = &corev1.SecretVolumeSource{
 				SecretName: DNSMetricsSecretName(dns),
 			}
 		}
 	}
 	if !coreFileVolumeFound {
-		return nil, fmt.Errorf("volume 'config-volume' is not found")
+		return nil, fmt.Errorf("volume '" + configVolume + "' is not found")
 	}
-
-	for i, c := range daemonset.Spec.Template.Spec.Containers {
+    for i, c := range daemonset.Spec.Template.Spec.Containers {
 		switch c.Name {
 		case "dns":
 			daemonset.Spec.Template.Spec.Containers[i].Image = coreDNSImage
