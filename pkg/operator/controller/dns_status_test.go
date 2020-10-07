@@ -13,8 +13,9 @@ import (
 
 func TestDNSStatusConditions(t *testing.T) {
 	type testInputs struct {
-		haveClusterIP bool
-		avail, desire int32
+		haveClusterIP  bool
+		avail, desire  int32
+		resolverErrors int
 	}
 	type testOutputs struct {
 		degraded, progressing, available bool
@@ -26,74 +27,83 @@ func TestDNSStatusConditions(t *testing.T) {
 	}{
 		{
 			description: "no cluster ip, 0/0 pods available",
-			inputs:      testInputs{false, 0, 0},
+			inputs:      testInputs{false, 0, 0, 0},
 			outputs:     testOutputs{true, true, false},
 		},
 		{
 			description: "cluster ip, 0/0 pods available",
-			inputs:      testInputs{true, 0, 0},
+			inputs:      testInputs{true, 0, 0, 0},
 			outputs:     testOutputs{true, false, false},
 		},
 		{
 			description: "no cluster ip, 0/2 pods available",
-			inputs:      testInputs{false, 0, 2},
+			inputs:      testInputs{false, 0, 2, 0},
 			outputs:     testOutputs{true, true, false},
 		},
 		{
 			description: "no cluster ip, 1/2 pods available",
-			inputs:      testInputs{false, 1, 2},
+			inputs:      testInputs{false, 1, 2, 0},
 			outputs:     testOutputs{true, true, false},
 		},
 		{
 			description: "no cluster ip, 2/2 pods available",
-			inputs:      testInputs{false, 2, 2},
+			inputs:      testInputs{false, 2, 2, 0},
 			outputs:     testOutputs{true, true, false},
 		},
 		{
 			description: "daemonset pod available on 0/0 nodes",
-			inputs:      testInputs{true, 0, 0},
+			inputs:      testInputs{true, 0, 0, 0},
 			outputs:     testOutputs{true, false, false},
 		},
 		{
 			description: "daemonset pod available on 0/2 nodes",
-			inputs:      testInputs{true, 0, 2},
+			inputs:      testInputs{true, 0, 2, 0},
 			outputs:     testOutputs{true, true, false},
 		},
 		{
 			description: "daemonset pod available on 1/2 nodes",
-			inputs:      testInputs{true, 1, 2},
+			inputs:      testInputs{true, 1, 2, 0},
 			outputs:     testOutputs{false, true, true},
 		},
 		{
 			description: "daemonset pod available on 2/2 nodes",
-			inputs:      testInputs{true, 2, 2},
+			inputs:      testInputs{true, 2, 2, 0},
 			outputs:     testOutputs{false, false, true},
 		},
 		{
 			description: "daemonset pod available on 1/3 nodes",
-			inputs:      testInputs{true, 1, 3},
+			inputs:      testInputs{true, 1, 3, 0},
 			outputs:     testOutputs{true, true, true},
 		},
 		{
 			description: "daemonset pod available on 2/3 nodes",
-			inputs:      testInputs{true, 2, 3},
+			inputs:      testInputs{true, 2, 3, 0},
 			outputs:     testOutputs{false, true, true},
 		},
 		{
 			description: "daemonset pod available on 0/1 nodes",
-			inputs:      testInputs{true, 0, 1},
+			inputs:      testInputs{true, 0, 1, 0},
+			outputs:     testOutputs{true, true, false},
+		},
+		{
+			description: "some endpoints unavailable",
+			inputs:      testInputs{true, 0, 1, 2},
 			outputs:     testOutputs{true, true, false},
 		},
 	}
 
 	for i, tc := range testCases {
 		var (
-			clusterIP string
+			clusterIP    string
+			resolverErrs []error
 
 			degraded, progressing, available operatorv1.ConditionStatus
 		)
 		if tc.inputs.haveClusterIP {
 			clusterIP = "1.2.3.4"
+		}
+		for i := 1; i <= tc.inputs.resolverErrors; i++ {
+			resolverErrs = append(resolverErrs, fmt.Errorf("error %d", i))
 		}
 		maxUnavailable := intstr.FromInt(1)
 		ds := &appsv1.DaemonSet{
@@ -141,7 +151,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: available,
 			},
 		}
-		actual := computeDNSStatusConditions([]operatorv1.OperatorCondition{}, clusterIP, ds)
+		actual := computeDNSStatusConditions([]operatorv1.OperatorCondition{}, clusterIP, ds, resolverErrs)
 		gotExpected := true
 		if len(actual) != len(expected) {
 			gotExpected = false

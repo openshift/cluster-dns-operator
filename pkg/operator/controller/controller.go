@@ -351,6 +351,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
 		}
+		endpoints := &corev1.Endpoints{}
 		if haveSvc, svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
 			// Set clusterIP to an empty string to cause ClusterOperator to report
 			// Available=False and Degraded=True.
@@ -358,11 +359,23 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 			errs = append(errs, fmt.Errorf("failed to create service for dns %s: %v", dns.Name, err))
 		} else if !haveSvc {
 			errs = append(errs, fmt.Errorf("failed to get service for dns %s", dns.Name))
-		} else if err := r.ensureMetricsIntegration(dns, svc, daemonsetRef); err != nil {
-			errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))
+		} else {
+			// The Service is required to define the ServiceMonitor.
+			if err := r.ensureMetricsIntegration(dns, svc, daemonsetRef); err != nil {
+				errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))
+			}
+
+			// The Service is required for Endpoints to exist.
+			name := types.NamespacedName{
+				Namespace: svc.Namespace,
+				Name:      svc.Name,
+			}
+			if err := r.client.Get(context.TODO(), name, endpoints); err != nil {
+				errs = append(errs, fmt.Errorf("failed to endpoints for dns %s: %v", dns.Name, err))
+			}
 		}
 
-		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset); err != nil {
+		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset, endpoints); err != nil {
 			errs = append(errs, fmt.Errorf("failed to sync status of dns %s/%s: %v", daemonset.Namespace, daemonset.Name, err))
 		}
 	}
