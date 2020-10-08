@@ -172,17 +172,24 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	for _, name := range []string{"dns", "dns-node-resolver", "kube-rbac-proxy"} {
 		var curIndex int
 		var curImage, expImage string
+		var curReady, expReady corev1.HTTPGetAction
 
 		for i, c := range current.Spec.Template.Spec.Containers {
 			if name == c.Name {
 				curIndex = i
 				curImage = current.Spec.Template.Spec.Containers[i].Image
+				if c.ReadinessProbe != nil && c.ReadinessProbe.HTTPGet != nil {
+					curReady = *c.ReadinessProbe.HTTPGet
+				}
 				break
 			}
 		}
 		for i, c := range expected.Spec.Template.Spec.Containers {
 			if name == c.Name {
 				expImage = expected.Spec.Template.Spec.Containers[i].Image
+				if c.ReadinessProbe != nil && c.ReadinessProbe.HTTPGet != nil {
+					expReady = *c.ReadinessProbe.HTTPGet
+				}
 				break
 			}
 		}
@@ -192,15 +199,25 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 			updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
 			changed = true
 			break
-		} else if curImage != expImage {
-			updated.Spec.Template.Spec.Containers[curIndex].Image = expImage
-			changed = true
+		} else {
+			if curImage != expImage {
+				updated.Spec.Template.Spec.Containers[curIndex].Image = expImage
+				changed = true
+			}
+			if !cmp.Equal(curReady, expReady) {
+				updated.Spec.Template.Spec.Containers[curIndex].ReadinessProbe = expected.Spec.Template.Spec.Containers[curIndex].ReadinessProbe
+				changed = true
+			}
 		}
 	}
 	// TODO: Also check Env?
 
 	if !cmp.Equal(current.Spec.Template.Spec.NodeSelector, expected.Spec.Template.Spec.NodeSelector, cmpopts.EquateEmpty()) {
 		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
+		changed = true
+	}
+	if !cmp.Equal(current.Spec.Template.Spec.TerminationGracePeriodSeconds, expected.Spec.Template.Spec.TerminationGracePeriodSeconds, cmpopts.EquateEmpty()) {
+		updated.Spec.Template.Spec.TerminationGracePeriodSeconds = expected.Spec.Template.Spec.TerminationGracePeriodSeconds
 		changed = true
 	}
 	if !cmp.Equal(current.Spec.Template.Spec.Tolerations, expected.Spec.Template.Spec.Tolerations, cmpopts.EquateEmpty(), cmpopts.SortSlices(cmpTolerations)) {

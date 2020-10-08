@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestDesiredDNSDaemonset(t *testing.T) {
@@ -198,10 +199,26 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			},
 			expect: true,
 		},
+		{
+			description: "if the readiness probe endpoint changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[0].ReadinessProbe.Handler.HTTPGet.Path = "/ready"
+			},
+			expect: true,
+		},
+		{
+			description: "if the termination grace period changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				sixty := int64(60)
+				daemonset.Spec.Template.Spec.TerminationGracePeriodSeconds = &sixty
+			},
+			expect: true,
+		},
 	}
 
 	for _, tc := range testCases {
 		hostPathFile := corev1.HostPathFile
+		thirty := int64(30)
 		original := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dns-original",
@@ -218,6 +235,17 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 								Command: []string{
 									"a",
 									"b",
+								},
+								ReadinessProbe: &corev1.Probe{
+									Handler: corev1.Handler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path: "/health",
+											Port: intstr.IntOrString{
+												IntVal: int32(8080),
+											},
+											Scheme: "HTTP",
+										},
+									},
 								},
 							},
 							{
@@ -240,6 +268,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 						NodeSelector: map[string]string{
 							"beta.kubernetes.io/os": "linux",
 						},
+						TerminationGracePeriodSeconds: &thirty,
 						Volumes: []corev1.Volume{
 							{
 								Name: "config-volume",
