@@ -32,7 +32,10 @@ var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Se
 {{end -}}
 .:5353 {
     errors
-    health
+    health {
+        lameduck 20s
+    }
+    ready
     kubernetes {{.ClusterDomain}} in-addr.arpa ip6.arpa {
         pods insecure
         fallthrough in-addr.arpa ip6.arpa
