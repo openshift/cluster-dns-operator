@@ -26,8 +26,8 @@ spec:
           protocol: TCP
         readinessProbe:
           httpGet:
-            path: /health
-            port: 8080
+            path: /ready
+            port: 8181
             scheme: HTTP
           initialDelaySeconds: 10
           periodSeconds: 10
@@ -152,6 +152,7 @@ spec:
       dnsPolicy: Default
       nodeSelector:
         kubernetes.io/os: linux      
+      terminationGracePeriodSeconds: 120
       volumes:
       - name: config-volume
         configMap:
