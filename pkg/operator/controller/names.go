@@ -85,3 +85,12 @@ func DNSServiceMonitorName(dns *operatorv1.DNS) types.NamespacedName {
 func DNSMetricsSecretName(dns *operatorv1.DNS) string {
 	return "dns-" + dns.Name + "-metrics-tls"
 }
+
+// NodeResolverDaemonSetName returns the namespaced name for the node resolver
+// daemonset.
+func NodeResolverDaemonSetName() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: DefaultOperandNamespace,
+		Name:      "node-resolver",
+	}
+}

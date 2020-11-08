@@ -334,6 +334,17 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	}
 
 	errs := []error{}
+
+	// In 4.6 and earlier, the node resolver runs as a container in the
+	// daemonset that ensureDNSDaemonSet manages, and if a separate node
+	// resolver daemonset exists, then ensureNodeResolverDaemonset deletes
+	// it.  We want to delete the node resolver daemonset before updating
+	// the DNS daemonset to avoid having both the node resolver running in
+	// both daemonsets at the same time.
+	if _, _, err := r.ensureNodeResolverDaemonSet(clusterIP, clusterDomain); err != nil {
+		errs = append(errs, err)
+	}
+
 	if haveDS, daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
 	} else if !haveDS {
