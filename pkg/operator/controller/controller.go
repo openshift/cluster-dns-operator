@@ -334,6 +334,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	}
 
 	errs := []error{}
+
 	if haveDS, daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
 	} else if !haveDS {
@@ -365,6 +366,14 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset); err != nil {
 			errs = append(errs, fmt.Errorf("failed to sync status of dns %s/%s: %v", daemonset.Namespace, daemonset.Name, err))
 		}
+	}
+
+	// In 4.7 and earlier, the node resolver controller runs as a container
+	// in the daemonset that ensureDNSDaemonSet manages, and if a separate
+	// node resolver daemonset exists, then ensureNodeResolverDaemonset
+	// deletes it.
+	if _, _, err := r.ensureNodeResolverDaemonSet(clusterIP, clusterDomain); err != nil {
+		errs = append(errs, err)
 	}
 
 	return utilerrors.NewAggregate(errs)
