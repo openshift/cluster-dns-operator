@@ -20,12 +20,12 @@ import (
 )
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
-func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (bool, *appsv1.DaemonSet, error) {
+func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS) (bool, *appsv1.DaemonSet, error) {
 	haveDS, current, err := r.currentDNSDaemonSet(dns)
 	if err != nil {
 		return false, nil, err
 	}
-	desired, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, r.CoreDNSImage, r.OpenshiftCLIImage, r.KubeRBACProxyImage)
+	desired, err := desiredDNSDaemonSet(dns, r.CoreDNSImage, r.KubeRBACProxyImage)
 	if err != nil {
 		return haveDS, current, fmt.Errorf("failed to build dns daemonset: %v", err)
 	}
@@ -63,7 +63,7 @@ func (r *reconciler) ensureDNSDaemonSetDeleted(dns *operatorv1.DNS) error {
 }
 
 // desiredDNSDaemonSet returns the desired dns daemonset.
-func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) (*appsv1.DaemonSet, error) {
+func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage string) (*appsv1.DaemonSet, error) {
 	daemonset := manifests.DNSDaemonSet()
 	name := DNSDaemonSetName(dns)
 	daemonset.Name = name.Name
@@ -101,26 +101,6 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 		switch c.Name {
 		case "dns":
 			daemonset.Spec.Template.Spec.Containers[i].Image = coreDNSImage
-		case "dns-node-resolver":
-			daemonset.Spec.Template.Spec.Containers[i].Image = openshiftCLIImage
-			envs := []corev1.EnvVar{}
-			if len(clusterIP) > 0 {
-				envs = append(envs, corev1.EnvVar{
-					Name:  "NAMESERVER",
-					Value: clusterIP,
-				})
-			}
-			if len(clusterDomain) > 0 {
-				envs = append(envs, corev1.EnvVar{
-					Name:  "CLUSTER_DOMAIN",
-					Value: clusterDomain,
-				})
-			}
-
-			if daemonset.Spec.Template.Spec.Containers[i].Env == nil {
-				daemonset.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{}
-			}
-			daemonset.Spec.Template.Spec.Containers[i].Env = append(daemonset.Spec.Template.Spec.Containers[i].Env, envs...)
 		case "kube-rbac-proxy":
 			daemonset.Spec.Template.Spec.Containers[i].Image = kubeRBACProxyImage
 		}
@@ -176,7 +156,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		changed = true
 	}
 
-	for _, name := range []string{"dns", "dns-node-resolver", "kube-rbac-proxy"} {
+	for _, name := range []string{"dns", "kube-rbac-proxy"} {
 		var curIndex int
 		var curImage, expImage string
 		var curReady, expReady corev1.Probe

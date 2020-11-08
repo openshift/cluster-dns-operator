@@ -16,4 +16,7 @@ func TestManifests(t *testing.T) {
 	MetricsClusterRoleBinding()
 	MetricsRole()
 	MetricsRoleBinding()
+
+	NodeResolverScript()
+	NodeResolverServiceAccount()
 }

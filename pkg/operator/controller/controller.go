@@ -268,6 +268,21 @@ func (r *reconciler) ensureDNSNamespace() error {
 		logrus.Infof("created dns service account: %s/%s", sa.Namespace, sa.Name)
 	}
 
+	nodeResolverServiceAccount := manifests.NodeResolverServiceAccount()
+	nodeResolverServiceAccountName := types.NamespacedName{
+		Namespace: nodeResolverServiceAccount.Namespace,
+		Name:      nodeResolverServiceAccount.Name,
+	}
+	if err := r.client.Get(context.TODO(), nodeResolverServiceAccountName, nodeResolverServiceAccount); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get serviceaccount %s: %w", nodeResolverServiceAccountName, err)
+		}
+		if err := r.client.Create(context.TODO(), nodeResolverServiceAccount); err != nil {
+			return fmt.Errorf("failed to create serviceaccount %s: %w", nodeResolverServiceAccountName, err)
+		}
+		logrus.Infof("created serviceaccount %s", nodeResolverServiceAccountName)
+	}
+
 	return nil
 }
 
@@ -335,7 +350,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 
 	errs := []error{}
 
-	if haveDS, daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
+	if haveDS, daemonset, err := r.ensureDNSDaemonSet(dns); err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
 	} else if !haveDS {
 		errs = append(errs, fmt.Errorf("failed to get daemonset for dns %s", dns.Name))
@@ -368,10 +383,6 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		}
 	}
 
-	// In 4.7 and earlier, the node resolver controller runs as a container
-	// in the daemonset that ensureDNSDaemonSet manages, and if a separate
-	// node resolver daemonset exists, then ensureNodeResolverDaemonset
-	// deletes it.
 	if _, _, err := r.ensureNodeResolverDaemonSet(clusterIP, clusterDomain); err != nil {
 		errs = append(errs, err)
 	}
