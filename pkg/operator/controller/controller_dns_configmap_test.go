@@ -52,7 +52,7 @@ bar.com:5353 example.com:5353 {
         upstream
         fallthrough in-addr.arpa ip6.arpa
     }
-    prometheus :9153
+    prometheus 127.0.0.1:9153
     forward . /etc/resolv.conf {
         policy sequential
     }

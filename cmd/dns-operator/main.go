@@ -17,7 +17,7 @@ import (
 const operatorNamespace = "openshift-dns-operator"
 
 func main() {
-	metrics.DefaultBindAddress = ":60000"
+	metrics.DefaultBindAddress = "127.0.0.1:60000"
 
 	// Collect operator configuration.
 	releaseVersion := os.Getenv("RELEASE_VERSION")
