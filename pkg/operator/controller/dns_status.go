@@ -2,7 +2,11 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -12,6 +16,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // syncDNSStatus computes the current status of dns and
@@ -29,6 +34,58 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 	}
 
 	return nil
+}
+
+// getIntOrPercentValueSafely is a helper for getScaledValueFromIntOrPercent and
+// was adapted from
+// <https://github.com/kubernetes/kubernetes/blob/v1.20.0-rc.0/staging/src/k8s.io/apimachinery/pkg/util/intstr/intstr.go#L203-L223>.
+func getIntOrPercentValueSafely(intOrStr *intstr.IntOrString) (int, bool, error) {
+	switch intOrStr.Type {
+	case intstr.Int:
+		return intOrStr.IntValue(), false, nil
+	case intstr.String:
+		isPercent := false
+		s := intOrStr.StrVal
+		if strings.HasSuffix(s, "%") {
+			isPercent = true
+			s = strings.TrimSuffix(intOrStr.StrVal, "%")
+		} else {
+			return 0, false, fmt.Errorf("invalid type: string is not a percentage")
+		}
+		v, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, false, fmt.Errorf("invalid value %q: %v", intOrStr.StrVal, err)
+		}
+		return int(v), isPercent, nil
+	}
+	return 0, false, fmt.Errorf("invalid type: neither int nor percentage")
+}
+
+// getScaledValueFromIntOrPercent returns a scaled value from an IntOrString
+// type. If the IntOrString is a percentage string value, it's treated as a
+// percentage and scaled appropriately in accordance to the total; if it's an
+// int value, it's treated as a a simple value; and if it is a string value
+// which is either non-numeric or numeric but lacking a trailing '%', it returns
+// an error.
+//
+// This definition was adapted from
+// <https://github.com/kubernetes/kubernetes/blob/v1.20.0-rc.0/staging/src/k8s.io/apimachinery/pkg/util/intstr/intstr.go#L141-L162>.
+func getScaledValueFromIntOrPercent(intOrPercent *intstr.IntOrString, total int, roundUp bool) (int, error) {
+	if intOrPercent == nil {
+		return 0, errors.New("nil value for IntOrString")
+	}
+	value, isPercent, err := getIntOrPercentValueSafely(intOrPercent)
+	if err != nil {
+		return 0, fmt.Errorf("invalid value for IntOrString: %v", err)
+	}
+	if isPercent {
+		if roundUp {
+			value = int(math.Ceil(float64(value) * (float64(total)) / 100))
+		} else {
+			value = int(math.Floor(float64(value) * (float64(total)) / 100))
+		}
+	}
+	return value, nil
 }
 
 // computeDNSStatusConditions computes dns status conditions based on
@@ -64,7 +121,12 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		Type: operatorv1.OperatorStatusTypeDegraded,
 	}
 	numberUnavailable := ds.Status.DesiredNumberScheduled - ds.Status.NumberAvailable
+	maxUnavailable, intstrErr := getScaledValueFromIntOrPercent(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable, int(ds.Status.DesiredNumberScheduled), true)
 	switch {
+	case intstrErr != nil:
+		degradedCondition.Status = operatorv1.ConditionUnknown
+		degradedCondition.Reason = "InvalidMaxUnavailable"
+		degradedCondition.Message = fmt.Sprintf("MaxUnavailable has an invalid value: %v", intstrErr)
 	case len(clusterIP) == 0 && ds.Status.NumberAvailable == 0:
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "NoServiceIPAndNoDaemonSetPods"
@@ -81,10 +143,10 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "NoPodsAvailable"
 		degradedCondition.Message = "No CoreDNS pods are available"
-	case numberUnavailable > ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntVal:
+	case int(numberUnavailable) > maxUnavailable:
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "MaxUnavailableExceeded"
-		degradedCondition.Message = fmt.Sprintf("Too many unavailable CoreDNS pods (%d > %d max unavailable)", numberUnavailable, ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntVal)
+		degradedCondition.Message = fmt.Sprintf("Too many unavailable CoreDNS pods (%d > %d max unavailable)", numberUnavailable, maxUnavailable)
 	default:
 		degradedCondition.Status = operatorv1.ConditionFalse
 		degradedCondition.Reason = "AsExpected"

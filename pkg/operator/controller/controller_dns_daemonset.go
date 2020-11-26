@@ -169,6 +169,11 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	changed := false
 	updated := current.DeepCopy()
 
+	if !cmp.Equal(current.Spec.UpdateStrategy, expected.Spec.UpdateStrategy, cmpopts.EquateEmpty()) {
+		updated.Spec.UpdateStrategy = expected.Spec.UpdateStrategy
+		changed = true
+	}
+
 	for _, name := range []string{"dns", "dns-node-resolver", "kube-rbac-proxy"} {
 		var curIndex int
 		var curImage, expImage string
