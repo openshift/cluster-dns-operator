@@ -12,6 +12,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // syncDNSStatus computes the current status of dns and
@@ -64,7 +65,14 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		Type: operatorv1.OperatorStatusTypeDegraded,
 	}
 	numberUnavailable := ds.Status.DesiredNumberScheduled - ds.Status.NumberAvailable
+	// TODO: Replace GetValueFromIntOrPercent with
+	// GetScaledValueFromIntOrPercent after rebasing on Kubernetes 1.20.
+	maxUnavailable, intstrErr := intstr.GetValueFromIntOrPercent(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable, int(ds.Status.DesiredNumberScheduled), true)
 	switch {
+	case intstrErr != nil:
+		degradedCondition.Status = operatorv1.ConditionUnknown
+		degradedCondition.Reason = "InvalidMaxUnavailable"
+		degradedCondition.Message = fmt.Sprintf("MaxUnavailable has an invalid value: %v", intstrErr)
 	case len(clusterIP) == 0 && ds.Status.NumberAvailable == 0:
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "NoServiceIPAndNoDaemonSetPods"
@@ -81,10 +89,10 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "NoPodsAvailable"
 		degradedCondition.Message = "No CoreDNS pods are available"
-	case numberUnavailable > ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntVal:
+	case int(numberUnavailable) > maxUnavailable:
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "MaxUnavailableExceeded"
-		degradedCondition.Message = fmt.Sprintf("Too many unavailable CoreDNS pods (%d > %d max unavailable)", numberUnavailable, ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.IntVal)
+		degradedCondition.Message = fmt.Sprintf("Too many unavailable CoreDNS pods (%d > %d max unavailable)", numberUnavailable, maxUnavailable)
 	default:
 		degradedCondition.Status = operatorv1.ConditionFalse
 		degradedCondition.Reason = "AsExpected"

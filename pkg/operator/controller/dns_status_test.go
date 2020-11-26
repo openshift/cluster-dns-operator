@@ -168,6 +168,114 @@ func TestDNSStatusConditions(t *testing.T) {
 	}
 }
 
+// TestComputeDNSDegradedCondition verifies the computeDNSDegradedCondition has
+// the expected behavior.
+func TestComputeDNSDegradedCondition(t *testing.T) {
+	makeDaemonSet := func(desired, available int, maxUnavailable intstr.IntOrString) *appsv1.DaemonSet {
+		return &appsv1.DaemonSet{
+			Spec: appsv1.DaemonSetSpec{
+				UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &maxUnavailable,
+					},
+				},
+			},
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: int32(desired),
+				NumberAvailable:        int32(available),
+			},
+		}
+	}
+	testCases := []struct {
+		name      string
+		clusterIP string
+		ds        *appsv1.DaemonSet
+		expected  operatorv1.ConditionStatus
+	}{
+		// TODO: Enable this test case after changing
+		// computeDNSDegradedCondition to use
+		// GetScaledValueFromIntOrPercent (which requires first rebasing
+		// to Kubernetes 1.20).
+		//{
+		//	name:      "invalid MaxUnavailable (string with digits without a percent sign)",
+		//	clusterIP: "172.30.0.10",
+		//	ds:        makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}),
+		//	expected: operatorv1.ConditionUnknown,
+		//},
+		{
+			name:      "invalid MaxUnavailable (string with letters)",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "TEST"}),
+			expected:  operatorv1.ConditionUnknown,
+		},
+		{
+			name:      "no clusterIP, 0 available",
+			clusterIP: "",
+			ds:        makeDaemonSet(6, 0, intstr.FromString("10%")),
+			expected:  operatorv1.ConditionTrue,
+		},
+		{
+			name:      "no clusterIP",
+			clusterIP: "",
+			ds:        makeDaemonSet(6, 6, intstr.FromString("10%")),
+			expected:  operatorv1.ConditionTrue,
+		},
+		{
+			name:      "0 desired",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(0, 0, intstr.FromString("10%")),
+			expected:  operatorv1.ConditionTrue,
+		},
+		{
+			name:      "0 available",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(6, 0, intstr.FromString("10%")),
+			expected:  operatorv1.ConditionTrue,
+		},
+		{
+			name:      "too few available (percentage)",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(100, 80, intstr.FromString("10%")),
+			expected:  operatorv1.ConditionTrue,
+		},
+		{
+			name:      "too few available (integer)",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(6, 4, intstr.FromInt(1)),
+			expected:  operatorv1.ConditionTrue,
+		},
+		{
+			name:      "enough available (percentage)",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(100, 90, intstr.FromString("10%")),
+			expected:  operatorv1.ConditionFalse,
+		},
+		{
+			name:      "enough available (integer)",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(6, 5, intstr.FromInt(1)),
+			expected:  operatorv1.ConditionFalse,
+		},
+		{
+			name:      "all available",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(6, 6, intstr.FromString("10%")),
+			expected:  operatorv1.ConditionFalse,
+		},
+	}
+
+	for _, tc := range testCases {
+		oldCondition := &operatorv1.OperatorCondition{
+			Type:   operatorv1.OperatorStatusTypeDegraded,
+			Status: operatorv1.ConditionUnknown,
+		}
+		actual := computeDNSDegradedCondition(oldCondition, tc.clusterIP, tc.ds)
+		if actual.Status != tc.expected {
+			t.Errorf("%q: expected status to be %s, got %s", tc.name, tc.expected, actual.Status)
+		}
+	}
+}
+
 func TestDNSStatusesEqual(t *testing.T) {
 	testCases := []struct {
 		description string
