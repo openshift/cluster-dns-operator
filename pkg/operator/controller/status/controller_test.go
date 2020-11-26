@@ -396,66 +396,70 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 		description      string
 		oldVersions      versions
 		curVersions      versions
-		dnsAvailable     bool
+		dnsProgressing   bool
 		expectedVersions versions
 	}{
 		{
-			description:      "initialize versions, operator is available",
+			description:      "initialize versions, operator is not progressing",
 			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
 			curVersions:      versions{"v1", "dns-v1"},
-			dnsAvailable:     true,
+			dnsProgressing:   false,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "initialize versions, operator is not available",
+			description:      "initialize versions, operator is progressing",
 			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
 			curVersions:      versions{"v1", "dns-v1"},
+			dnsProgressing:   true,
 			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue},
 		},
 		{
 			description:      "update with no change",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v1"},
-			dnsAvailable:     true,
+			dnsProgressing:   false,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator version, operator is not available",
+			description:      "update operator version, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v1"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator version, operator is available",
+			description:      "update operator version, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v1"},
-			dnsAvailable:     true,
+			dnsProgressing:   false,
 			expectedVersions: versions{"v2", "dns-v1"},
 		},
 		{
-			description:      "update operand image, operator is not available",
+			description:      "update operand image, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v2"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operand image, operator is available",
+			description:      "update operand image, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v2"},
-			dnsAvailable:     true,
+			dnsProgressing:   false,
 			expectedVersions: versions{"v1", "dns-v2"},
 		},
 		{
-			description:      "update operator and operand image, operator is not available",
+			description:      "update operator and operand image, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v2"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator and operandr image, operator is available",
+			description:      "update operator and operandr image, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v2"},
-			dnsAvailable:     true,
+			dnsProgressing:   false,
 			expectedVersions: versions{"v2", "dns-v2"},
 		},
 	}
@@ -511,7 +515,7 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 				KubeRBACProxyImage:     tc.curVersions.operand,
 			},
 		}
-		versions := r.computeOperatorStatusVersions(oldVersions, tc.dnsAvailable)
+		versions := r.computeOperatorStatusVersions(oldVersions, tc.dnsProgressing)
 		versionsCmpOpts := []cmp.Option{
 			cmpopts.EquateEmpty(),
 			cmpopts.SortSlices(func(a, b configv1.OperandVersion) bool { return a.Name < b.Name }),

@@ -120,9 +120,10 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 	}
 	co.Status.RelatedObjects = related
 
-	dnsAvailable := checkDNSAvailable(&state.DNS)
+	dnsAvailable := checkDNSStatusCondition(&state.DNS, operatorv1.OperatorStatusTypeAvailable)
+	dnsProgressing := checkDNSStatusCondition(&state.DNS, operatorv1.OperatorStatusTypeProgressing)
 
-	co.Status.Versions = r.computeOperatorStatusVersions(oldStatus.Versions, dnsAvailable)
+	co.Status.Versions = r.computeOperatorStatusVersions(oldStatus.Versions, dnsProgressing)
 
 	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorAvailableCondition(dnsAvailable))
 	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorProgressingCondition(dnsAvailable,
@@ -208,10 +209,10 @@ func (r *reconciler) getOperatorState(nsName string) (operatorState, error) {
 }
 
 // computeOperatorStatusVersions computes the operator's current versions.
-func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.OperandVersion, allDNSESAvailable bool) []configv1.OperandVersion {
+func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.OperandVersion, dnsProgressing bool) []configv1.OperandVersion {
 	// We need to report old version until the operator fully transitions to the new version.
 	// https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusteroperator.md#version-reporting-during-an-upgrade
-	if !allDNSESAvailable {
+	if dnsProgressing {
 		return oldVersions
 	}
 
@@ -235,10 +236,10 @@ func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.Operan
 	}
 }
 
-// checkDNSAvailable checks if the dns is available.
-func checkDNSAvailable(dns *operatorv1.DNS) bool {
+// checkDNSStatusCondition checks if the dns is available.
+func checkDNSStatusCondition(dns *operatorv1.DNS, statusConditionType string) bool {
 	for _, c := range dns.Status.Conditions {
-		if c.Type == operatorv1.OperatorStatusTypeAvailable && c.Status == operatorv1.ConditionTrue {
+		if c.Type == statusConditionType && c.Status == operatorv1.ConditionTrue {
 			return true
 		}
 	}
@@ -272,9 +273,6 @@ func computeOperatorDegradedCondition(dns *operatorv1.DNS) configv1.ClusterOpera
 // computeOperatorProgressingCondition computes the operator's current Progressing status state.
 func computeOperatorProgressingCondition(dnsAvailable bool, oldVersions, curVersions []configv1.OperandVersion,
 	operatorReleaseVersion, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) configv1.ClusterOperatorStatusCondition {
-	// TODO: Update progressingCondition when an ingresscontroller
-	//       progressing condition is created. The Operator's condition
-	//       should be derived from the ingresscontroller's condition.
 	progressingCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorProgressing,
 	}
