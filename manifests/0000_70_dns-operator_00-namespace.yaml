@@ -5,6 +5,7 @@ metadata:
     include.release.openshift.io/ibm-cloud-managed: "true"
     include.release.openshift.io/self-managed-high-availability: "true"
     openshift.io/node-selector: ""
+    include.release.openshift.io/single-node-production-edge: "true"
   name: openshift-dns-operator
   labels:
     # set value to avoid depending on kube admission that depends on openshift apis
