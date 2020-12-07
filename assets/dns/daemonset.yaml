@@ -150,12 +150,6 @@ spec:
       dnsPolicy: Default
       nodeSelector:
         kubernetes.io/os: linux      
-      updateStrategy:
-        type: RollingUpdate
-        rollingUpdate:
-          # Note: The daemon controller rounds the percentage up
-          # (unlike the deployment controller, which rounds down).
-          maxUnavailable: 10%
       volumes:
       - name: config-volume
         configMap:
@@ -172,3 +166,9 @@ spec:
       tolerations:
       # DNS needs to run everywhere. Tolerate all taints
       - operator: Exists
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Note: The daemon controller rounds the percentage up
+      # (unlike the deployment controller, which rounds down).
+      maxUnavailable: 10%
