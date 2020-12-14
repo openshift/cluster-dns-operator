@@ -147,6 +147,7 @@ spec:
         resources:
           requests:
             cpu: 5m
+            memory: 21Mi
       dnsPolicy: Default
       nodeSelector:
         kubernetes.io/os: linux      
