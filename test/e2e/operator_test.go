@@ -177,6 +177,9 @@ func TestDefaultDNSSteadyConditions(t *testing.T) {
 }
 
 func TestCoreDNSImageUpgrade(t *testing.T) {
+	// TODO: Revise this test and remove skip.
+	// See https://bugzilla.redhat.com/show_bug.cgi?id=1912522
+	t.Skip("skipping TestCoreDNSImageUpgrade as this test is fundamentally broken")
 	cl, err := getClient()
 	if err != nil {
 		t.Fatal(err)
@@ -253,29 +256,17 @@ func TestCoreDNSImageUpgrade(t *testing.T) {
 		if err := cl.Update(context.TODO(), deployment); err != nil {
 			t.Fatalf("failed to restore dns operator to old coredns image: %v", err)
 		}
+		// Ensure the image change is completely reverted before
+		// moving on to the next test.
+		err = checkCurrentDNSImage(t, cl, curImage)
+		if err != nil {
+			t.Fatalf("failed to observe restored coredns image: %v", err)
+		}
 	}()
 
-	err = wait.PollImmediate(1*time.Second, 3*time.Minute, func() (bool, error) {
-		podList := &corev1.PodList{}
-		if err := cl.List(context.TODO(), podList, client.InNamespace("openshift-dns")); err != nil {
-			t.Logf("failed to get pod list in openshift-dns namespace: %v", err)
-			return false, nil
-		}
-
-		for _, pod := range podList.Items {
-			for _, container := range pod.Spec.Containers {
-				if container.Name == "dns" {
-					if container.Image == newImage {
-						return true, nil
-					}
-					break
-				}
-			}
-		}
-		return false, nil
-	})
+	err = checkCurrentDNSImage(t, cl, newImage)
 	if err != nil {
-		t.Errorf("failed to observe updated coredns image: %v", err)
+		t.Fatalf("failed to observe updated coredns image: %v", err)
 	}
 }
 
@@ -295,6 +286,30 @@ func setImage(deployment *appsv1.Deployment, image string) {
 			break
 		}
 	}
+}
+
+func checkCurrentDNSImage(t *testing.T, cl client.Client, expectedImage string) error {
+	err := wait.PollImmediate(1*time.Second, 7*time.Minute, func() (bool, error) {
+		podList := &corev1.PodList{}
+		if err := cl.List(context.TODO(), podList, client.InNamespace("openshift-dns")); err != nil {
+			t.Logf("failed to get pod list in openshift-dns namespace: %v", err)
+			return false, nil
+		}
+
+		for _, pod := range podList.Items {
+			for _, container := range pod.Spec.Containers {
+				if container.Name == "dns" {
+					if container.Image != expectedImage {
+						return false, nil
+					}
+					break
+				}
+			}
+		}
+		return true, nil
+	})
+
+	return err
 }
 
 func TestDNSForwarding(t *testing.T) {
@@ -414,6 +429,11 @@ func TestDNSForwarding(t *testing.T) {
 		}
 	}()
 
+	// Verify that default DNS pods are all available before inspecting them.
+	if err := waitForDNSConditions(t, cl, 1*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
 	// Verify that the Corefile of DNS DaemonSet pods have been updated.
 	dnsDaemonSet := &appsv1.DaemonSet{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DNSDaemonSetName(defaultDNS), dnsDaemonSet); err != nil {
@@ -430,7 +450,12 @@ func TestDNSForwarding(t *testing.T) {
 	catCmd := []string{"cat", "/etc/coredns/Corefile"}
 	for _, pod := range defaultDNSPods.Items {
 		if err := lookForStringInPodExec(pod.Namespace, pod.Name, "dns", catCmd, upstreamIP, 2*time.Minute); err != nil {
-			t.Fatalf("failed to find %s in %s of pod %s/%s: %v", upstreamIP, catCmd[1], pod.Namespace, pod.Name, err)
+			// If we failed to find the expected IP in the pod's corefile, log the pod's status.
+			currPod := &corev1.Pod{}
+			if err := cl.Get(context.TODO(), types.NamespacedName{pod.Name, pod.Namespace}, currPod); err != nil {
+				t.Logf("failed to get pod %s: %v", pod.Name, err)
+			}
+			t.Fatalf("failed to find %s in %s of pod %s/%s: %v, pod status: %v", upstreamIP, catCmd[1], pod.Namespace, pod.Name, err, currPod.Status)
 		}
 	}
 
