@@ -12,6 +12,10 @@ const (
 	// daemonset, and the value is the name of the owning dns.
 	controllerDaemonSetLabel = "dns.operator.openshift.io/daemonset-dns"
 
+	// nodeResolverDaemonSetLabelName is the name of the label that
+	// identifies the node resolver daemonset.
+	nodeResolverDaemonSetLabelName = "dns.operator.openshift.io/daemonset-node-resolver"
+
 	// MetricsServingCertAnnotation is the annotation needed to generate
 	// the certificates for secure DNS metrics.
 	MetricsServingCertAnnotation = "service.beta.openshift.io/serving-cert-secret-name"
@@ -92,5 +96,14 @@ func NodeResolverDaemonSetName() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: DefaultOperandNamespace,
 		Name:      "node-resolver",
+	}
+}
+
+// NodeResolverDaemonSetPodSelector is label selector for node resolver pods.
+func NodeResolverDaemonSetPodSelector() *metav1.LabelSelector {
+	return &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			nodeResolverDaemonSetLabelName: "",
+		},
 	}
 }

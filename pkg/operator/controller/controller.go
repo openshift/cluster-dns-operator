@@ -341,7 +341,8 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	// it.  We want to delete the node resolver daemonset before updating
 	// the DNS daemonset to avoid having both the node resolver running in
 	// both daemonsets at the same time.
-	if _, _, err := r.ensureNodeResolverDaemonSet(clusterIP, clusterDomain); err != nil {
+	haveResolverDaemonset, resolverDaemonset, err := r.ensureNodeResolverDaemonSet(dns, clusterIP, clusterDomain)
+	if err != nil {
 		errs = append(errs, err)
 	}
 
@@ -373,7 +374,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 			errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))
 		}
 
-		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset); err != nil {
+		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset, haveResolverDaemonset, resolverDaemonset); err != nil {
 			errs = append(errs, fmt.Errorf("failed to sync status of dns %s/%s: %v", daemonset.Namespace, daemonset.Name, err))
 		}
 	}

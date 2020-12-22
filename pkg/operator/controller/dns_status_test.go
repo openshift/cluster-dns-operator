@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/openshift/cluster-dns-operator/pkg/manifests"
+
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -13,11 +15,13 @@ import (
 
 func TestDNSStatusConditions(t *testing.T) {
 	type testInputs struct {
-		haveClusterIP bool
-		avail, desire int32
+		haveClusterIP             bool
+		avail, desire             int32
+		haveResolverDaemonset     bool
+		resolverDaemonsetHasOwner bool
 	}
 	type testOutputs struct {
-		degraded, progressing, available bool
+		degraded, progressing, available, upgradeable bool
 	}
 	testCases := []struct {
 		description string
@@ -26,63 +30,73 @@ func TestDNSStatusConditions(t *testing.T) {
 	}{
 		{
 			description: "no cluster ip, 0/0 pods available",
-			inputs:      testInputs{false, 0, 0},
-			outputs:     testOutputs{true, true, false},
+			inputs:      testInputs{false, 0, 0, false, false},
+			outputs:     testOutputs{true, true, false, true},
 		},
 		{
 			description: "cluster ip, 0/0 pods available",
-			inputs:      testInputs{true, 0, 0},
-			outputs:     testOutputs{true, false, false},
+			inputs:      testInputs{true, 0, 0, false, false},
+			outputs:     testOutputs{true, false, false, true},
 		},
 		{
 			description: "no cluster ip, 0/2 pods available",
-			inputs:      testInputs{false, 0, 2},
-			outputs:     testOutputs{true, true, false},
+			inputs:      testInputs{false, 0, 2, false, false},
+			outputs:     testOutputs{true, true, false, true},
 		},
 		{
 			description: "no cluster ip, 1/2 pods available",
-			inputs:      testInputs{false, 1, 2},
-			outputs:     testOutputs{true, true, false},
+			inputs:      testInputs{false, 1, 2, false, false},
+			outputs:     testOutputs{true, true, false, true},
 		},
 		{
 			description: "no cluster ip, 2/2 pods available",
-			inputs:      testInputs{false, 2, 2},
-			outputs:     testOutputs{true, true, false},
+			inputs:      testInputs{false, 2, 2, false, false},
+			outputs:     testOutputs{true, true, false, true},
 		},
 		{
 			description: "daemonset pod available on 0/0 nodes",
-			inputs:      testInputs{true, 0, 0},
-			outputs:     testOutputs{true, false, false},
+			inputs:      testInputs{true, 0, 0, false, false},
+			outputs:     testOutputs{true, false, false, true},
 		},
 		{
 			description: "daemonset pod available on 0/2 nodes",
-			inputs:      testInputs{true, 0, 2},
-			outputs:     testOutputs{true, true, false},
+			inputs:      testInputs{true, 0, 2, false, false},
+			outputs:     testOutputs{true, true, false, true},
 		},
 		{
 			description: "daemonset pod available on 1/2 nodes",
-			inputs:      testInputs{true, 1, 2},
-			outputs:     testOutputs{false, true, true},
+			inputs:      testInputs{true, 1, 2, false, false},
+			outputs:     testOutputs{false, true, true, true},
+		},
+		{
+			description: "have node resolver daemonset with incorrect owner",
+			inputs:      testInputs{true, 2, 2, true, false},
+			outputs:     testOutputs{false, false, true, false},
+		},
+		{
+			description: "have node resolver daemonset with correct owner",
+			inputs:      testInputs{true, 2, 2, true, true},
+			outputs:     testOutputs{false, false, true, true},
 		},
 		{
 			description: "daemonset pod available on 2/2 nodes",
-			inputs:      testInputs{true, 2, 2},
-			outputs:     testOutputs{false, false, true},
+			inputs:      testInputs{true, 2, 2, false, false},
+			outputs:     testOutputs{false, false, true, true},
 		},
 		{
 			description: "daemonset pod available on 1/3 nodes",
-			inputs:      testInputs{true, 1, 3},
-			outputs:     testOutputs{true, true, true},
+			inputs:      testInputs{true, 1, 3, false, false},
+			outputs:     testOutputs{true, true, true, true},
 		},
 		{
 			description: "daemonset pod available on 2/3 nodes",
-			inputs:      testInputs{true, 2, 3},
-			outputs:     testOutputs{false, true, true},
+			inputs:      testInputs{true, 2, 3, false, false},
+			outputs:     testOutputs{false, true, true, true},
 		},
 		{
 			description: "daemonset pod available on 0/1 nodes",
-			inputs:      testInputs{true, 0, 1},
-			outputs:     testOutputs{true, true, false},
+			inputs:      testInputs{true, 0, 1, false, false},
+			outputs:     testOutputs{true, true, false, true},
 		},
 	}
 
@@ -90,10 +104,21 @@ func TestDNSStatusConditions(t *testing.T) {
 		var (
 			clusterIP string
 
-			degraded, progressing, available operatorv1.ConditionStatus
+			haveResolverDaemonset bool
+			resolverDaemonset     *appsv1.DaemonSet
+
+			degraded    operatorv1.ConditionStatus
+			progressing operatorv1.ConditionStatus
+			available   operatorv1.ConditionStatus
+			upgradeable operatorv1.ConditionStatus
 		)
 		if tc.inputs.haveClusterIP {
 			clusterIP = "1.2.3.4"
+		}
+		dns := &operatorv1.DNS{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: DefaultDNSController,
+			},
 		}
 		maxUnavailable := intstr.FromInt(1)
 		ds := &appsv1.DaemonSet{
@@ -112,6 +137,24 @@ func TestDNSStatusConditions(t *testing.T) {
 				NumberAvailable:        tc.inputs.avail,
 			},
 		}
+		if tc.inputs.haveResolverDaemonset {
+			haveResolverDaemonset = true
+			resolverDaemonset = &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-resolver",
+				},
+			}
+		}
+		if tc.inputs.resolverDaemonsetHasOwner {
+			resolverDaemonset.ObjectMeta.Labels = map[string]string{
+				manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
+			}
+		}
+		if tc.outputs.upgradeable {
+			upgradeable = operatorv1.ConditionTrue
+		} else {
+			upgradeable = operatorv1.ConditionFalse
+		}
 		if tc.outputs.degraded {
 			degraded = operatorv1.ConditionTrue
 		} else {
@@ -129,6 +172,10 @@ func TestDNSStatusConditions(t *testing.T) {
 		}
 		expected := []operatorv1.OperatorCondition{
 			{
+				Type:   operatorv1.OperatorStatusTypeUpgradeable,
+				Status: upgradeable,
+			},
+			{
 				Type:   operatorv1.OperatorStatusTypeDegraded,
 				Status: degraded,
 			},
@@ -141,7 +188,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: available,
 			},
 		}
-		actual := computeDNSStatusConditions([]operatorv1.OperatorCondition{}, clusterIP, ds)
+		actual := computeDNSStatusConditions([]operatorv1.OperatorCondition{}, dns, clusterIP, ds, haveResolverDaemonset, resolverDaemonset)
 		gotExpected := true
 		if len(actual) != len(expected) {
 			gotExpected = false
