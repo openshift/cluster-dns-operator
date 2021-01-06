@@ -41,6 +41,7 @@ spec:
         resources:
           requests:
             cpu: 10m
+            memory: 29Mi
       - name: kube-rbac-proxy
         image: quay.io/openshift/origin-kube-rbac-proxy:latest
         args:
