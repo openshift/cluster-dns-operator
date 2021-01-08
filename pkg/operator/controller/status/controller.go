@@ -79,14 +79,14 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 
 // Reconcile computes the operator's current status and therefrom creates or
 // updates the ClusterOperator resource for the operator.
-func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	nsManifest := manifests.DNSNamespace()
 
 	co := &configv1.ClusterOperator{ObjectMeta: metav1.ObjectMeta{Name: operatorcontroller.DNSClusterOperatorName().Name}}
 	if err := r.client.Get(context.TODO(), operatorcontroller.DNSClusterOperatorName(), co); err != nil {
 		if errors.IsNotFound(err) {
 			initializeClusterOperator(co)
-			if err := r.client.Create(context.TODO(), co); err != nil {
+			if err := r.client.Create(ctx, co); err != nil {
 				fmt.Printf("failed to create co %s: %v\n", co.Name, err)
 				return reconcile.Result{}, fmt.Errorf("failed to create clusteroperator %s: %v", co.Name, err)
 			}
@@ -131,7 +131,7 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorDegradedCondition(&state.DNS))
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
-		if err := r.client.Status().Update(context.TODO(), co); err != nil {
+		if err := r.client.Status().Update(ctx, co); err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed to update clusteroperator %s: %v", co.Name, err)
 		}
 	}
