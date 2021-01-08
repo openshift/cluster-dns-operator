@@ -85,7 +85,7 @@ type reconciler struct {
 
 // Reconcile expects request to refer to a dns and will do all the work
 // to ensure the dns is in the desired state.
-func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	errs := []error{}
 	result := reconcile.Result{}
 
@@ -98,7 +98,7 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 	}
 	// Get the current dns state.
 	dns := &operatorv1.DNS{}
-	if err := r.client.Get(context.TODO(), request.NamespacedName, dns); err != nil {
+	if err := r.client.Get(ctx, request.NamespacedName, dns); err != nil {
 		if errors.IsNotFound(err) {
 			// This means the dns was already deleted/finalized and there are
 			// stale queue entries (or something edge triggering from a related
@@ -130,7 +130,7 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 				if slice.ContainsString(dns.Finalizers, DNSControllerFinalizer) {
 					updated := dns.DeepCopy()
 					updated.Finalizers = slice.RemoveString(updated.Finalizers, DNSControllerFinalizer)
-					if err := r.client.Update(context.TODO(), updated); err != nil {
+					if err := r.client.Update(ctx, updated); err != nil {
 						errs = append(errs, fmt.Errorf("failed to remove finalizer from dns %s: %v", dns.Name, err))
 					}
 				}

@@ -34,6 +34,24 @@ type Operator struct {
 	client  client.Client
 }
 
+type newClientBuilder struct{}
+
+// controller-runtime v0.7.0 manager.New(...) requires manager.Options.ClientBuilder{} to be
+// specified instead of the previously used manager.Options.NewClient(...) function.
+// Create a newClientBuilder type that fits the manager.ClientBuilder interface
+// so that a non-caching client can be used everywhere (instead of the default cache created by the
+// default ClientBuilder).
+func (n *newClientBuilder) Build(_ cache.Cache, config *rest.Config, options client.Options) (client.Client, error) {
+	return client.New(config, options)
+}
+
+// controller-runtime v0.7.0 manager.ClientBuilder interface requires this function
+// to be implemented, even if Build(...) ignores any cache parameters.
+// Short circuit the uncaching logic by returning the unmodified ClientBuilder.
+func (n *newClientBuilder) WithUncached(objs ...client.Object) manager.ClientBuilder {
+	return n
+}
+
 // New creates (but does not start) a new operator from configuration.
 func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, error) {
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
@@ -49,9 +67,7 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 		// return the updated resource. All client consumers will need audited to
 		// ensure they are tolerant of stale data (or we need a cache or client that
 		// makes stronger coherence guarantees).
-		NewClient: func(_ cache.Cache, config *rest.Config, options client.Options) (client.Client, error) {
-			return client.New(config, options)
-		},
+		ClientBuilder: &newClientBuilder{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create operator manager: %v", err)
@@ -86,10 +102,10 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 // Start creates the default DNS and then starts the operator
 // synchronously until a message is received on the stop channel.
 // TODO: Move the default DNS logic elsewhere.
-func (o *Operator) Start(stop <-chan struct{}) error {
+func (o *Operator) Start(ctx context.Context) error {
 	// Periodicaly ensure the default dns exists.
 	go wait.Until(func() {
-		if !o.manager.GetCache().WaitForCacheSync(stop) {
+		if !o.manager.GetCache().WaitForCacheSync(ctx) {
 			logrus.Error("failed to sync cache before ensuring default dns")
 			return
 		}
@@ -97,16 +113,16 @@ func (o *Operator) Start(stop <-chan struct{}) error {
 		if err != nil {
 			logrus.Errorf("failed to ensure default dns %v", err)
 		}
-	}, 1*time.Minute, stop)
+	}, 1*time.Minute, ctx.Done())
 
 	errChan := make(chan error)
 	go func() {
-		errChan <- o.manager.Start(stop)
+		errChan <- o.manager.Start(ctx)
 	}()
 
 	// Wait for the manager to exit or an explicit stop.
 	select {
-	case <-stop:
+	case <-ctx.Done():
 		return nil
 	case err := <-errChan:
 		return err
