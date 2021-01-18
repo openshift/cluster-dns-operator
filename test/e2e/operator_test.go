@@ -177,13 +177,44 @@ func TestDefaultDNSSteadyConditions(t *testing.T) {
 }
 
 func TestCoreDNSImageUpgrade(t *testing.T) {
-	// TODO: Revise this test and remove skip.
-	// See https://bugzilla.redhat.com/show_bug.cgi?id=1912522
-	t.Skip("skipping TestCoreDNSImageUpgrade as this test is fundamentally broken")
 	cl, err := getClient()
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Override the cluster version to temporarily disable CVO updates to the DNS operator deployment.
+	deplOverride := configv1.ComponentOverride{
+		Kind:      "Deployment",
+		Group:     "apps/v1",
+		Namespace: "openshift-dns-operator",
+		Name:      "dns-operator",
+		Unmanaged: true,
+	}
+
+	clusterVersion := &configv1.ClusterVersion{}
+	cvName := types.NamespacedName{Namespace: "default", Name: "version"}
+
+	if err := cl.Get(context.TODO(), cvName, clusterVersion); err != nil {
+		t.Fatalf("failed to get cluster version %s/%s: %v", cvName.Namespace, cvName.Name, err)
+	}
+
+	clusterVersion.Spec.Overrides = []configv1.ComponentOverride{deplOverride}
+
+	if err := cl.Update(context.TODO(), clusterVersion); err != nil {
+		t.Fatalf("failed to update cluster version %s/%s: %v", cvName.Namespace, cvName.Name, err)
+	}
+
+	// Remove cluster version override once the test finishes.
+	defer func() {
+		if err := cl.Get(context.TODO(), cvName, clusterVersion); err != nil {
+			t.Fatalf("failed to get cluster version %s/%s: %v", cvName.Namespace, cvName.Name, err)
+		}
+
+		clusterVersion.Spec.Overrides = []configv1.ComponentOverride{}
+
+		if err := cl.Update(context.TODO(), clusterVersion); err != nil {
+			t.Fatalf("failed to update cluster version %s/%s: %v", cvName.Namespace, cvName.Name, err)
+		}
+	}()
 
 	deployment := &appsv1.Deployment{}
 	namespacedName := types.NamespacedName{Namespace: "openshift-dns-operator", Name: "dns-operator"}
