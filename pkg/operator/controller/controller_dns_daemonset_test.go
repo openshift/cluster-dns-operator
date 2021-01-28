@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestDesiredDNSDaemonset(t *testing.T) {
@@ -77,6 +78,7 @@ var toleration = corev1.Toleration{
 }
 
 func TestDaemonsetConfigChanged(t *testing.T) {
+	pointerTo := func(ios intstr.IntOrString) *intstr.IntOrString { return &ios }
 	testCases := []struct {
 		description string
 		mutate      func(*appsv1.DaemonSet)
@@ -198,6 +200,18 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			},
 			expect: true,
 		},
+		{
+			description: "if the update strategy changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.UpdateStrategy = appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: pointerTo(intstr.FromString("10%")),
+					},
+				}
+			},
+			expect: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -269,6 +283,12 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 								},
 							},
 						},
+					},
+				},
+				UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: pointerTo(intstr.FromInt(1)),
 					},
 				},
 			},
