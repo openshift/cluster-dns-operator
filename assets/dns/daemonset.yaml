@@ -110,10 +110,10 @@ spec:
               # to do it: IPv4, IPv6, IPv4 over TCP and IPv6 over TCP. The two last ones
               # are for deployments with Kuryr on older OpenStack (OSP13) - those do not
               # support UDP loadbalancers and require reaching DNS through TCP.
-              cmds=('dig -t A @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"'
-                    'dig -t AAAA @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"'
-                    'dig -t A +tcp @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"'
-                    'dig -t AAAA +tcp @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"')
+              cmds=('dig -t A @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"|grep -v "^;"'
+                    'dig -t AAAA @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"|grep -v "^;"'
+                    'dig -t A +tcp +retry=0 @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"|grep -v "^;"'
+                    'dig -t AAAA +tcp +retry=0 @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"|grep -v "^;"')
               for i in ${!cmds[*]}
               do
                 ips=($(eval "${cmds[i]}"))
