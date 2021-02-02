@@ -177,14 +177,14 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	for _, name := range []string{"dns", "dns-node-resolver", "kube-rbac-proxy"} {
 		var curIndex int
 		var curImage, expImage string
-		var curReady, expReady corev1.HTTPGetAction
+		var curReady, expReady corev1.Probe
 
 		for i, c := range current.Spec.Template.Spec.Containers {
 			if name == c.Name {
 				curIndex = i
 				curImage = current.Spec.Template.Spec.Containers[i].Image
-				if c.ReadinessProbe != nil && c.ReadinessProbe.HTTPGet != nil {
-					curReady = *c.ReadinessProbe.HTTPGet
+				if c.ReadinessProbe != nil {
+					curReady = *c.ReadinessProbe
 				}
 				break
 			}
@@ -192,8 +192,8 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		for i, c := range expected.Spec.Template.Spec.Containers {
 			if name == c.Name {
 				expImage = expected.Spec.Template.Spec.Containers[i].Image
-				if c.ReadinessProbe != nil && c.ReadinessProbe.HTTPGet != nil {
-					expReady = *c.ReadinessProbe.HTTPGet
+				if c.ReadinessProbe != nil {
+					expReady = *c.ReadinessProbe
 				}
 				break
 			}
