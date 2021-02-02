@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestDesiredDNSDaemonset(t *testing.T) {
@@ -155,6 +156,20 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			},
 			expect: true,
 		},
+		{
+			description: "if the readiness probe endpoint changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[0].ReadinessProbe.Handler.HTTPGet.Path = "/ready"
+			},
+			expect: true,
+		},
+		{
+			description: "if the readiness probe period changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[0].ReadinessProbe.PeriodSeconds = 2
+			},
+			expect: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -174,6 +189,18 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 								Command: []string{
 									"a",
 									"b",
+								},
+								ReadinessProbe: &corev1.Probe{
+									PeriodSeconds: 10,
+									Handler: corev1.Handler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Path: "/health",
+											Port: intstr.IntOrString{
+												IntVal: int32(8080),
+											},
+											Scheme: "HTTP",
+										},
+									},
 								},
 							},
 							{
