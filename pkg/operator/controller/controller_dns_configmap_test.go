@@ -46,7 +46,6 @@ bar.com:5353 example.com:5353 {
     health
     kubernetes cluster.local in-addr.arpa ip6.arpa {
         pods insecure
-        upstream
         fallthrough in-addr.arpa ip6.arpa
     }
     prometheus 127.0.0.1:9153
