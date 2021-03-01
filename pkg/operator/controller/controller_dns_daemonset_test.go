@@ -208,6 +208,13 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: true,
 		},
 		{
+			description: "if the readiness probe period changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[0].ReadinessProbe.PeriodSeconds = 2
+			},
+			expect: true,
+		},
+		{
 			description: "if the termination grace period changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				sixty := int64(60)
@@ -250,6 +257,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 									"b",
 								},
 								ReadinessProbe: &corev1.Probe{
+									PeriodSeconds: 10,
 									Handler: corev1.Handler{
 										HTTPGet: &corev1.HTTPGetAction{
 											Path: "/health",

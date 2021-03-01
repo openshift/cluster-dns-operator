@@ -30,10 +30,10 @@ spec:
             port: 8080
             scheme: HTTP
           initialDelaySeconds: 10
-          periodSeconds: 10
+          periodSeconds: 3
           successThreshold: 1
           failureThreshold: 3
-          timeoutSeconds: 10
+          timeoutSeconds: 3
         livenessProbe:
           httpGet:
             path: /health
