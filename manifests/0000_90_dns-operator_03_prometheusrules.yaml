@@ -13,7 +13,7 @@ spec:
     - name: openshift-dns.rules
       rules:
       - alert: CoreDNSPanicking
-        expr: increase(coredns_panic_count_total[10m]) > 0
+        expr: increase(coredns_panics_total[10m]) > 0
         for: 5m
         labels:
           severity: warning
@@ -28,9 +28,9 @@ spec:
           message: "CoreDNS Health Checks are slowing down (instance {{ $labels.instance }})"
       - alert: CoreDNSErrorsHigh
         expr: |
-          (sum(rate(coredns_dns_response_rcode_count_total{rcode="SERVFAIL"}[5m]))
+          (sum(rate(coredns_dns_responses_total{rcode="SERVFAIL"}[5m]))
             /
-          sum(rate(coredns_dns_response_rcode_count_total[5m])))
+          sum(rate(coredns_dns_responses_total[5m])))
           > 0.01
         for: 5m
         labels:
