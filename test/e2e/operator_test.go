@@ -176,6 +176,66 @@ func TestDefaultDNSSteadyConditions(t *testing.T) {
 	}
 }
 
+// TestCoreDNSDaemonSetReconciliation verifies that the operator reconciles the
+// dns-default daemonset.  The test modifies the daemonset and verifies that the
+// operator reverts the change.
+func TestCoreDNSDaemonSetReconciliation(t *testing.T) {
+	cl, err := getClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defaultDNS := &operatorv1.DNS{}
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DefaultDNSController}, defaultDNS); err != nil {
+			t.Logf("failed to get dns %q: %v", operatorcontroller.DefaultDNSController, err)
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("failed to get dns %q: %v", operatorcontroller.DefaultDNSController, err)
+	}
+
+	newNodeSelector := "foo"
+	namespacedName := operatorcontroller.DNSDaemonSetName(defaultDNS)
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		dnsDaemonSet := &appsv1.DaemonSet{}
+		if err := cl.Get(context.TODO(), namespacedName, dnsDaemonSet); err != nil {
+			t.Logf("failed to get daemonset %s: %v", namespacedName, err)
+			return false, nil
+		}
+		dnsDaemonSet.Spec.Template.Spec.NodeSelector[newNodeSelector] = ""
+		if err := cl.Update(context.TODO(), dnsDaemonSet); err != nil {
+			t.Logf("failed to update daemonset %s: %v", namespacedName, err)
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Errorf("failed to update daemonset %s: %v", namespacedName, err)
+	}
+
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		dnsDaemonSet := &appsv1.DaemonSet{}
+		if err := cl.Get(context.TODO(), namespacedName, dnsDaemonSet); err != nil {
+			t.Logf("failed to get daemonset %s: %v", namespacedName, err)
+			return false, nil
+		}
+		for k := range dnsDaemonSet.Spec.Template.Spec.NodeSelector {
+			if k == newNodeSelector {
+				t.Logf("found %q node selector on daemonset %s: %v", newNodeSelector, namespacedName, err)
+				return false, nil
+			}
+		}
+		t.Logf("observed absence of %q node selector on daemonset %s: %v", newNodeSelector, namespacedName, err)
+		return true, nil
+	})
+	if err != nil {
+		t.Errorf("failed to observe reversion of update to daemonset %s: %v", namespacedName, err)
+	}
+}
+
 func TestDNSForwarding(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
