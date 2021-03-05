@@ -215,6 +215,14 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: true,
 		},
 		{
+			description: "if the termination grace period is defaulted",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				newVal := int64(corev1.DefaultTerminationGracePeriodSeconds)
+				daemonset.Spec.Template.Spec.TerminationGracePeriodSeconds = &newVal
+			},
+			expect: false,
+		},
+		{
 			description: "if the termination grace period changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				sixty := int64(60)

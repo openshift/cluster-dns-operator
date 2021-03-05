@@ -223,7 +223,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
 		changed = true
 	}
-	if !cmp.Equal(current.Spec.Template.Spec.TerminationGracePeriodSeconds, expected.Spec.Template.Spec.TerminationGracePeriodSeconds, cmpopts.EquateEmpty()) {
+	if !cmp.Equal(current.Spec.Template.Spec.TerminationGracePeriodSeconds, expected.Spec.Template.Spec.TerminationGracePeriodSeconds, cmpopts.EquateEmpty(), cmp.Comparer(cmpTerminationGracePeriodSeconds)) {
 		updated.Spec.Template.Spec.TerminationGracePeriodSeconds = expected.Spec.Template.Spec.TerminationGracePeriodSeconds
 		changed = true
 	}
@@ -338,4 +338,18 @@ func cmpTolerations(a, b corev1.Toleration) bool {
 		}
 	}
 	return true
+}
+
+// cmpTerminationGracePeriodSeconds compares two terminationGracePeriodSeconds
+// values and returns a Boolean indicating whether they are equal.
+func cmpTerminationGracePeriodSeconds(a, b *int64) bool {
+	aVal := int64(corev1.DefaultTerminationGracePeriodSeconds)
+	if a != nil {
+		aVal = *a
+	}
+	bVal := int64(corev1.DefaultTerminationGracePeriodSeconds)
+	if b != nil {
+		bVal = *b
+	}
+	return aVal == bVal
 }
