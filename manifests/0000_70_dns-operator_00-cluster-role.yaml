@@ -42,6 +42,14 @@ rules:
   - "*"
 
 - apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+
+- apiGroups:
   - monitoring.coreos.com
   resources:
   - servicemonitors
