@@ -19,46 +19,55 @@ func TestDNSStatusConditions(t *testing.T) {
 		availDNS, desireDNS int32
 		haveNR              bool
 		availNR, desireNR   int32
+		managementState     operatorv1.ManagementState
 	}
 	type testOut struct {
-		degraded, progressing, available bool
+		degraded, progressing, available, upgradeable bool
 	}
 	testCases := []struct {
 		inputs  testIn
 		outputs testOut
 	}{
-		{testIn{false, false, 0, 0, false, 0, 0}, testOut{true, true, false}},
-		{testIn{false, true, 0, 0, true, 0, 0}, testOut{true, true, false}},
-		{testIn{false, true, 0, 0, true, 0, 2}, testOut{true, true, false}},
-		{testIn{false, true, 0, 2, true, 0, 0}, testOut{true, true, false}},
-		{testIn{false, true, 0, 2, true, 0, 2}, testOut{true, true, false}},
-		{testIn{false, true, 1, 2, true, 0, 2}, testOut{true, true, false}},
-		{testIn{false, true, 0, 2, true, 1, 2}, testOut{true, true, false}},
-		{testIn{false, true, 1, 2, true, 1, 2}, testOut{true, true, false}},
-		{testIn{false, true, 1, 2, true, 2, 2}, testOut{true, true, false}},
-		{testIn{false, true, 2, 2, true, 1, 2}, testOut{true, true, false}},
-		{testIn{false, true, 2, 2, true, 2, 2}, testOut{true, true, false}},
-		{testIn{true, true, 0, 0, true, 0, 0}, testOut{true, false, false}},
-		{testIn{true, true, 0, 0, true, 0, 2}, testOut{true, true, false}},
-		{testIn{true, true, 0, 2, true, 0, 0}, testOut{true, true, false}},
-		{testIn{true, true, 0, 2, true, 0, 2}, testOut{true, true, false}},
-		{testIn{true, true, 0, 2, true, 1, 2}, testOut{true, true, false}},
-		{testIn{true, true, 1, 2, true, 0, 2}, testOut{false, true, true}},
-		{testIn{true, true, 1, 2, true, 1, 2}, testOut{false, true, true}},
-		{testIn{true, true, 1, 2, true, 2, 2}, testOut{false, true, true}},
-		{testIn{true, true, 2, 2, true, 0, 2}, testOut{false, true, true}},
-		{testIn{true, true, 2, 2, true, 2, 2}, testOut{false, false, true}},
-		{testIn{true, true, 1, 3, true, 3, 3}, testOut{true, true, true}},
-		{testIn{true, true, 3, 3, true, 0, 3}, testOut{false, true, true}},
-		{testIn{true, true, 2, 3, true, 3, 3}, testOut{false, true, true}},
-		{testIn{true, true, 0, 1, true, 0, 1}, testOut{true, true, false}},
+		{testIn{false, false, 0, 0, false, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 0, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 0, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 2, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 2, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 1, 2, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 1, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 1, 2, true, 2, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 2, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 2, 2, true, 2, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 0, true, 0, 0, operatorv1.Managed}, testOut{true, false, false, true}},
+		{testIn{true, true, 0, 0, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 2, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 2, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 1, 2, true, 0, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 1, 2, true, 1, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 1, 2, true, 2, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 2, true, 0, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 2, true, 2, 2, operatorv1.Managed}, testOut{false, false, true, true}},
+		{testIn{true, true, 1, 3, true, 3, 3, operatorv1.Managed}, testOut{true, true, true, true}},
+		{testIn{true, true, 3, 3, true, 0, 3, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 3, true, 3, 3, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 0, 1, true, 0, 1, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 0, true, 0, 2, operatorv1.Unmanaged}, testOut{true, true, false, false}},
+		{testIn{true, true, 1, 3, true, 3, 3, operatorv1.Unmanaged}, testOut{true, true, true, false}},
+		{testIn{true, true, 2, 2, true, 0, 2, operatorv1.Unmanaged}, testOut{false, true, true, false}},
+		{testIn{true, true, 2, 2, true, 2, 2, operatorv1.Unmanaged}, testOut{false, false, true, false}},
+		{testIn{true, true, 0, 0, true, 0, 2, operatorv1.ManagementState("")}, testOut{true, true, false, true}},
+		{testIn{true, true, 1, 3, true, 3, 3, operatorv1.ManagementState("")}, testOut{true, true, true, true}},
+		{testIn{true, true, 2, 2, true, 0, 2, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 2, true, 2, 2, operatorv1.ManagementState("")}, testOut{false, false, true, true}},
 	}
 
 	for i, tc := range testCases {
 		var (
 			clusterIP string
 
-			degraded, progressing, available operatorv1.ConditionStatus
+			degraded, progressing, available, upgradeable operatorv1.ConditionStatus
 		)
 		if tc.inputs.haveClusterIP {
 			clusterIP = "1.2.3.4"
@@ -103,6 +112,8 @@ func TestDNSStatusConditions(t *testing.T) {
 				},
 			}
 		}
+		dns := operatorv1.DNS{}
+		dns.Spec.ManagementState = tc.inputs.managementState
 		if tc.outputs.degraded {
 			degraded = operatorv1.ConditionTrue
 		} else {
@@ -118,6 +129,11 @@ func TestDNSStatusConditions(t *testing.T) {
 		} else {
 			available = operatorv1.ConditionFalse
 		}
+		if tc.outputs.upgradeable {
+			upgradeable = operatorv1.ConditionTrue
+		} else {
+			upgradeable = operatorv1.ConditionFalse
+		}
 		expected := []operatorv1.OperatorCondition{
 			{
 				Type:   operatorv1.OperatorStatusTypeDegraded,
@@ -131,8 +147,12 @@ func TestDNSStatusConditions(t *testing.T) {
 				Type:   operatorv1.OperatorStatusTypeAvailable,
 				Status: available,
 			},
+			{
+				Type:   operatorv1.OperatorStatusTypeUpgradeable,
+				Status: upgradeable,
+			},
 		}
-		actual := computeDNSStatusConditions(&operatorv1.DNS{}, clusterIP, tc.inputs.haveDNS, dnsDaemonset, tc.inputs.haveNR, nodeResolverDaemonset)
+		actual := computeDNSStatusConditions(&dns, clusterIP, tc.inputs.haveDNS, dnsDaemonset, tc.inputs.haveNR, nodeResolverDaemonset)
 		gotExpected := true
 		if len(actual) != len(expected) {
 			gotExpected = false
@@ -156,7 +176,18 @@ func TestDNSStatusConditions(t *testing.T) {
 		if !tc.inputs.haveClusterIP {
 			haveClusterIP = "no cluster ip"
 		}
-		description := fmt.Sprintf("%s, %d/%d DNS pods available, %d/%d node-resolver pods available", haveClusterIP, tc.inputs.availDNS, tc.inputs.desireDNS, tc.inputs.availNR, tc.inputs.desireNR)
+		var managementState string
+		switch tc.inputs.managementState {
+		case operatorv1.Managed:
+			managementState = "Managed"
+		case operatorv1.Force:
+			managementState = "Force"
+		case operatorv1.Removed:
+			managementState = "Removed"
+		case operatorv1.Unmanaged:
+			managementState = "Unmanaged"
+		}
+		description := fmt.Sprintf("%s, %d/%d DNS pods available, %d/%d node-resolver pods available, managementState is %s", haveClusterIP, tc.inputs.availDNS, tc.inputs.desireDNS, tc.inputs.availNR, tc.inputs.desireNR, managementState)
 		if !gotExpected {
 			t.Fatalf("%q:\nexpected %#v\ngot %#v", description, expected, actual)
 		}
