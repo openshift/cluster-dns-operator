@@ -364,7 +364,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		}
 
 		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset); err != nil {
-			errs = append(errs, fmt.Errorf("failed to sync status of dns %s/%s: %v", daemonset.Namespace, daemonset.Name, err))
+			errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 		}
 	}
 
