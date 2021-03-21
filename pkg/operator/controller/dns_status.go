@@ -67,10 +67,6 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 	numberUnavailable := ds.Status.DesiredNumberScheduled - ds.Status.NumberAvailable
 	maxUnavailable, intstrErr := intstr.GetScaledValueFromIntOrPercent(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable, int(ds.Status.DesiredNumberScheduled), true)
 	switch {
-	case intstrErr != nil:
-		degradedCondition.Status = operatorv1.ConditionUnknown
-		degradedCondition.Reason = "InvalidMaxUnavailable"
-		degradedCondition.Message = fmt.Sprintf("MaxUnavailable has an invalid value: %v", intstrErr)
 	case len(clusterIP) == 0 && ds.Status.NumberAvailable == 0:
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "NoServiceIPAndNoDaemonSetPods"
@@ -87,6 +83,10 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "NoPodsAvailable"
 		degradedCondition.Message = "No CoreDNS pods are available"
+	case intstrErr != nil:
+		degradedCondition.Status = operatorv1.ConditionUnknown
+		degradedCondition.Reason = "InvalidMaxUnavailable"
+		degradedCondition.Message = fmt.Sprintf("MaxUnavailable has an invalid value: %v", intstrErr)
 	case int(numberUnavailable) > maxUnavailable:
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "MaxUnavailableExceeded"

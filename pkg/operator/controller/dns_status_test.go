@@ -193,6 +193,12 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 		expected  operatorv1.ConditionStatus
 	}{
 		{
+			name:      "0 available, invalid MaxUnavailable",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(6, 0, intstr.FromString("TEST")),
+			expected:  operatorv1.ConditionTrue,
+		},
+		{
 			name:      "invalid MaxUnavailable (string with digits without a percent sign)",
 			clusterIP: "172.30.0.10",
 			ds:        makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}),
