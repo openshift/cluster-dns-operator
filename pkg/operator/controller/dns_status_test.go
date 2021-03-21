@@ -192,16 +192,12 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 		ds        *appsv1.DaemonSet
 		expected  operatorv1.ConditionStatus
 	}{
-		// TODO: Enable this test case after changing
-		// computeDNSDegradedCondition to use
-		// GetScaledValueFromIntOrPercent (which requires first rebasing
-		// to Kubernetes 1.20).
-		//{
-		//	name:      "invalid MaxUnavailable (string with digits without a percent sign)",
-		//	clusterIP: "172.30.0.10",
-		//	ds:        makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}),
-		//	expected: operatorv1.ConditionUnknown,
-		//},
+		{
+			name:      "invalid MaxUnavailable (string with digits without a percent sign)",
+			clusterIP: "172.30.0.10",
+			ds:        makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}),
+			expected:  operatorv1.ConditionUnknown,
+		},
 		{
 			name:      "invalid MaxUnavailable (string with letters)",
 			clusterIP: "172.30.0.10",

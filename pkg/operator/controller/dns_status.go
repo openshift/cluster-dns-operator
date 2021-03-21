@@ -65,9 +65,7 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		Type: operatorv1.OperatorStatusTypeDegraded,
 	}
 	numberUnavailable := ds.Status.DesiredNumberScheduled - ds.Status.NumberAvailable
-	// TODO: Replace GetValueFromIntOrPercent with
-	// GetScaledValueFromIntOrPercent after rebasing on Kubernetes 1.20.
-	maxUnavailable, intstrErr := intstr.GetValueFromIntOrPercent(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable, int(ds.Status.DesiredNumberScheduled), true)
+	maxUnavailable, intstrErr := intstr.GetScaledValueFromIntOrPercent(ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable, int(ds.Status.DesiredNumberScheduled), true)
 	switch {
 	case intstrErr != nil:
 		degradedCondition.Status = operatorv1.ConditionUnknown
