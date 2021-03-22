@@ -171,7 +171,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 		{
 			description: "if the config-volume default mode value is defaulted",
 			mutate: func(daemonset *appsv1.DaemonSet) {
-				newVal := volumeDefaultMode
+				newVal := corev1.ConfigMapVolumeSourceDefaultMode
 				daemonset.Spec.Template.Spec.Volumes[0].ConfigMap.DefaultMode = &newVal
 			},
 			expect: false,
@@ -187,7 +187,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 		{
 			description: "if the metrics-tls default mode value is defaulted",
 			mutate: func(daemonset *appsv1.DaemonSet) {
-				newVal := volumeDefaultMode
+				newVal := corev1.SecretVolumeSourceDefaultMode
 				daemonset.Spec.Template.Spec.Volumes[2].Secret.DefaultMode = &newVal
 			},
 			expect: false,
