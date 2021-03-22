@@ -350,17 +350,18 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 
 	errs := []error{}
 
-	if haveDS, daemonset, err := r.ensureDNSDaemonSet(dns); err != nil {
+	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns)
+	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
-	} else if !haveDS {
+	} else if !haveDNSDaemonset {
 		errs = append(errs, fmt.Errorf("failed to get daemonset for dns %s", dns.Name))
 	} else {
 		trueVar := true
 		daemonsetRef := metav1.OwnerReference{
 			APIVersion: "apps/v1",
 			Kind:       "DaemonSet",
-			Name:       daemonset.Name,
-			UID:        daemonset.UID,
+			Name:       dnsDaemonset.Name,
+			UID:        dnsDaemonset.UID,
 			Controller: &trueVar,
 		}
 
@@ -377,14 +378,15 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		} else if err := r.ensureMetricsIntegration(dns, svc, daemonsetRef); err != nil {
 			errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))
 		}
-
-		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset); err != nil {
-			errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
-		}
 	}
 
-	if _, _, err := r.ensureNodeResolverDaemonSet(clusterIP, clusterDomain); err != nil {
+	haveNodeResolverDaemonset, nodeResolverDaemonset, err := r.ensureNodeResolverDaemonSet(clusterIP, clusterDomain)
+	if err != nil {
 		errs = append(errs, err)
+	}
+
+	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset); err != nil {
+		errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 	}
 
 	return utilerrors.NewAggregate(errs)
