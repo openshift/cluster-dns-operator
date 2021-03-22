@@ -257,10 +257,6 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	return true, updated
 }
 
-// volumeDefaultMode is the default mode value that the API uses for configmap
-// and secret volume sources.  Decimal 420 is octal 0644, which is u=rw,g=r,o=r.
-const volumeDefaultMode = int32(420)
-
 // cmpConfigMapVolumeSource compares two configmap volume source values and
 // returns a Boolean indicating whether they are equal.
 func cmpConfigMapVolumeSource(a, b corev1.ConfigMapVolumeSource) bool {
@@ -270,11 +266,11 @@ func cmpConfigMapVolumeSource(a, b corev1.ConfigMapVolumeSource) bool {
 	if !cmp.Equal(a.Items, b.Items, cmpopts.EquateEmpty()) {
 		return false
 	}
-	aDefaultMode := volumeDefaultMode
+	aDefaultMode := corev1.ConfigMapVolumeSourceDefaultMode
 	if a.DefaultMode != nil {
 		aDefaultMode = *a.DefaultMode
 	}
-	bDefaultMode := volumeDefaultMode
+	bDefaultMode := corev1.ConfigMapVolumeSourceDefaultMode
 	if b.DefaultMode != nil {
 		bDefaultMode = *b.DefaultMode
 	}
@@ -296,11 +292,11 @@ func cmpSecretVolumeSource(a, b corev1.SecretVolumeSource) bool {
 	if !cmp.Equal(a.Items, b.Items, cmpopts.EquateEmpty()) {
 		return false
 	}
-	aDefaultMode := volumeDefaultMode
+	aDefaultMode := corev1.SecretVolumeSourceDefaultMode
 	if a.DefaultMode != nil {
 		aDefaultMode = *a.DefaultMode
 	}
-	bDefaultMode := volumeDefaultMode
+	bDefaultMode := corev1.SecretVolumeSourceDefaultMode
 	if b.DefaultMode != nil {
 		bDefaultMode = *b.DefaultMode
 	}
