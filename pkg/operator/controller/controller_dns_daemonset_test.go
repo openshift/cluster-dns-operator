@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"reflect"
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -26,6 +27,19 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 		t.Errorf("invalid dns daemonset: %v", err)
 	} else {
 		// Validate the daemonset
+		expectedNodeSelector := map[string]string{"kubernetes.io/os": "linux"}
+		actualNodeSelector := ds.Spec.Template.Spec.NodeSelector
+		if !reflect.DeepEqual(actualNodeSelector, expectedNodeSelector) {
+			t.Errorf("unexpected node selector: expected %#v, got %#v", expectedNodeSelector, actualNodeSelector)
+		}
+		actualTolerations := ds.Spec.Template.Spec.Tolerations
+		expectedTolerations := []corev1.Toleration{{
+			Key:      "node-role.kubernetes.io/master",
+			Operator: corev1.TolerationOpExists,
+		}}
+		if !reflect.DeepEqual(actualTolerations, expectedTolerations) {
+			t.Errorf("unexpected tolerations: expected %#v, got %#v", expectedTolerations, actualTolerations)
+		}
 		if len(ds.Spec.Template.Spec.Containers) != 2 {
 			t.Errorf("expected number of daemonset containers 2, got %d", len(ds.Spec.Template.Spec.Containers))
 		}
@@ -42,6 +56,43 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 			default:
 				t.Errorf("unexpected daemonset container %q", c.Name)
 			}
+		}
+	}
+}
+
+// TestDesiredDNSDaemonsetNodePlacement verifies that desiredDNSDaemonSet
+// respects the DNS pod placement API.
+func TestDesiredDNSDaemonsetNodePlacement(t *testing.T) {
+	nodeSelector := map[string]string{
+		"xyzzy": "quux",
+	}
+	tolerations := []corev1.Toleration{{
+		Key:      "foo",
+		Value:    "bar",
+		Operator: corev1.TolerationOpExists,
+		Effect:   corev1.TaintEffectNoExecute,
+	}}
+	dns := &operatorv1.DNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: DefaultDNSController,
+		},
+		Spec: operatorv1.DNSSpec{
+			NodePlacement: operatorv1.DNSNodePlacement{
+				NodeSelector: nodeSelector,
+				Tolerations:  tolerations,
+			},
+		},
+	}
+	if ds, err := desiredDNSDaemonSet(dns, "", ""); err != nil {
+		t.Errorf("invalid dns daemonset: %v", err)
+	} else {
+		actualNodeSelector := ds.Spec.Template.Spec.NodeSelector
+		if !reflect.DeepEqual(actualNodeSelector, nodeSelector) {
+			t.Errorf("unexpected node selector: expected %#v, got %#v", nodeSelector, actualNodeSelector)
+		}
+		actualTolerations := ds.Spec.Template.Spec.Tolerations
+		if !reflect.DeepEqual(actualTolerations, tolerations) {
+			t.Errorf("unexpected tolerations: expected %#v, got %#v", tolerations, actualTolerations)
 		}
 	}
 }

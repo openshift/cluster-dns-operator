@@ -79,6 +79,15 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 	daemonset.Spec.Selector = DNSDaemonSetPodSelector(dns)
 	daemonset.Spec.Template.Labels = daemonset.Spec.Selector.MatchLabels
 
+	nodeSelector := map[string]string{"kubernetes.io/os": "linux"}
+	if len(dns.Spec.NodePlacement.NodeSelector) != 0 {
+		nodeSelector = dns.Spec.NodePlacement.NodeSelector
+	}
+	if dns.Spec.NodePlacement.Tolerations != nil {
+		daemonset.Spec.Template.Spec.Tolerations = dns.Spec.NodePlacement.Tolerations
+	}
+	daemonset.Spec.Template.Spec.NodeSelector = nodeSelector
+
 	coreFileVolumeFound := false
 	for i := range daemonset.Spec.Template.Spec.Volumes {
 		// TODO: remove hardcoding of volume name
