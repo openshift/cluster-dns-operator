@@ -43,7 +43,10 @@ bar.com:5353 example.com:5353 {
 }
 .:5353 {
     errors
-    health
+    health {
+        lameduck 20s
+    }
+    ready
     kubernetes cluster.local in-addr.arpa ip6.arpa {
         pods insecure
         upstream
