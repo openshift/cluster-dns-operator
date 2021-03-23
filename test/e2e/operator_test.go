@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -440,5 +442,112 @@ func TestDNSForwarding(t *testing.T) {
 	logMsg := "NOERROR"
 	if err := lookForStringInPodLog(upstreamResolver.Namespace, upstreamResolver.Name, upstreamResolver.Name, logMsg, 30*time.Second); err != nil {
 		t.Fatalf("failed to parse %q from pod %s/%s logs: %v", logMsg, upstreamResolver.Namespace, upstreamResolver.Name, err)
+	}
+}
+
+// TestDNSNodePlacement verifies that the node placement API works properly by
+// first configuring DNS pods to run only on master nodes and verifying that
+// this configuration results in having the expected number of DNS pods, then
+// configuring DNS pods with a label selector that selects 0 nodes and verifying
+// that the invalid label selector is ignored.
+func TestDNSNodePlacement(t *testing.T) {
+	cl, err := getClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Configure DNS pods to run only on master nodes.
+	defaultDNS := &operatorv1.DNS{}
+	name := types.NamespacedName{Name: operatorcontroller.DefaultDNSController}
+	if err := cl.Get(context.TODO(), name, defaultDNS); err != nil {
+		t.Fatalf("failed to get default dns: %v", err)
+	}
+	defaultDNS.Spec.NodePlacement.NodeSelector = map[string]string{
+		"node-role.kubernetes.io/master": "",
+	}
+	if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+		t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+	}
+	defer func() {
+		defaultDNS = &operatorv1.DNS{}
+		if err := cl.Get(context.TODO(), name, defaultDNS); err != nil {
+			t.Fatalf("failed to get default dns: %v", err)
+		}
+		if defaultDNS.Spec.NodePlacement.NodeSelector != nil {
+			defaultDNS.Spec.NodePlacement.NodeSelector = nil
+			if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+				t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+			}
+		}
+	}()
+
+	// Verify that all remaining DNS pods are running on master nodes.
+	dnsDaemonSet := &appsv1.DaemonSet{}
+	dnsDaemonSetName := operatorcontroller.DNSDaemonSetName(defaultDNS)
+	if err := cl.Get(context.TODO(), dnsDaemonSetName, dnsDaemonSet); err != nil {
+		fmt.Errorf("failed to get daemonset %s: %v", dnsDaemonSetName, err)
+	}
+	selector, err := metav1.LabelSelectorAsSelector(dnsDaemonSet.Spec.Selector)
+	if err != nil {
+		t.Fatalf("daemonset %s has invalid spec.selector: %v", dnsDaemonSetName, err)
+	}
+	listOpts := []client.ListOption{
+		client.MatchingLabelsSelector{Selector: selector},
+		client.InNamespace(dnsDaemonSet.Namespace),
+	}
+	nodeList := &corev1.NodeList{}
+	if err := cl.List(context.TODO(), nodeList); err != nil {
+		t.Fatalf("failed to list nodes: %v", err)
+	}
+	masterNodes := sets.NewString()
+	for _, node := range nodeList.Items {
+		if _, ok := node.Labels["node-role.kubernetes.io/master"]; ok {
+			masterNodes.Insert(node.Name)
+		}
+	}
+	podList := &corev1.PodList{}
+	err = wait.PollImmediate(1*time.Second, 3*time.Minute, func() (bool, error) {
+		if err := cl.List(context.TODO(), podList, listOpts...); err != nil {
+			t.Logf("failed to list pods for dns daemonset %s: %v", dnsDaemonSetName, err)
+			return false, nil
+		}
+		for _, pod := range podList.Items {
+			if !masterNodes.Has(pod.Spec.NodeName) {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+	if err != nil {
+		nodes := sets.NewString()
+		for _, node := range nodeList.Items {
+			nodes.Insert(node.Name)
+		}
+		t.Errorf("failed to observe updated set of nodes with dns pods; expected %s; got %s", strings.Join(masterNodes.List(), ","), strings.Join(nodes.List(), ","))
+	}
+
+	// Configure DNS pods to run only on nodes with label foo=bar (which we
+	// assume no nodes have).
+	if err := cl.Get(context.TODO(), name, defaultDNS); err != nil {
+		t.Fatalf("failed to get default dns: %v", err)
+	}
+	defaultDNS.Spec.NodePlacement.NodeSelector = map[string]string{
+		"foo": "bar",
+	}
+	if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+		t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+	}
+
+	// Verify that DNS pods continue to run (meaning the label selector that
+	// matched no nodes is being ignored).
+	err = wait.PollImmediate(1*time.Second, 3*time.Minute, func() (bool, error) {
+		if err := cl.List(context.TODO(), podList, listOpts...); err != nil {
+			t.Logf("failed to list pods for dns daemonset %s: %v", dnsDaemonSetName, err)
+			return false, nil
+		}
+		return len(podList.Items) == 0, nil
+	})
+	if len(podList.Items) == 0 {
+		t.Errorf("expected label selector matching 0 nodes to be ignored; found 0 dns pods")
 	}
 }
