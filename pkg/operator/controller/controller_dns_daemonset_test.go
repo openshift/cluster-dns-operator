@@ -171,7 +171,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 		{
 			description: "if the config-volume default mode value is defaulted",
 			mutate: func(daemonset *appsv1.DaemonSet) {
-				newVal := volumeDefaultMode
+				newVal := corev1.ConfigMapVolumeSourceDefaultMode
 				daemonset.Spec.Template.Spec.Volumes[0].ConfigMap.DefaultMode = &newVal
 			},
 			expect: false,
@@ -187,7 +187,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 		{
 			description: "if the metrics-tls default mode value is defaulted",
 			mutate: func(daemonset *appsv1.DaemonSet) {
-				newVal := volumeDefaultMode
+				newVal := corev1.SecretVolumeSourceDefaultMode
 				daemonset.Spec.Template.Spec.Volumes[2].Secret.DefaultMode = &newVal
 			},
 			expect: false,
@@ -213,6 +213,14 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 				daemonset.Spec.Template.Spec.Containers[0].ReadinessProbe.PeriodSeconds = 2
 			},
 			expect: true,
+		},
+		{
+			description: "if the termination grace period is defaulted",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				newVal := int64(corev1.DefaultTerminationGracePeriodSeconds)
+				daemonset.Spec.Template.Spec.TerminationGracePeriodSeconds = &newVal
+			},
+			expect: false,
 		},
 		{
 			description: "if the termination grace period changes",

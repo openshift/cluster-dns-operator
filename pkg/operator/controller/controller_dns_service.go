@@ -84,10 +84,12 @@ func (r *reconciler) updateDNSService(current, desired *corev1.Service) (bool, e
 		return false, nil
 	}
 
+	// Diff before updating because the client may mutate the object.
+	diff := cmp.Diff(current, updated, cmpopts.EquateEmpty())
 	if err := r.client.Update(context.TODO(), updated); err != nil {
 		return false, fmt.Errorf("failed to update dns service %s/%s: %v", updated.Namespace, updated.Name, err)
 	}
-	logrus.Infof("updated dns service: %s/%s", updated.Namespace, updated.Name)
+	logrus.Infof("updated dns service %s/%s: %v", updated.Namespace, updated.Name, diff)
 	return true, nil
 }
 
@@ -97,7 +99,7 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 		// have modified.
 		//
 		// TODO: Remove TopologyKeys when the service topology feature gate is enabled.
-		cmpopts.IgnoreFields(corev1.ServiceSpec{}, "ClusterIP", "TopologyKeys"),
+		cmpopts.IgnoreFields(corev1.ServiceSpec{}, "ClusterIP", "ClusterIPs", "TopologyKeys"),
 		cmp.Comparer(cmpServiceAffinity),
 		cmp.Comparer(cmpServiceType),
 		cmpopts.EquateEmpty(),

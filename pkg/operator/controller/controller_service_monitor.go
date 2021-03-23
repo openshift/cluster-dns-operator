@@ -105,10 +105,12 @@ func (r *reconciler) updateDNSServiceMonitor(current, desired *unstructured.Unst
 		return false, nil
 	}
 
+	// Diff before updating because the client may mutate the object.
+	diff := cmp.Diff(current, updated, cmpopts.EquateEmpty())
 	if err := r.client.Update(context.TODO(), updated); err != nil {
 		return false, fmt.Errorf("failed to update dns servicemonitor %s/%s: %v", updated.GetNamespace(), updated.GetName(), err)
 	}
-	logrus.Infof("updated dns servicemonitor: %s/%s", updated.GetNamespace(), updated.GetName())
+	logrus.Infof("updated dns servicemonitor %s/%s: %v", updated.GetNamespace(), updated.GetName(), diff)
 	return true, nil
 }
 

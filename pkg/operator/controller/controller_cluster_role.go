@@ -62,10 +62,12 @@ func (r *reconciler) updateDNSClusterRole(current, desired *rbacv1.ClusterRole) 
 		return false, nil
 	}
 
+	// Diff before updating because the client may mutate the object.
+	diff := cmp.Diff(current, updated, cmpopts.EquateEmpty())
 	if err := r.client.Update(context.TODO(), updated); err != nil {
 		return false, fmt.Errorf("failed to update dns cluster role %s/%s: %v", updated.Namespace, updated.Name, err)
 	}
-	logrus.Infof("updated dns cluster role: %s/%s", updated.Namespace, updated.Name)
+	logrus.Infof("updated dns cluster role %s/%s: %v", updated.Namespace, updated.Name, diff)
 	return true, nil
 }
 
