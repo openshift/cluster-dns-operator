@@ -127,6 +127,14 @@ func desiredNodeResolverDaemonSet(clusterIP, clusterDomain, openshiftCLIImage st
 							MountPath: "/etc/hosts",
 						}},
 					}},
+					// The node-resolver pods need to run on
+					// every node in the cluster.  On nodes
+					// that have Smart NICs, each pod that
+					// uses the container network consumes
+					// an SR-IOV device.  Using the host
+					// network eliminates the need for this
+					// scarce resource.
+					HostNetwork: true,
 					NodeSelector: map[string]string{
 						"beta.kubernetes.io/os": "linux",
 					},
