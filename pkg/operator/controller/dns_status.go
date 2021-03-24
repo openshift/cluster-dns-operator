@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -22,7 +23,7 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 	updated := dns.DeepCopy()
 	updated.Status.ClusterIP = clusterIP
 	updated.Status.ClusterDomain = clusterDomain
-	updated.Status.Conditions = computeDNSStatusConditions(dns.Status.Conditions, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset)
+	updated.Status.Conditions = computeDNSStatusConditions(dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset)
 	if !dnsStatusesEqual(updated.Status, dns.Status) {
 		if err := r.client.Status().Update(context.TODO(), updated); err != nil {
 			return fmt.Errorf("failed to update dns status: %v", err)
@@ -35,8 +36,9 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 
 // computeDNSStatusConditions computes dns status conditions based on
 // the status of ds and clusterIP.
-func computeDNSStatusConditions(oldConditions []operatorv1.OperatorCondition, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet) []operatorv1.OperatorCondition {
+func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet) []operatorv1.OperatorCondition {
 	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition *operatorv1.OperatorCondition
+	oldConditions := dns.Status.Conditions
 	for i := range oldConditions {
 		switch oldConditions[i].Type {
 		case operatorv1.OperatorStatusTypeDegraded:
@@ -50,7 +52,7 @@ func computeDNSStatusConditions(oldConditions []operatorv1.OperatorCondition, cl
 
 	conditions := []operatorv1.OperatorCondition{
 		computeDNSDegradedCondition(oldDegradedCondition, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset),
-		computeDNSProgressingCondition(oldProgressingCondition, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset),
+		computeDNSProgressingCondition(oldProgressingCondition, dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset),
 		computeDNSAvailableCondition(oldAvailableCondition, clusterIP, haveDNSDaemonset, dnsDaemonset),
 	}
 
@@ -148,7 +150,7 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 
 // computeDNSProgressingCondition computes the dns Progressing status condition
 // based on the status of the DNS and node-resolver daemonsets.
-func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet) operatorv1.OperatorCondition {
+func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet) operatorv1.OperatorCondition {
 	progressingCondition := &operatorv1.OperatorCondition{
 		Type: operatorv1.OperatorStatusTypeProgressing,
 	}
@@ -163,6 +165,18 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 		want := dnsDaemonset.Status.DesiredNumberScheduled
 		if have != want {
 			messages = append(messages, fmt.Sprintf("Have %d available DNS pods, want %d.", have, want))
+		}
+
+		wantSelector := dns.Spec.NodePlacement.NodeSelector
+		haveSelector := dnsDaemonset.Spec.Template.Spec.NodeSelector
+		if !reflect.DeepEqual(haveSelector, wantSelector) {
+			messages = append(messages, fmt.Sprintf("Have DNS daemonset with node selector %v, want %v.", haveSelector, wantSelector))
+		}
+
+		haveTolerations := dnsDaemonset.Spec.Template.Spec.Tolerations
+		wantTolerations := dns.Spec.NodePlacement.Tolerations
+		if !reflect.DeepEqual(haveTolerations, wantTolerations) {
+			messages = append(messages, fmt.Sprintf("Have DNS daemonset with tolerations %v, want %v.", haveTolerations, wantTolerations))
 		}
 	}
 	if !haveNodeResolverDaemonset {
