@@ -58,6 +58,7 @@ bar.com:5353 example.com:5353 {
         policy sequential
     }
     cache 900
+    log
     reload
 }
 `

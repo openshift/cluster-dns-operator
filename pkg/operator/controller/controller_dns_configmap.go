@@ -45,6 +45,7 @@ var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Se
         policy sequential
     }
     cache 900
+    log
     reload
 }
 `))
