@@ -44,7 +44,7 @@ var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Se
     forward . /etc/resolv.conf {
         policy sequential
     }
-    cache 900
+    cache 30
     reload
 }
 `))
