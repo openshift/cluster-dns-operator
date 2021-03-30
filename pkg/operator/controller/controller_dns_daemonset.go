@@ -17,15 +17,18 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
-func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (bool, *appsv1.DaemonSet, error) {
+func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS) (bool, *appsv1.DaemonSet, error) {
 	haveDS, current, err := r.currentDNSDaemonSet(dns)
 	if err != nil {
 		return false, nil, err
 	}
-	desired, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, r.CoreDNSImage, r.OpenshiftCLIImage, r.KubeRBACProxyImage)
+	desired, err := desiredDNSDaemonSet(dns, r.CoreDNSImage, r.KubeRBACProxyImage)
 	if err != nil {
 		return haveDS, current, fmt.Errorf("failed to build dns daemonset: %v", err)
 	}
@@ -63,7 +66,7 @@ func (r *reconciler) ensureDNSDaemonSetDeleted(dns *operatorv1.DNS) error {
 }
 
 // desiredDNSDaemonSet returns the desired dns daemonset.
-func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) (*appsv1.DaemonSet, error) {
+func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage string) (*appsv1.DaemonSet, error) {
 	daemonset := manifests.DNSDaemonSet()
 	name := DNSDaemonSetName(dns)
 	daemonset.Name = name.Name
@@ -78,6 +81,15 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 	// Ensure the daemonset adopts only its own pods.
 	daemonset.Spec.Selector = DNSDaemonSetPodSelector(dns)
 	daemonset.Spec.Template.Labels = daemonset.Spec.Selector.MatchLabels
+
+	nodeSelector := map[string]string{"kubernetes.io/os": "linux"}
+	if len(dns.Spec.NodePlacement.NodeSelector) != 0 {
+		nodeSelector = dns.Spec.NodePlacement.NodeSelector
+	}
+	if dns.Spec.NodePlacement.Tolerations != nil {
+		daemonset.Spec.Template.Spec.Tolerations = dns.Spec.NodePlacement.Tolerations
+	}
+	daemonset.Spec.Template.Spec.NodeSelector = nodeSelector
 
 	coreFileVolumeFound := false
 	for i := range daemonset.Spec.Template.Spec.Volumes {
@@ -101,26 +113,6 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, coreDNSI
 		switch c.Name {
 		case "dns":
 			daemonset.Spec.Template.Spec.Containers[i].Image = coreDNSImage
-		case "dns-node-resolver":
-			daemonset.Spec.Template.Spec.Containers[i].Image = openshiftCLIImage
-			envs := []corev1.EnvVar{}
-			if len(clusterIP) > 0 {
-				envs = append(envs, corev1.EnvVar{
-					Name:  "NAMESERVER",
-					Value: clusterIP,
-				})
-			}
-			if len(clusterDomain) > 0 {
-				envs = append(envs, corev1.EnvVar{
-					Name:  "CLUSTER_DOMAIN",
-					Value: clusterDomain,
-				})
-			}
-
-			if daemonset.Spec.Template.Spec.Containers[i].Env == nil {
-				daemonset.Spec.Template.Spec.Containers[i].Env = []corev1.EnvVar{}
-			}
-			daemonset.Spec.Template.Spec.Containers[i].Env = append(daemonset.Spec.Template.Spec.Containers[i].Env, envs...)
 		case "kube-rbac-proxy":
 			daemonset.Spec.Template.Spec.Containers[i].Image = kubeRBACProxyImage
 		}
@@ -156,6 +148,16 @@ func (r *reconciler) updateDNSDaemonSet(current, desired *appsv1.DaemonSet) (boo
 		return false, nil
 	}
 
+	if safe, reason, err := r.daemonsetUpdateIsSafe(current, updated); err != nil {
+		return false, err
+	} else if !safe {
+		ignored := updated.DeepCopy()
+		updated.Spec.Template.Spec.Tolerations = current.Spec.Template.Spec.Tolerations
+		updated.Spec.Template.Spec.NodeSelector = current.Spec.Template.Spec.NodeSelector
+		diff := cmp.Diff(ignored, updated, cmpopts.EquateEmpty())
+		logrus.Warnf("skipping unsafe update to the node-placement parameters for dns daemonset %s/%s: %s; ignored: %v", updated.Namespace, updated.Name, reason, diff)
+	}
+
 	// Diff before updating because the client may mutate the object.
 	diff := cmp.Diff(current, updated, cmpopts.EquateEmpty())
 	if err := r.client.Update(context.TODO(), updated); err != nil {
@@ -163,6 +165,80 @@ func (r *reconciler) updateDNSDaemonSet(current, desired *appsv1.DaemonSet) (boo
 	}
 	logrus.Infof("updated dns daemonset %s/%s: %v", updated.Namespace, updated.Name, diff)
 	return true, nil
+}
+
+// daemonsetUpdateIsSafe takes current and updated daemonsets, checks if the
+// update is safe, and returns a Boolean value and a string value indicating
+// whether the update is safe or the reason why it is not.
+func (r *reconciler) daemonsetUpdateIsSafe(current, updated *appsv1.DaemonSet) (bool, string, error) {
+	name := types.NamespacedName{
+		Namespace: current.Namespace,
+		Name:      current.Name,
+	}
+	// Allow the update if the current daemonset doesn't even have a
+	// valid selector.
+	selector, err := metav1.LabelSelectorAsSelector(current.Spec.Selector)
+	if err != nil {
+		logrus.Warningf("daemonset %q has an invalid spec.selector: %v", name, err)
+		return true, "", nil
+	}
+	listOpts := []client.ListOption{
+		client.MatchingLabelsSelector{Selector: selector},
+		client.InNamespace(current.Namespace),
+	}
+	podList := &corev1.PodList{}
+	if err := r.cache.List(context.TODO(), podList, listOpts...); err != nil {
+		return false, "", fmt.Errorf("failed to list the daemonset's pods: %w", err)
+	}
+	// Allow the update if the current daemonset has 0 pods as the update
+	// cannot reduce the number of pods below 0.
+	if len(podList.Items) == 0 {
+		logrus.Warningf("daemonset %q has 0 pods", name)
+		return true, "", nil
+	}
+	nodeLabelSelector := &metav1.LabelSelector{
+		MatchLabels: updated.Spec.Template.Spec.NodeSelector,
+	}
+	nodeSelector, err := metav1.LabelSelectorAsSelector(nodeLabelSelector)
+	if err != nil {
+		return false, fmt.Sprintf("daemonset %q has an invalid spec.template.spec.nodeSelector: %v", name, err), nil
+	}
+	listOpts = []client.ListOption{
+		client.MatchingLabelsSelector{Selector: nodeSelector},
+	}
+	nodeList := &corev1.NodeList{}
+	if err := r.cache.List(context.TODO(), nodeList, listOpts...); err != nil {
+		return false, "", fmt.Errorf("failed to list nodes: %w", err)
+	}
+	for _, node := range nodeList.Items {
+		if node.Spec.Unschedulable {
+			continue
+		}
+		taints := node.Spec.Taints
+		tolerations := updated.Spec.Template.Spec.Tolerations
+		if !tolerationsTolerateTaints(tolerations, taints) {
+			continue
+		}
+		// We have found a node to which it should be possible to
+		// schedule pods for the updated daemonset, so the update
+		// can be considered safe.
+		return true, "", nil
+	}
+	return false, "updated daemonset's node placement parameters match 0 schedulable nodes", nil
+}
+
+func tolerationsTolerateTaints(tolerations []corev1.Toleration, taints []corev1.Taint) bool {
+	if len(taints) == 0 {
+		return true
+	}
+	for _, taint := range taints {
+		for _, toleration := range tolerations {
+			if toleration.ToleratesTaint(&taint) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // daemonsetConfigChanged checks if current config matches the expected config
@@ -176,7 +252,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		changed = true
 	}
 
-	for _, name := range []string{"dns", "dns-node-resolver", "kube-rbac-proxy"} {
+	for _, name := range []string{"dns", "kube-rbac-proxy"} {
 		var curIndex int
 		var curImage, expImage string
 		var curReady, expReady corev1.Probe

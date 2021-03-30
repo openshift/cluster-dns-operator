@@ -39,6 +39,7 @@ rules:
   - configmaps
   - endpoints
   - pods
+  - nodes
   verbs:
   - "*"
 

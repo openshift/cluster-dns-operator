@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"reflect"
 	"testing"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -13,10 +14,7 @@ import (
 )
 
 func TestDesiredDNSDaemonset(t *testing.T) {
-	clusterDomain := "cluster.local"
-	clusterIP := "172.30.77.10"
 	coreDNSImage := "quay.io/openshift/coredns:test"
-	openshiftCLIImage := "openshift/origin-cli:test"
 	kubeRBACProxyImage := "quay.io/openshift/origin-kube-rbac-proxy:test"
 
 	dns := &operatorv1.DNS{
@@ -25,39 +23,31 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 		},
 	}
 
-	if ds, err := desiredDNSDaemonSet(dns, clusterIP, clusterDomain, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage); err != nil {
+	if ds, err := desiredDNSDaemonSet(dns, coreDNSImage, kubeRBACProxyImage); err != nil {
 		t.Errorf("invalid dns daemonset: %v", err)
 	} else {
 		// Validate the daemonset
-		if len(ds.Spec.Template.Spec.Containers) != 3 {
-			t.Errorf("expected number of daemonset containers 3, got %d", len(ds.Spec.Template.Spec.Containers))
+		expectedNodeSelector := map[string]string{"kubernetes.io/os": "linux"}
+		actualNodeSelector := ds.Spec.Template.Spec.NodeSelector
+		if !reflect.DeepEqual(actualNodeSelector, expectedNodeSelector) {
+			t.Errorf("unexpected node selector: expected %#v, got %#v", expectedNodeSelector, actualNodeSelector)
+		}
+		actualTolerations := ds.Spec.Template.Spec.Tolerations
+		expectedTolerations := []corev1.Toleration{{
+			Key:      "node-role.kubernetes.io/master",
+			Operator: corev1.TolerationOpExists,
+		}}
+		if !reflect.DeepEqual(actualTolerations, expectedTolerations) {
+			t.Errorf("unexpected tolerations: expected %#v, got %#v", expectedTolerations, actualTolerations)
+		}
+		if len(ds.Spec.Template.Spec.Containers) != 2 {
+			t.Errorf("expected number of daemonset containers 2, got %d", len(ds.Spec.Template.Spec.Containers))
 		}
 		for _, c := range ds.Spec.Template.Spec.Containers {
 			switch c.Name {
 			case "dns":
 				if e, a := coreDNSImage, c.Image; e != a {
 					t.Errorf("expected daemonset dns image %q, got %q", e, a)
-				}
-			case "dns-node-resolver":
-				if e, a := openshiftCLIImage, c.Image; e != a {
-					t.Errorf("expected daemonset dns node resolver image %q, got %q", e, a)
-				}
-
-				envs := map[string]string{}
-				for _, e := range c.Env {
-					envs[e.Name] = e.Value
-				}
-				nameserver, ok := envs["NAMESERVER"]
-				if !ok {
-					t.Errorf("NAMESERVER env for dns node resolver image not found")
-				} else if clusterIP != nameserver {
-					t.Errorf("expected NAMESERVER env for dns node resolver image %q, got %q", clusterIP, nameserver)
-				}
-				domain, ok := envs["CLUSTER_DOMAIN"]
-				if !ok {
-					t.Errorf("CLUSTER_DOMAIN env for dns node resolver image not found")
-				} else if clusterDomain != domain {
-					t.Errorf("expected CLUSTER_DOMAIN env for dns node resolver image %q, got %q", clusterDomain, domain)
 				}
 			case "kube-rbac-proxy":
 				if e, a := kubeRBACProxyImage, c.Image; e != a {
@@ -66,6 +56,43 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 			default:
 				t.Errorf("unexpected daemonset container %q", c.Name)
 			}
+		}
+	}
+}
+
+// TestDesiredDNSDaemonsetNodePlacement verifies that desiredDNSDaemonSet
+// respects the DNS pod placement API.
+func TestDesiredDNSDaemonsetNodePlacement(t *testing.T) {
+	nodeSelector := map[string]string{
+		"xyzzy": "quux",
+	}
+	tolerations := []corev1.Toleration{{
+		Key:      "foo",
+		Value:    "bar",
+		Operator: corev1.TolerationOpExists,
+		Effect:   corev1.TaintEffectNoExecute,
+	}}
+	dns := &operatorv1.DNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: DefaultDNSController,
+		},
+		Spec: operatorv1.DNSSpec{
+			NodePlacement: operatorv1.DNSNodePlacement{
+				NodeSelector: nodeSelector,
+				Tolerations:  tolerations,
+			},
+		},
+	}
+	if ds, err := desiredDNSDaemonSet(dns, "", ""); err != nil {
+		t.Errorf("invalid dns daemonset: %v", err)
+	} else {
+		actualNodeSelector := ds.Spec.Template.Spec.NodeSelector
+		if !reflect.DeepEqual(actualNodeSelector, nodeSelector) {
+			t.Errorf("unexpected node selector: expected %#v, got %#v", nodeSelector, actualNodeSelector)
+		}
+		actualTolerations := ds.Spec.Template.Spec.Tolerations
+		if !reflect.DeepEqual(actualTolerations, tolerations) {
+			t.Errorf("unexpected tolerations: expected %#v, got %#v", tolerations, actualTolerations)
 		}
 	}
 }
@@ -123,13 +150,6 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: true,
 		},
 		{
-			description: "if the dns-node-resolver container image is changed",
-			mutate: func(daemonset *appsv1.DaemonSet) {
-				daemonset.Spec.Template.Spec.Containers[1].Image = "openshift/origin-cli:latest"
-			},
-			expect: true,
-		},
-		{
 			description: "if the dns container image is changed",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				daemonset.Spec.Template.Spec.Containers[0].Image = "openshift/origin-coredns:latest"
@@ -139,7 +159,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 		{
 			description: "if the kube rbac proxy image is changed",
 			mutate: func(daemonset *appsv1.DaemonSet) {
-				daemonset.Spec.Template.Spec.Containers[2].Image = "openshift/origin-kube-rbac-proxy:latest"
+				daemonset.Spec.Template.Spec.Containers[1].Image = "openshift/origin-kube-rbac-proxy:latest"
 			},
 			expect: true,
 		},
@@ -188,7 +208,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			description: "if the metrics-tls default mode value is defaulted",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				newVal := corev1.SecretVolumeSourceDefaultMode
-				daemonset.Spec.Template.Spec.Volumes[2].Secret.DefaultMode = &newVal
+				daemonset.Spec.Template.Spec.Volumes[1].Secret.DefaultMode = &newVal
 			},
 			expect: false,
 		},
@@ -196,7 +216,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			description: "if the metrics-tls default mode value changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				newVal := int32(0)
-				daemonset.Spec.Template.Spec.Volumes[2].Secret.DefaultMode = &newVal
+				daemonset.Spec.Template.Spec.Volumes[1].Secret.DefaultMode = &newVal
 			},
 			expect: true,
 		},
@@ -245,7 +265,6 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		hostPathFile := corev1.HostPathFile
 		thirty := int64(30)
 		original := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
@@ -278,14 +297,6 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 								},
 							},
 							{
-								Name:  "dns-node-resolver",
-								Image: "openshift/origin-cli:v4.0",
-								Command: []string{
-									"c",
-									"d",
-								},
-							},
-							{
 								Name:  "kube-rbac-proxy",
 								Image: "openshift/origin-kube-rbac-proxy:v4.0",
 								Command: []string{
@@ -306,15 +317,6 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 										LocalObjectReference: corev1.LocalObjectReference{
 											Name: "dns-default",
 										},
-									},
-								},
-							},
-							{
-								Name: "hosts-file",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/etc/hosts",
-										Type: &hostPathFile,
 									},
 								},
 							},
