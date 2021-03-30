@@ -136,7 +136,7 @@ func desiredNodeResolverDaemonSet(clusterIP, clusterDomain, openshiftCLIImage st
 					// scarce resource.
 					HostNetwork: true,
 					NodeSelector: map[string]string{
-						"beta.kubernetes.io/os": "linux",
+						"kubernetes.io/os": "linux",
 					},
 					PriorityClassName:  "system-node-critical",
 					ServiceAccountName: "node-resolver",
