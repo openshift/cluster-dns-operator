@@ -56,7 +56,9 @@ bar.com:5353 example.com:5353 {
     forward . /etc/resolv.conf {
         policy sequential
     }
-    cache 900
+    cache 900 {
+        denial 9984 30
+    }
     reload
 }
 `
