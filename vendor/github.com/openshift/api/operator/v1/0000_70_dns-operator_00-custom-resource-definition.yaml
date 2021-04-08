@@ -45,6 +45,11 @@ spec:
               DNS.
             type: object
             properties:
+              managementState:
+                description: managementState indicates whether the DNS operator should
+                  manage cluster DNS
+                type: string
+                pattern: ^(Managed|Unmanaged|Force|Removed)$
               nodePlacement:
                 description: "nodePlacement provides explicit control over the scheduling
                   of DNS pods. \n Generally, it is useful to run a DNS pod on every
