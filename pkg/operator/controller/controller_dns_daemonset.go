@@ -156,10 +156,12 @@ func (r *reconciler) updateDNSDaemonSet(current, desired *appsv1.DaemonSet) (boo
 		return false, nil
 	}
 
+	// Diff before updating because the client may mutate the object.
+	diff := cmp.Diff(current, updated, cmpopts.EquateEmpty())
 	if err := r.client.Update(context.TODO(), updated); err != nil {
 		return false, fmt.Errorf("failed to update dns daemonset %s/%s: %v", updated.Namespace, updated.Name, err)
 	}
-	logrus.Infof("updated dns daemonset: %s/%s", updated.Namespace, updated.Name)
+	logrus.Infof("updated dns daemonset %s/%s: %v", updated.Namespace, updated.Name, diff)
 	return true, nil
 }
 
@@ -221,7 +223,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
 		changed = true
 	}
-	if !cmp.Equal(current.Spec.Template.Spec.TerminationGracePeriodSeconds, expected.Spec.Template.Spec.TerminationGracePeriodSeconds, cmpopts.EquateEmpty()) {
+	if !cmp.Equal(current.Spec.Template.Spec.TerminationGracePeriodSeconds, expected.Spec.Template.Spec.TerminationGracePeriodSeconds, cmpopts.EquateEmpty(), cmp.Comparer(cmpTerminationGracePeriodSeconds)) {
 		updated.Spec.Template.Spec.TerminationGracePeriodSeconds = expected.Spec.Template.Spec.TerminationGracePeriodSeconds
 		changed = true
 	}
@@ -255,10 +257,6 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	return true, updated
 }
 
-// volumeDefaultMode is the default mode value that the API uses for configmap
-// and secret volume sources.  Decimal 420 is octal 0644, which is u=rw,g=r,o=r.
-const volumeDefaultMode = int32(420)
-
 // cmpConfigMapVolumeSource compares two configmap volume source values and
 // returns a Boolean indicating whether they are equal.
 func cmpConfigMapVolumeSource(a, b corev1.ConfigMapVolumeSource) bool {
@@ -268,11 +266,11 @@ func cmpConfigMapVolumeSource(a, b corev1.ConfigMapVolumeSource) bool {
 	if !cmp.Equal(a.Items, b.Items, cmpopts.EquateEmpty()) {
 		return false
 	}
-	aDefaultMode := volumeDefaultMode
+	aDefaultMode := corev1.ConfigMapVolumeSourceDefaultMode
 	if a.DefaultMode != nil {
 		aDefaultMode = *a.DefaultMode
 	}
-	bDefaultMode := volumeDefaultMode
+	bDefaultMode := corev1.ConfigMapVolumeSourceDefaultMode
 	if b.DefaultMode != nil {
 		bDefaultMode = *b.DefaultMode
 	}
@@ -294,11 +292,11 @@ func cmpSecretVolumeSource(a, b corev1.SecretVolumeSource) bool {
 	if !cmp.Equal(a.Items, b.Items, cmpopts.EquateEmpty()) {
 		return false
 	}
-	aDefaultMode := volumeDefaultMode
+	aDefaultMode := corev1.SecretVolumeSourceDefaultMode
 	if a.DefaultMode != nil {
 		aDefaultMode = *a.DefaultMode
 	}
-	bDefaultMode := volumeDefaultMode
+	bDefaultMode := corev1.SecretVolumeSourceDefaultMode
 	if b.DefaultMode != nil {
 		bDefaultMode = *b.DefaultMode
 	}
@@ -336,4 +334,18 @@ func cmpTolerations(a, b corev1.Toleration) bool {
 		}
 	}
 	return true
+}
+
+// cmpTerminationGracePeriodSeconds compares two terminationGracePeriodSeconds
+// values and returns a Boolean indicating whether they are equal.
+func cmpTerminationGracePeriodSeconds(a, b *int64) bool {
+	aVal := int64(corev1.DefaultTerminationGracePeriodSeconds)
+	if a != nil {
+		aVal = *a
+	}
+	bVal := int64(corev1.DefaultTerminationGracePeriodSeconds)
+	if b != nil {
+		bVal = *b
+	}
+	return aVal == bVal
 }

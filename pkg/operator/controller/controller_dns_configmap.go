@@ -132,10 +132,12 @@ func (r *reconciler) updateDNSConfigMap(current, desired *corev1.ConfigMap) (boo
 		return false, nil
 	}
 
+	// Diff before updating because the client may mutate the object.
+	diff := cmp.Diff(current, updated, cmpopts.EquateEmpty())
 	if err := r.client.Update(context.TODO(), updated); err != nil {
 		return false, fmt.Errorf("failed to update configmap: %v", err)
 	}
-	logrus.Infof("updated configmap; old: %#v, new: %#v", current, updated)
+	logrus.Infof("updated configmap %s/%s: %v", updated.Namespace, updated.Name, diff)
 	return true, nil
 }
 
