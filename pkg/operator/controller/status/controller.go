@@ -77,22 +77,23 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 // Reconcile computes the operator's current status and therefrom creates or
 // updates the ClusterOperator resource for the operator.
 func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	co := &configv1.ClusterOperator{ObjectMeta: metav1.ObjectMeta{Name: operatorcontroller.DNSClusterOperatorName().Name}}
-	if err := r.client.Get(ctx, operatorcontroller.DNSClusterOperatorName(), co); err != nil {
+	co := &configv1.ClusterOperator{}
+	name := operatorcontroller.DNSClusterOperatorName()
+	if err := r.client.Get(ctx, name, co); err != nil {
 		if errors.IsNotFound(err) {
 			initializeClusterOperator(co)
 			if err := r.client.Create(ctx, co); err != nil {
-				return reconcile.Result{}, fmt.Errorf("failed to create clusteroperator %s: %v", co.Name, err)
+				return reconcile.Result{}, fmt.Errorf("failed to create clusteroperator %q: %w", name.Name, err)
 			}
 		} else {
-			return reconcile.Result{}, fmt.Errorf("failed to get clusteroperator %s: %v", co.Name, err)
+			return reconcile.Result{}, fmt.Errorf("failed to get clusteroperator %q: %w", name.Name, err)
 		}
 	}
 	oldStatus := co.Status.DeepCopy()
 
 	state, err := r.getOperatorState()
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed to get operator state: %v", err)
+		return reconcile.Result{}, fmt.Errorf("failed to get operator state: %w", err)
 	}
 
 	related := []configv1.ObjectReference{
@@ -133,7 +134,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(ctx, co); err != nil {
-			return reconcile.Result{}, fmt.Errorf("failed to update clusteroperator %s: %v", co.Name, err)
+			return reconcile.Result{}, fmt.Errorf("failed to update clusteroperator %q: %w", name.Name, err)
 		}
 	}
 
@@ -142,6 +143,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 // Populate versions and conditions in cluster operator status as CVO expects these fields.
 func initializeClusterOperator(co *configv1.ClusterOperator) {
+	co.Name = operatorcontroller.DNSClusterOperatorName().Name
 	co.Status.Versions = []configv1.OperandVersion{
 		{
 			Name:    OperatorVersionName,
