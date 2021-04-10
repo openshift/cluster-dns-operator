@@ -109,15 +109,15 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			Name:     "default",
 		},
 	}
-	if state.Namespace != nil {
+	if state.namespace != nil {
 		related = append(related, configv1.ObjectReference{
 			Resource: "namespaces",
-			Name:     state.Namespace.Name,
+			Name:     state.namespace.Name,
 		})
 	}
 	co.Status.RelatedObjects = related
 
-	dnsAvailable := checkDNSAvailable(&state.DNS)
+	dnsAvailable := checkDNSAvailable(&state.dns)
 
 	co.Status.Versions = r.computeOperatorStatusVersions(oldStatus.Versions, dnsAvailable)
 
@@ -125,7 +125,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorProgressingCondition(dnsAvailable,
 		oldStatus.Versions, co.Status.Versions, r.OperatorReleaseVersion, r.CoreDNSImage,
 		r.OpenshiftCLIImage, r.KubeRBACProxyImage))
-	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorDegradedCondition(&state.DNS))
+	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorDegradedCondition(&state.dns))
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(ctx, co); err != nil {
@@ -173,8 +173,8 @@ func initializeClusterOperator(co *configv1.ClusterOperator) {
 }
 
 type operatorState struct {
-	Namespace *corev1.Namespace
-	DNS       operatorv1.DNS
+	namespace *corev1.Namespace
+	dns       operatorv1.DNS
 }
 
 // getOperatorState gets and returns the resources necessary to compute the
@@ -192,7 +192,7 @@ func (r *reconciler) getOperatorState() (operatorState, error) {
 			return state, fmt.Errorf("failed to get namespace %q: %w", name, err)
 		}
 	} else {
-		state.Namespace = ns
+		state.namespace = ns
 	}
 
 	dnsList := operatorv1.DNSList{}
@@ -201,7 +201,7 @@ func (r *reconciler) getOperatorState() (operatorState, error) {
 	if err := r.cache.List(context.TODO(), &dnsList); err != nil {
 		return state, fmt.Errorf("failed to list dnses: %w", err)
 	} else {
-		state.DNS = dnsList.Items[0]
+		state.dns = dnsList.Items[0]
 	}
 
 	return state, nil
