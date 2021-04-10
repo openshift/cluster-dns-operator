@@ -82,6 +82,8 @@ func TestDNSStatusConditions(t *testing.T) {
 					NumberAvailable:        tc.inputs.availDNS,
 				},
 			}
+			dnsDaemonset.Spec.Template.Spec.NodeSelector = nodeSelectorForDNS(&operatorv1.DNS{})
+			dnsDaemonset.Spec.Template.Spec.Tolerations = tolerationsForDNS(&operatorv1.DNS{})
 		}
 		if tc.inputs.haveDNS {
 			nodeResolverDaemonset = &appsv1.DaemonSet{
@@ -344,10 +346,12 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		}
 	}
 	var (
-		emptySelector       map[string]string
-		emptyTolerations    []corev1.Toleration
-		nonEmptySelector    = map[string]string{"foo": "bar"}
-		nonEmptyTolerations = []corev1.Toleration{{Key: "foo"}}
+		emptySelector      map[string]string
+		emptyTolerations   []corev1.Toleration
+		defaultSelector    = nodeSelectorForDNS(&operatorv1.DNS{})
+		defaultTolerations = tolerationsForDNS(&operatorv1.DNS{})
+		customSelector     = map[string]string{"foo": "bar"}
+		customTolerations  = []corev1.Toleration{{Key: "foo"}}
 	)
 	testCases := []struct {
 		name         string
@@ -361,75 +365,109 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "no clusterIP",
 			clusterIP:    "",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "0 desired",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(0, 0, intstr.FromString("10%"), emptySelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(0, 0, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(0, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(0, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "0/6 available DNS pods with MaxUnavailable 10%",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("10%"), emptySelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "6/6 DNS pods and 5/6 node-resolver pods available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(6, 5, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 5, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "6/6 DNS pods and 6/6 node-resolver pods available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
+			expected:     operatorv1.ConditionFalse,
+		},
+		{
+			name:         "6/6 DNS pods with custom node selector and tolerations",
+			clusterIP:    "172.30.0.10",
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), customSelector, customTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: customSelector,
+			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "5/6 available with invalid MaxUnavailable",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 5, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, emptySelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(6, 5, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "6/6 available with invalid MaxUnavailable",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, emptySelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionFalse,
 		},
 		{
-			name:         "6/6 DNS pods with node selector and tolerations",
+			name:         "6/6 DNS pods missing default node selector",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), nonEmptySelector, nonEmptyTolerations),
-			nodeSelector: nonEmptySelector,
-			tolerations:  nonEmptyTolerations,
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
-			expected:     operatorv1.ConditionFalse,
-		},
-		{
-			name:         "6/6 DNS pods missing node selector",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
-			nodeSelector: nonEmptySelector,
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
-			name:         "6/6 DNS pods missing tolerations",
+			name:         "6/6 DNS pods missing default tolerations",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
-			tolerations:  nonEmptyTolerations,
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, emptyTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, emptyTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
+			expected:     operatorv1.ConditionTrue,
+		},
+		{
+			name:         "6/6 DNS pods missing custom node selector",
+			clusterIP:    "172.30.0.10",
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, customTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: customSelector,
+			tolerations:  customTolerations,
+			expected:     operatorv1.ConditionTrue,
+		},
+		{
+			name:         "6/6 DNS pods missing custom tolerations",
+			clusterIP:    "172.30.0.10",
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), customSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nodeSelector: customSelector,
+			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
 	}

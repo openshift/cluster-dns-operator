@@ -82,14 +82,8 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 	daemonset.Spec.Selector = DNSDaemonSetPodSelector(dns)
 	daemonset.Spec.Template.Labels = daemonset.Spec.Selector.MatchLabels
 
-	nodeSelector := map[string]string{"kubernetes.io/os": "linux"}
-	if len(dns.Spec.NodePlacement.NodeSelector) != 0 {
-		nodeSelector = dns.Spec.NodePlacement.NodeSelector
-	}
-	if dns.Spec.NodePlacement.Tolerations != nil {
-		daemonset.Spec.Template.Spec.Tolerations = dns.Spec.NodePlacement.Tolerations
-	}
-	daemonset.Spec.Template.Spec.NodeSelector = nodeSelector
+	daemonset.Spec.Template.Spec.NodeSelector = nodeSelectorForDNS(dns)
+	daemonset.Spec.Template.Spec.Tolerations = tolerationsForDNS(dns)
 
 	coreFileVolumeFound := false
 	for i := range daemonset.Spec.Template.Spec.Volumes {
@@ -118,6 +112,27 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 		}
 	}
 	return daemonset, nil
+}
+
+// nodeSelectorForDNS takes a dns and returns the node selector that it
+// specifies, or a default node selector if it doesn't specify one.
+func nodeSelectorForDNS(dns *operatorv1.DNS) map[string]string {
+	if len(dns.Spec.NodePlacement.NodeSelector) != 0 {
+		return dns.Spec.NodePlacement.NodeSelector
+	}
+	return map[string]string{"kubernetes.io/os": "linux"}
+}
+
+// tolerationsForDNS takes a dns and returns the tolerations that it specifies,
+// or default tolerations if it doesn't specify tolerations.
+func tolerationsForDNS(dns *operatorv1.DNS) []corev1.Toleration {
+	if len(dns.Spec.NodePlacement.Tolerations) != 0 {
+		return dns.Spec.NodePlacement.Tolerations
+	}
+	return []corev1.Toleration{{
+		Key:      "node-role.kubernetes.io/master",
+		Operator: corev1.TolerationOpExists,
+	}}
 }
 
 // currentDNSDaemonSet returns the current dns daemonset.

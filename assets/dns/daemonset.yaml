@@ -82,9 +82,7 @@ spec:
             path: Corefile
       - name: metrics-tls
         # secretName is set at runtime
-      tolerations:
-      - key: "node-role.kubernetes.io/master"
-        operator: Exists
+      # tolerations is set at runtime.
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:

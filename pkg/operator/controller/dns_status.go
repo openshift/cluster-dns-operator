@@ -167,16 +167,16 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 			messages = append(messages, fmt.Sprintf("Have %d available DNS pods, want %d.", have, want))
 		}
 
-		wantSelector := dns.Spec.NodePlacement.NodeSelector
 		haveSelector := dnsDaemonset.Spec.Template.Spec.NodeSelector
+		wantSelector := nodeSelectorForDNS(dns)
 		if !reflect.DeepEqual(haveSelector, wantSelector) {
-			messages = append(messages, fmt.Sprintf("Have DNS daemonset with node selector %v, want %v.", haveSelector, wantSelector))
+			messages = append(messages, fmt.Sprintf("Have DNS daemonset with node selector %+v, want %+v.", haveSelector, wantSelector))
 		}
 
 		haveTolerations := dnsDaemonset.Spec.Template.Spec.Tolerations
-		wantTolerations := dns.Spec.NodePlacement.Tolerations
+		wantTolerations := tolerationsForDNS(dns)
 		if !reflect.DeepEqual(haveTolerations, wantTolerations) {
-			messages = append(messages, fmt.Sprintf("Have DNS daemonset with tolerations %v, want %v.", haveTolerations, wantTolerations))
+			messages = append(messages, fmt.Sprintf("Have DNS daemonset with tolerations %+v, want %+v.", haveTolerations, wantTolerations))
 		}
 	}
 	if !haveNodeResolverDaemonset {
