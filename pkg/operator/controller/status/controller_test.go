@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	configv1 "github.com/openshift/api/config/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -19,12 +20,18 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 
 	testCases := []struct {
 		description       string
+		dnsMissing        bool
 		dnsAvailable      bool
 		reportedVersions  versions
 		oldVersions       versions
 		curVersions       versions
 		expectProgressing configv1.ConditionStatus
 	}{
+		{
+			description:       "dns does not exist",
+			dnsMissing:        true,
+			expectProgressing: configv1.ConditionTrue,
+		},
 		{
 			description:       "dns available",
 			dnsAvailable:      true,
@@ -101,6 +108,25 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		var (
+			haveDNS bool
+			dns     *operatorv1.DNS
+		)
+		if !tc.dnsMissing {
+			haveDNS = true
+			availableStatus := operatorv1.ConditionFalse
+			if tc.dnsAvailable {
+				availableStatus = operatorv1.ConditionTrue
+			}
+			dns = &operatorv1.DNS{
+				Status: operatorv1.DNSStatus{
+					Conditions: []operatorv1.OperatorCondition{{
+						Type:   operatorv1.OperatorStatusTypeAvailable,
+						Status: availableStatus,
+					}},
+				},
+			}
+		}
 		oldVersions := []configv1.OperandVersion{
 			{
 				Name:    OperatorVersionName,
@@ -143,7 +169,7 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 			Status: tc.expectProgressing,
 		}
 
-		actual := computeOperatorProgressingCondition(tc.dnsAvailable, oldVersions, reportedVersions,
+		actual := computeOperatorProgressingCondition(haveDNS, dns, oldVersions, reportedVersions,
 			tc.curVersions.operator, tc.curVersions.operand, tc.curVersions.operand, tc.curVersions.operand)
 		conditionsCmpOpts := []cmp.Option{
 			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
@@ -397,6 +423,7 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 		oldVersions      versions
 		curVersions      versions
 		dnsAvailable     bool
+		dnsMissing       bool
 		expectedVersions versions
 	}{
 		{
@@ -405,6 +432,13 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 			curVersions:      versions{"v1", "dns-v1"},
 			dnsAvailable:     true,
 			expectedVersions: versions{"v1", "dns-v1"},
+		},
+		{
+			description:      "initialize versions, dns does not exist",
+			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
+			curVersions:      versions{"v1", "dns-v1"},
+			dnsMissing:       true,
+			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue},
 		},
 		{
 			description:      "initialize versions, operator is not available",
@@ -462,9 +496,26 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 
 	for _, tc := range testCases {
 		var (
+			haveDNS          bool
+			dns              *operatorv1.DNS
 			oldVersions      []configv1.OperandVersion
 			expectedVersions []configv1.OperandVersion
 		)
+
+		if !tc.dnsMissing {
+			haveDNS = true
+			availableStatus := operatorv1.ConditionFalse
+			if tc.dnsAvailable {
+				availableStatus = operatorv1.ConditionTrue
+			}
+			dns = &operatorv1.DNS{
+				Status: operatorv1.DNSStatus{
+					Conditions: []operatorv1.OperatorCondition{{
+						Type:   operatorv1.OperatorStatusTypeAvailable,
+						Status: availableStatus,
+					}}},
+			}
+		}
 
 		oldVersions = []configv1.OperandVersion{
 			{
@@ -511,7 +562,7 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 				KubeRBACProxyImage:     tc.curVersions.operand,
 			},
 		}
-		versions := r.computeOperatorStatusVersions(oldVersions, tc.dnsAvailable)
+		versions := r.computeOperatorStatusVersions(haveDNS, dns, oldVersions)
 		versionsCmpOpts := []cmp.Option{
 			cmpopts.EquateEmpty(),
 			cmpopts.SortSlices(func(a, b configv1.OperandVersion) bool { return a.Name < b.Name }),

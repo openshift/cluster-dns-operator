@@ -109,7 +109,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			Name:     "default",
 		},
 	}
-	if state.namespace != nil {
+	if state.haveNamespace {
 		related = append(related, configv1.ObjectReference{
 			Resource: "namespaces",
 			Name:     state.namespace.Name,
@@ -117,15 +117,13 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 	co.Status.RelatedObjects = related
 
-	dnsAvailable := checkDNSAvailable(&state.dns)
+	co.Status.Versions = r.computeOperatorStatusVersions(state.haveDNS, &state.dns, oldStatus.Versions)
 
-	co.Status.Versions = r.computeOperatorStatusVersions(oldStatus.Versions, dnsAvailable)
-
-	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorAvailableCondition(dnsAvailable))
-	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorProgressingCondition(dnsAvailable,
+	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorAvailableCondition(state.haveDNS, &state.dns))
+	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorProgressingCondition(state.haveDNS, &state.dns,
 		oldStatus.Versions, co.Status.Versions, r.OperatorReleaseVersion, r.CoreDNSImage,
 		r.OpenshiftCLIImage, r.KubeRBACProxyImage))
-	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorDegradedCondition(&state.dns))
+	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorDegradedCondition(state.haveDNS, &state.dns))
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(ctx, co); err != nil {
@@ -173,8 +171,10 @@ func initializeClusterOperator(co *configv1.ClusterOperator) {
 }
 
 type operatorState struct {
-	namespace *corev1.Namespace
-	dns       operatorv1.DNS
+	haveNamespace bool
+	namespace     corev1.Namespace
+	haveDNS       bool
+	dns           operatorv1.DNS
 }
 
 // getOperatorState gets and returns the resources necessary to compute the
@@ -182,17 +182,17 @@ type operatorState struct {
 func (r *reconciler) getOperatorState() (operatorState, error) {
 	var state operatorState
 
-	ns := &corev1.Namespace{}
 	name := types.NamespacedName{
 		Name: operatorcontroller.DefaultOperandNamespace,
 	}
-	if err := r.client.Get(context.TODO(), name, ns); err != nil {
+	if err := r.client.Get(context.TODO(), name, &state.namespace); err != nil {
 		if !errors.IsNotFound(err) {
 			fmt.Printf("failed to get ns %s: %v\n", name, err)
 			return state, fmt.Errorf("failed to get namespace %q: %w", name, err)
 		}
+		state.haveNamespace = false
 	} else {
-		state.namespace = ns
+		state.haveNamespace = true
 	}
 
 	dnsList := operatorv1.DNSList{}
@@ -200,7 +200,8 @@ func (r *reconciler) getOperatorState() (operatorState, error) {
 	//       https://github.com/kubernetes-sigs/controller-runtime/issues/934
 	if err := r.cache.List(context.TODO(), &dnsList); err != nil {
 		return state, fmt.Errorf("failed to list dnses: %w", err)
-	} else {
+	} else if len(dnsList.Items) > 0 {
+		state.haveDNS = true
 		state.dns = dnsList.Items[0]
 	}
 
@@ -208,10 +209,13 @@ func (r *reconciler) getOperatorState() (operatorState, error) {
 }
 
 // computeOperatorStatusVersions computes the operator's current versions.
-func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.OperandVersion, allDNSESAvailable bool) []configv1.OperandVersion {
+func (r *reconciler) computeOperatorStatusVersions(haveDNS bool, dns *operatorv1.DNS, oldVersions []configv1.OperandVersion) []configv1.OperandVersion {
 	// We need to report old version until the operator fully transitions to the new version.
 	// https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusteroperator.md#version-reporting-during-an-upgrade
-	if !allDNSESAvailable {
+	if !haveDNS {
+		return oldVersions
+	}
+	if !checkDNSAvailable(dns) {
 		return oldVersions
 	}
 
@@ -247,7 +251,16 @@ func checkDNSAvailable(dns *operatorv1.DNS) bool {
 }
 
 // computeOperatorDegradedCondition computes the operator's current Degraded status state.
-func computeOperatorDegradedCondition(dns *operatorv1.DNS) configv1.ClusterOperatorStatusCondition {
+func computeOperatorDegradedCondition(haveDNS bool, dns *operatorv1.DNS) configv1.ClusterOperatorStatusCondition {
+	if !haveDNS {
+		return configv1.ClusterOperatorStatusCondition{
+			Type:    configv1.OperatorDegraded,
+			Status:  configv1.ConditionTrue,
+			Reason:  "DNSDoesNotExist",
+			Message: `DNS "default" does not exist.`,
+		}
+	}
+
 	var degraded bool
 	for _, cond := range dns.Status.Conditions {
 		if cond.Type == operatorv1.OperatorStatusTypeDegraded && cond.Status == operatorv1.ConditionTrue {
@@ -270,8 +283,7 @@ func computeOperatorDegradedCondition(dns *operatorv1.DNS) configv1.ClusterOpera
 }
 
 // computeOperatorProgressingCondition computes the operator's current Progressing status state.
-func computeOperatorProgressingCondition(dnsAvailable bool, oldVersions, curVersions []configv1.OperandVersion,
-	operatorReleaseVersion, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) configv1.ClusterOperatorStatusCondition {
+func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldVersions, curVersions []configv1.OperandVersion, operatorReleaseVersion, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) configv1.ClusterOperatorStatusCondition {
 	// TODO: Update progressingCondition when an ingresscontroller
 	//       progressing condition is created. The Operator's condition
 	//       should be derived from the ingresscontroller's condition.
@@ -282,7 +294,10 @@ func computeOperatorProgressingCondition(dnsAvailable bool, oldVersions, curVers
 	progressing := false
 
 	var messages []string
-	if !dnsAvailable {
+	if !haveDNS {
+		messages = append(messages, `DNS "default" does not exist`)
+		progressing = true
+	} else if !checkDNSAvailable(dns) {
 		messages = append(messages, "DNS default unavailable")
 		progressing = true
 	}
@@ -336,18 +351,24 @@ func computeOperatorProgressingCondition(dnsAvailable bool, oldVersions, curVers
 }
 
 // computeOperatorAvailableCondition computes the operator's current Available status state.
-func computeOperatorAvailableCondition(dnsAvailable bool) configv1.ClusterOperatorStatusCondition {
+func computeOperatorAvailableCondition(haveDNS bool, dns *operatorv1.DNS) configv1.ClusterOperatorStatusCondition {
 	availableCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorAvailable,
 	}
-	if dnsAvailable {
-		availableCondition.Status = configv1.ConditionTrue
-		availableCondition.Reason = "AsExpected"
-		availableCondition.Message = "DNS default is available"
-	} else {
+
+	switch {
+	case !haveDNS:
+		availableCondition.Status = configv1.ConditionFalse
+		availableCondition.Reason = "DNSDoesNotExist"
+		availableCondition.Message = `DNS "default" does not exist.`
+	case !checkDNSAvailable(dns):
 		availableCondition.Status = configv1.ConditionFalse
 		availableCondition.Reason = "DNSUnavailable"
-		availableCondition.Message = "DNS default is unavailable"
+		availableCondition.Message = `DNS "default" is unavailable.`
+	default:
+		availableCondition.Status = configv1.ConditionTrue
+		availableCondition.Reason = "AsExpected"
+		availableCondition.Message = `DNS "default" is available.`
 	}
 
 	return availableCondition
