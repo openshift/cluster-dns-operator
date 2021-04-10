@@ -77,6 +77,8 @@ func (r *reconciler) ensureNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP,
 // desiredNodeResolverDaemonSet returns the desired node resolver daemonset.
 func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, openshiftCLIImage string) (bool, *appsv1.DaemonSet, error) {
 	hostPathFile := corev1.HostPathFile
+	// TODO: Consider setting maxSurge to a positive value.
+	maxSurge := intstr.FromInt(0)
 	maxUnavailable := intstr.FromString("10%")
 	envs := []corev1.EnvVar{{
 		Name:  "SERVICES",
@@ -168,6 +170,7 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				Type: appsv1.RollingUpdateDaemonSetStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+					MaxSurge:       &maxSurge,
 					MaxUnavailable: &maxUnavailable,
 				},
 			},
