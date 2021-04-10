@@ -11,7 +11,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
-	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
 
@@ -80,8 +79,6 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 // Reconcile computes the operator's current status and therefrom creates or
 // updates the ClusterOperator resource for the operator.
 func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	nsManifest := manifests.DNSNamespace()
-
 	co := &configv1.ClusterOperator{ObjectMeta: metav1.ObjectMeta{Name: operatorcontroller.DNSClusterOperatorName().Name}}
 	if err := r.client.Get(ctx, operatorcontroller.DNSClusterOperatorName(), co); err != nil {
 		if errors.IsNotFound(err) {
@@ -96,7 +93,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 	oldStatus := co.Status.DeepCopy()
 
-	state, err := r.getOperatorState(nsManifest.Name)
+	state, err := r.getOperatorState()
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to get operator state: %v", err)
 	}
@@ -182,14 +179,17 @@ type operatorState struct {
 
 // getOperatorState gets and returns the resources necessary to compute the
 // operator's current state.
-func (r *reconciler) getOperatorState(nsName string) (operatorState, error) {
-	state := operatorState{}
+func (r *reconciler) getOperatorState() (operatorState, error) {
+	var state operatorState
 
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName}}
-	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: nsName}, ns); err != nil {
+	ns := &corev1.Namespace{}
+	name := types.NamespacedName{
+		Name: operatorcontroller.DefaultOperandNamespace,
+	}
+	if err := r.client.Get(context.TODO(), name, ns); err != nil {
 		if !errors.IsNotFound(err) {
-			fmt.Printf("failed to get ns %s: %v\n", nsName, err)
-			return state, fmt.Errorf("failed to get namespace %q: %v", nsName, err)
+			fmt.Printf("failed to get ns %s: %v\n", name, err)
+			return state, fmt.Errorf("failed to get namespace %q: %w", name, err)
 		}
 	} else {
 		state.Namespace = ns
@@ -199,7 +199,7 @@ func (r *reconciler) getOperatorState(nsName string) (operatorState, error) {
 	// TODO: Change to a get call when the following issue is resolved:
 	//       https://github.com/kubernetes-sigs/controller-runtime/issues/934
 	if err := r.cache.List(context.TODO(), &dnsList); err != nil {
-		return state, fmt.Errorf("failed to list dnses: %v", err)
+		return state, fmt.Errorf("failed to list dnses: %w", err)
 	} else {
 		state.DNS = dnsList.Items[0]
 	}

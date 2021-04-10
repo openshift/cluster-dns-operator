@@ -96,6 +96,8 @@ func TestOperatorAvailable(t *testing.T) {
 	}
 }
 
+// TestClusterOperatorStatusRelatedObjects verifies that the dns clusteroperator
+// reports the expected related objects.
 func TestClusterOperatorStatusRelatedObjects(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
@@ -117,22 +119,22 @@ func TestClusterOperatorStatusRelatedObjects(t *testing.T) {
 			Name:     "openshift-dns",
 		},
 	}
-
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		co := &configv1.ClusterOperator{}
 		if err := cl.Get(context.TODO(), opName, co); err != nil {
-			t.Logf("failed to get DNS cluster operator %s: %v", opName.Name, err)
+			t.Logf("failed to get clusteroperator %q: %v", opName.Name, err)
 			return false, nil
 		}
 
-		if reflect.DeepEqual(expected, co.Status.RelatedObjects) {
-			return true, nil
+		if !reflect.DeepEqual(expected, co.Status.RelatedObjects) {
+			t.Logf("did not observe expected status.relatedObjects for clusteroperator %q: expected %+v, got %+v", opName.Name, expected, co.Status.RelatedObjects)
+			return false, nil
 		}
 
-		return false, nil
+		return true, nil
 	})
 	if err != nil {
-		t.Errorf("did not get expected status related objects: %v", err)
+		t.Errorf("did not get expected status related objects: %w", err)
 	}
 }
 
