@@ -215,8 +215,15 @@ func (r *reconciler) computeOperatorStatusVersions(haveDNS bool, dns *operatorv1
 	if !haveDNS {
 		return oldVersions
 	}
-	if !checkDNSAvailable(dns) {
-		return oldVersions
+	for _, c := range dns.Status.Conditions {
+		if c.Type != operatorv1.OperatorStatusTypeProgressing {
+			continue
+		}
+		switch c.Status {
+		case operatorv1.ConditionTrue, operatorv1.ConditionUnknown:
+			return oldVersions
+		}
+		break
 	}
 
 	return []configv1.OperandVersion{

@@ -441,15 +441,14 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 		description      string
 		oldVersions      versions
 		curVersions      versions
-		dnsAvailable     bool
 		dnsMissing       bool
+		dnsProgressing   bool
 		expectedVersions versions
 	}{
 		{
-			description:      "initialize versions, operator is available",
+			description:      "initialize versions, operator is not progressing",
 			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
 			curVersions:      versions{"v1", "dns-v1"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
@@ -460,55 +459,55 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue},
 		},
 		{
-			description:      "initialize versions, operator is not available",
+			description:      "initialize versions, operator is progressing",
 			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
 			curVersions:      versions{"v1", "dns-v1"},
+			dnsProgressing:   true,
 			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue},
 		},
 		{
 			description:      "update with no change",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v1"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator version, operator is not available",
+			description:      "update operator version, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v1"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator version, operator is available",
+			description:      "update operator version, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v1"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v2", "dns-v1"},
 		},
 		{
-			description:      "update operand image, operator is not available",
+			description:      "update operand image, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v2"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operand image, operator is available",
+			description:      "update operand image, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v2"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v1", "dns-v2"},
 		},
 		{
-			description:      "update operator and operand image, operator is not available",
+			description:      "update operator and operand image, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v2"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator and operandr image, operator is available",
+			description:      "update operator and operand image, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v2"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v2", "dns-v2"},
 		},
 	}
@@ -523,15 +522,15 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 
 		if !tc.dnsMissing {
 			haveDNS = true
-			availableStatus := operatorv1.ConditionFalse
-			if tc.dnsAvailable {
-				availableStatus = operatorv1.ConditionTrue
+			progressingStatus := operatorv1.ConditionFalse
+			if tc.dnsProgressing {
+				progressingStatus = operatorv1.ConditionTrue
 			}
 			dns = &operatorv1.DNS{
 				Status: operatorv1.DNSStatus{
 					Conditions: []operatorv1.OperatorCondition{{
-						Type:   operatorv1.OperatorStatusTypeAvailable,
-						Status: availableStatus,
+						Type:   operatorv1.OperatorStatusTypeProgressing,
+						Status: progressingStatus,
 					}}},
 			}
 		}
