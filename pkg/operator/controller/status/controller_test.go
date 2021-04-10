@@ -194,7 +194,7 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
 		}
 		if !cmp.Equal(actual, expected, conditionsCmpOpts...) {
-			t.Fatalf("%q: expected %#v, got %#v", tc.description, expected, actual)
+			t.Errorf("%q: expected %#v, got %#v", tc.description, expected, actual)
 		}
 	}
 }
@@ -426,7 +426,7 @@ func TestOperatorStatusesEqual(t *testing.T) {
 
 	for _, tc := range testCases {
 		if actual := operatorStatusesEqual(tc.a, tc.b); actual != tc.expected {
-			t.Fatalf("%q: expected %v, got %v", tc.description, tc.expected, actual)
+			t.Errorf("%q: expected %v, got %v", tc.description, tc.expected, actual)
 		}
 	}
 }
@@ -586,7 +586,7 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 			cmpopts.SortSlices(func(a, b configv1.OperandVersion) bool { return a.Name < b.Name }),
 		}
 		if !cmp.Equal(versions, expectedVersions, versionsCmpOpts...) {
-			t.Fatalf("%q: expected %v, got %v", tc.description, expectedVersions, versions)
+			t.Errorf("%q: expected %v, got %v", tc.description, expectedVersions, versions)
 		}
 	}
 }
