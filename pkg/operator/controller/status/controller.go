@@ -119,11 +119,20 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	co.Status.Versions = r.computeOperatorStatusVersions(state.haveDNS, &state.dns, oldStatus.Versions)
 
-	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorAvailableCondition(state.haveDNS, &state.dns))
-	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorProgressingCondition(state.haveDNS, &state.dns,
-		oldStatus.Versions, co.Status.Versions, r.OperatorReleaseVersion, r.CoreDNSImage,
-		r.OpenshiftCLIImage, r.KubeRBACProxyImage))
-	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorDegradedCondition(state.haveDNS, &state.dns))
+	co.Status.Conditions = mergeConditions(co.Status.Conditions,
+		computeOperatorAvailableCondition(state.haveDNS, &state.dns),
+		computeOperatorProgressingCondition(
+			state.haveDNS,
+			&state.dns,
+			oldStatus.Versions,
+			co.Status.Versions,
+			r.OperatorReleaseVersion,
+			r.CoreDNSImage,
+			r.OpenshiftCLIImage,
+			r.KubeRBACProxyImage,
+		),
+		computeOperatorDegradedCondition(state.haveDNS, &state.dns),
+	)
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(ctx, co); err != nil {
