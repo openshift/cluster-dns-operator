@@ -85,6 +85,17 @@ func TestDNSServiceChanged(t *testing.T) {
 			expect: false,
 		},
 		{
+			description: "if .spec.ipFamilies or .spec.ipFamilyPolicy change",
+			mutate: func(service *corev1.Service) {
+				service.Spec.IPFamilies = []corev1.IPFamily{
+					corev1.IPv4Protocol,
+				}
+				ipFamilyPolicy := corev1.IPFamilyPolicySingleStack
+				service.Spec.IPFamilyPolicy = &ipFamilyPolicy
+			},
+			expect: false,
+		},
+		{
 			description: "if service.beta.openshift.io/serving-cert-secret-name annotation changes",
 			mutate: func(service *corev1.Service) {
 				service.ObjectMeta.Annotations = map[string]string{
