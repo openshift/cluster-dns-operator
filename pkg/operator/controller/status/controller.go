@@ -82,7 +82,6 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if errors.IsNotFound(err) {
 			initializeClusterOperator(co)
 			if err := r.client.Create(ctx, co); err != nil {
-				fmt.Printf("failed to create co %s: %v\n", co.Name, err)
 				return reconcile.Result{}, fmt.Errorf("failed to create clusteroperator %s: %v", co.Name, err)
 			}
 		} else {
