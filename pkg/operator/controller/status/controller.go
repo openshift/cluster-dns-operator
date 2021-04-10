@@ -284,22 +284,38 @@ func computeOperatorDegradedCondition(haveDNS bool, dns *operatorv1.DNS) configv
 
 // computeOperatorProgressingCondition computes the operator's current Progressing status state.
 func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldVersions, curVersions []configv1.OperandVersion, operatorReleaseVersion, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) configv1.ClusterOperatorStatusCondition {
-	// TODO: Update progressingCondition when an ingresscontroller
-	//       progressing condition is created. The Operator's condition
-	//       should be derived from the ingresscontroller's condition.
 	progressingCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorProgressing,
 	}
+	status := configv1.ConditionUnknown
+	var messages, progressingReasons []string
 
-	progressing := false
-
-	var messages []string
 	if !haveDNS {
+		status = configv1.ConditionTrue
+		progressingReasons = append(progressingReasons, "DNSDoesNotExist")
 		messages = append(messages, `DNS "default" does not exist`)
-		progressing = true
-	} else if !checkDNSAvailable(dns) {
-		messages = append(messages, "DNS default unavailable")
-		progressing = true
+	} else {
+		foundProgressingCondition := false
+		for _, cond := range dns.Status.Conditions {
+			if cond.Type != operatorv1.OperatorStatusTypeProgressing {
+				continue
+			}
+			foundProgressingCondition = true
+			switch cond.Status {
+			case operatorv1.ConditionTrue:
+				status = configv1.ConditionTrue
+				progressingReasons = append(progressingReasons, "DNSReportsProgressingIsTrue")
+				messages = append(messages, fmt.Sprintf("DNS %q reports Progressing=True: %q", dns.Name, cond.Message))
+			case operatorv1.ConditionUnknown:
+				progressingReasons = append(progressingReasons, "DNSReportsProgressingIsUnknown")
+				messages = append(messages, fmt.Sprintf("DNS %q reports Progressing=Unknown: %q", dns.Name, cond.Message))
+			}
+			break
+		}
+		if !foundProgressingCondition {
+			progressingReasons = append(progressingReasons, "DNSDoesNotReportProgressingStatus")
+			messages = append(messages, fmt.Sprintf("DNS %q is not reporting a Progressing status condition", dns.Name))
+		}
 	}
 
 	oldVersionsMap := make(map[string]string)
@@ -314,37 +330,39 @@ func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldV
 		switch opv.Name {
 		case OperatorVersionName:
 			if opv.Version != operatorReleaseVersion {
+				status = configv1.ConditionTrue
+				progressingReasons = append(progressingReasons, "UpgradingOperator")
 				messages = append(messages, fmt.Sprintf("Moving to release version %q.", operatorReleaseVersion))
-				progressing = true
 			}
 		case CoreDNSVersionName:
 			if opv.Version != coreDNSImage {
+				status = configv1.ConditionTrue
+				progressingReasons = append(progressingReasons, "UpgradingCoreDNS")
 				messages = append(messages, fmt.Sprintf("Moving to coredns image version %q.", coreDNSImage))
-				progressing = true
 			}
 		case OpenshiftCLIVersionName:
 			if opv.Version != openshiftCLIImage {
+				status = configv1.ConditionTrue
+				progressingReasons = append(progressingReasons, "UpgradingOpenShiftCLI")
 				messages = append(messages, fmt.Sprintf("Moving to openshift-cli image version %q.", openshiftCLIImage))
-				progressing = true
 			}
 		case KubeRBACProxyName:
 			if opv.Version != kubeRBACProxyImage {
+				status = configv1.ConditionTrue
+				progressingReasons = append(progressingReasons, "UpgradingKubeRBACProxy")
 				messages = append(messages, fmt.Sprintf("Moving to kube-rbac-proxy image version %q.", kubeRBACProxyImage))
-				progressing = true
 			}
 		}
 	}
 
-	if progressing {
-		progressingCondition.Status = configv1.ConditionTrue
-		progressingCondition.Reason = "Reconciling"
+	if len(progressingReasons) != 0 {
+		progressingCondition.Status = status
+		progressingCondition.Reason = strings.Join(progressingReasons, "And")
+		progressingCondition.Message = strings.Join(messages, "\n")
 	} else {
 		progressingCondition.Status = configv1.ConditionFalse
 		progressingCondition.Reason = "AsExpected"
-	}
-	progressingCondition.Message = dnsEqualConditionMessage
-	if len(messages) > 0 {
-		progressingCondition.Message = strings.Join(messages, "\n")
+		progressingCondition.Message = dnsEqualConditionMessage
 	}
 
 	return progressingCondition

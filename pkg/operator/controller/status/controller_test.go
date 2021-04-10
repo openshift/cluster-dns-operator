@@ -22,6 +22,7 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 		description       string
 		dnsMissing        bool
 		dnsAvailable      bool
+		dnsProgressing    bool
 		reportedVersions  versions
 		oldVersions       versions
 		curVersions       versions
@@ -33,12 +34,23 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 			expectProgressing: configv1.ConditionTrue,
 		},
 		{
-			description:       "dns available",
+			description:       "dns not available, not progressing",
+			expectProgressing: configv1.ConditionFalse,
+		},
+		{
+			description:       "dns not available but progressing",
+			dnsProgressing:    true,
+			expectProgressing: configv1.ConditionTrue,
+		},
+		{
+			description:       "dns available, not progressing",
 			dnsAvailable:      true,
 			expectProgressing: configv1.ConditionFalse,
 		},
 		{
-			description:       "dns not available",
+			description:       "dns available and progressing",
+			dnsAvailable:      true,
+			dnsProgressing:    true,
 			expectProgressing: configv1.ConditionTrue,
 		},
 		{
@@ -118,11 +130,18 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 			if tc.dnsAvailable {
 				availableStatus = operatorv1.ConditionTrue
 			}
+			progressingStatus := operatorv1.ConditionFalse
+			if tc.dnsProgressing {
+				progressingStatus = operatorv1.ConditionTrue
+			}
 			dns = &operatorv1.DNS{
 				Status: operatorv1.DNSStatus{
 					Conditions: []operatorv1.OperatorCondition{{
 						Type:   operatorv1.OperatorStatusTypeAvailable,
 						Status: availableStatus,
+					}, {
+						Type:   operatorv1.OperatorStatusTypeProgressing,
+						Status: progressingStatus,
 					}},
 				},
 			}
