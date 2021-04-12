@@ -176,90 +176,63 @@ func TestDefaultDNSSteadyConditions(t *testing.T) {
 	}
 }
 
-func TestCoreDNSImageUpgrade(t *testing.T) {
+// TestCoreDNSDaemonSetReconciliation verifies that the operator reconciles the
+// dns-default daemonset.  The test modifies the daemonset and verifies that the
+// operator reverts the change.
+func TestCoreDNSDaemonSetReconciliation(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	deployment := &appsv1.Deployment{}
-	namespacedName := types.NamespacedName{Namespace: "openshift-dns-operator", Name: "dns-operator"}
+	defaultDNS := &operatorv1.DNS{}
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
-		if err := cl.Get(context.TODO(), namespacedName, deployment); err != nil {
-			t.Logf("failed to get deployment %s/%s: %v", namespacedName.Namespace, namespacedName.Name, err)
+		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DefaultDNSController}, defaultDNS); err != nil {
+			t.Logf("failed to get dns %q: %v", operatorcontroller.DefaultDNSController, err)
 			return false, nil
 		}
 		return true, nil
 	})
 	if err != nil {
-		t.Errorf("failed to get deployment: %v", err)
+		t.Fatalf("failed to get dns %q: %v", operatorcontroller.DefaultDNSController, err)
 	}
 
-	var curImage string
-	for _, env := range deployment.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "IMAGE" {
-			curImage = env.Value
-			break
-		}
-	}
-	if len(curImage) == 0 {
-		t.Errorf("env IMAGE not found in the operator deployment")
-	}
-
-	newImage := "openshift/origin-coredns:latest"
-	setImage(deployment, newImage)
-	if err := cl.Update(context.TODO(), deployment); err != nil {
-		t.Fatalf("failed to update dns operator to new coredns image: %v", err)
-	}
-	defer func() {
-		if err := cl.Get(context.TODO(), namespacedName, deployment); err != nil {
-			t.Fatalf("failed to get latest deployment: %v", err)
-		}
-		setImage(deployment, curImage)
-		if err := cl.Update(context.TODO(), deployment); err != nil {
-			t.Fatalf("failed to restore dns operator to old coredns image: %v", err)
-		}
-	}()
-
-	err = wait.PollImmediate(1*time.Second, 3*time.Minute, func() (bool, error) {
-		podList := &corev1.PodList{}
-		if err := cl.List(context.TODO(), podList, client.InNamespace("openshift-dns")); err != nil {
-			t.Logf("failed to get pod list in openshift-dns namespace: %v", err)
+	newNodeSelector := "foo"
+	namespacedName := operatorcontroller.DNSDaemonSetName(defaultDNS)
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		dnsDaemonSet := &appsv1.DaemonSet{}
+		if err := cl.Get(context.TODO(), namespacedName, dnsDaemonSet); err != nil {
+			t.Logf("failed to get daemonset %s: %v", namespacedName, err)
 			return false, nil
 		}
-
-		for _, pod := range podList.Items {
-			for _, container := range pod.Spec.Containers {
-				if container.Name == "dns" {
-					if container.Image == newImage {
-						return true, nil
-					}
-					break
-				}
-			}
+		dnsDaemonSet.Spec.Template.Spec.NodeSelector[newNodeSelector] = ""
+		if err := cl.Update(context.TODO(), dnsDaemonSet); err != nil {
+			t.Logf("failed to update daemonset %s: %v", namespacedName, err)
+			return false, nil
 		}
-		return false, nil
+		return true, nil
 	})
 	if err != nil {
-		t.Errorf("failed to observe updated coredns image: %v", err)
+		t.Errorf("failed to update daemonset %s: %v", namespacedName, err)
 	}
-}
 
-func setVersion(deployment *appsv1.Deployment, version string) {
-	for i, env := range deployment.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "RELEASE_VERSION" {
-			deployment.Spec.Template.Spec.Containers[0].Env[i].Value = version
-			break
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		dnsDaemonSet := &appsv1.DaemonSet{}
+		if err := cl.Get(context.TODO(), namespacedName, dnsDaemonSet); err != nil {
+			t.Logf("failed to get daemonset %s: %v", namespacedName, err)
+			return false, nil
 		}
-	}
-}
-
-func setImage(deployment *appsv1.Deployment, image string) {
-	for i, env := range deployment.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "IMAGE" {
-			deployment.Spec.Template.Spec.Containers[0].Env[i].Value = image
-			break
+		for k := range dnsDaemonSet.Spec.Template.Spec.NodeSelector {
+			if k == newNodeSelector {
+				t.Logf("found %q node selector on daemonset %s: %v", newNodeSelector, namespacedName, err)
+				return false, nil
+			}
 		}
+		t.Logf("observed absence of %q node selector on daemonset %s: %v", newNodeSelector, namespacedName, err)
+		return true, nil
+	})
+	if err != nil {
+		t.Errorf("failed to observe reversion of update to daemonset %s: %v", namespacedName, err)
 	}
 }
 
@@ -380,6 +353,11 @@ func TestDNSForwarding(t *testing.T) {
 		}
 	}()
 
+	// Verify that default DNS pods are all available before inspecting them.
+	if err := waitForDNSConditions(t, cl, 1*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
 	// Verify that the Corefile of DNS DaemonSet pods have been updated.
 	dnsDaemonSet := &appsv1.DaemonSet{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DNSDaemonSetName(defaultDNS), dnsDaemonSet); err != nil {
@@ -396,7 +374,12 @@ func TestDNSForwarding(t *testing.T) {
 	catCmd := []string{"cat", "/etc/coredns/Corefile"}
 	for _, pod := range defaultDNSPods.Items {
 		if err := lookForStringInPodExec(pod.Namespace, pod.Name, "dns", catCmd, upstreamIP, 2*time.Minute); err != nil {
-			t.Fatalf("failed to find %s in %s of pod %s/%s: %v", upstreamIP, catCmd[1], pod.Namespace, pod.Name, err)
+			// If we failed to find the expected IP in the pod's corefile, log the pod's status.
+			currPod := &corev1.Pod{}
+			if err := cl.Get(context.TODO(), types.NamespacedName{pod.Name, pod.Namespace}, currPod); err != nil {
+				t.Logf("failed to get pod %s: %v", pod.Name, err)
+			}
+			t.Fatalf("failed to find %s in %s of pod %s/%s: %v, pod status: %v", upstreamIP, catCmd[1], pod.Namespace, pod.Name, err, currPod.Status)
 		}
 	}
 
