@@ -1,11 +1,11 @@
+# *** AUTOMATICALLY GENERATED FILE - DO NOT EDIT ***
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  annotations:
+    include.release.openshift.io/ibm-cloud-managed: "true"
   name: dns-operator
   namespace: openshift-dns-operator
-  annotations:
-    include.release.openshift.io/self-managed-high-availability: "true"
-    include.release.openshift.io/single-node-developer: "true"
 spec:
   replicas: 1
   selector:
@@ -16,41 +16,34 @@ spec:
       labels:
         name: dns-operator
     spec:
-      dnsPolicy: Default
-      nodeSelector:
-        kubernetes.io/os: linux
-        node-role.kubernetes.io/master: ''
-      restartPolicy: Always
-      priorityClassName: system-cluster-critical
-      serviceAccountName: dns-operator
       containers:
-      - name: dns-operator
-        terminationMessagePolicy: FallbackToLogsOnError
-        image: openshift/origin-cluster-dns-operator:latest
-        command:
+      - command:
         - dns-operator
         env:
         - name: RELEASE_VERSION
-          value: "0.0.1-snapshot"
+          value: 0.0.1-snapshot
         - name: IMAGE
           value: openshift/origin-coredns:v4.0
         - name: OPENSHIFT_CLI_IMAGE
           value: openshift/origin-cli:v4.0
         - name: KUBE_RBAC_PROXY_IMAGE
           value: quay.io/openshift/origin-kube-rbac-proxy:latest
+        image: openshift/origin-cluster-dns-operator:latest
+        name: dns-operator
         resources:
           requests:
             cpu: 10m
             memory: 29Mi
-      - name: kube-rbac-proxy
-        image: quay.io/openshift/origin-kube-rbac-proxy:latest
-        args:
+        terminationMessagePolicy: FallbackToLogsOnError
+      - args:
         - --logtostderr
         - --secure-listen-address=:9393
         - --tls-cipher-suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_128_CBC_SHA256,TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
         - --upstream=http://127.0.0.1:60000/
         - --tls-cert-file=/etc/tls/private/tls.crt
         - --tls-private-key-file=/etc/tls/private/tls.key
+        image: quay.io/openshift/origin-kube-rbac-proxy:latest
+        name: kube-rbac-proxy
         ports:
         - containerPort: 9393
           name: metrics
@@ -62,20 +55,26 @@ spec:
         - mountPath: /etc/tls/private
           name: metrics-tls
           readOnly: true
+      dnsPolicy: Default
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: system-cluster-critical
+      restartPolicy: Always
+      serviceAccountName: dns-operator
+      terminationGracePeriodSeconds: 2
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
+      - effect: NoExecute
+        key: node.kubernetes.io/unreachable
+        operator: Exists
+        tolerationSeconds: 120
+      - effect: NoExecute
+        key: node.kubernetes.io/not-ready
+        operator: Exists
+        tolerationSeconds: 120
       volumes:
       - name: metrics-tls
         secret:
           secretName: metrics-tls
-      terminationGracePeriodSeconds: 2
-      tolerations:
-      - key: "node-role.kubernetes.io/master"
-        operator: "Exists"
-        effect: "NoSchedule"
-      - key: "node.kubernetes.io/unreachable"
-        operator: "Exists"
-        effect: "NoExecute"
-        tolerationSeconds: 120
-      - key: "node.kubernetes.io/not-ready"
-        operator: "Exists"
-        effect: "NoExecute"
-        tolerationSeconds: 120
