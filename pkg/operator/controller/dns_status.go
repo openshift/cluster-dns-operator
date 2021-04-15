@@ -218,7 +218,7 @@ func computeDNSAvailableCondition(oldCondition *operatorv1.OperatorCondition, cl
 	}
 	if len(clusterIP) == 0 {
 		unavailableReasons = append(unavailableReasons, "NoService")
-		messages = append(messages, "The DNS service has no cluster IP address.")
+		messages = append(messages, "No IP address is assigned to the DNS service.")
 	}
 	if len(unavailableReasons) != 0 {
 		availableCondition.Status = operatorv1.ConditionFalse
