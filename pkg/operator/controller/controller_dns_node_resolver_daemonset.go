@@ -26,6 +26,9 @@ const (
 	// are relative names; for each relative name, an alias with the
 	// CLUSTER_DOMAIN suffix will also be added.
 	services = "image-registry.openshift-image-registry.svc"
+
+	// workloadPartitioningManagement contains the management workload annotation
+	workloadPartitioningManagement = "workload.openshift.io/management"
 )
 
 var (
@@ -100,6 +103,9 @@ func desiredNodeResolverDaemonSet(clusterIP, clusterDomain, openshiftCLIImage st
 			Selector: NodeResolverDaemonSetPodSelector(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						workloadPartitioningManagement: `{"effect": "PreferredDuringScheduling"}`,
+					},
 					Labels: NodeResolverDaemonSetPodSelector().MatchLabels,
 				},
 				Spec: corev1.PodSpec{

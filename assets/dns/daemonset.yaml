@@ -3,6 +3,9 @@ apiVersion: apps/v1
 # name, namespace and labels are set at runtime
 spec:
   template:
+    metadata:
+      annotations:
+        workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
     spec:
       serviceAccountName: dns
       priorityClassName: system-node-critical

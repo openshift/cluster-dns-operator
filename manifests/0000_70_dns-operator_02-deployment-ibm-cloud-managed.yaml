@@ -13,6 +13,8 @@ spec:
       name: dns-operator
   template:
     metadata:
+      annotations:
+        workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
       labels:
         name: dns-operator
     spec:
