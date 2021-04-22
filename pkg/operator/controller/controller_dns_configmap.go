@@ -28,9 +28,11 @@ var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Se
     forward .{{range .Upstreams}} {{.}}{{end}}
     {{- end}}
     errors
+    bufsize 1232
 }
 {{end -}}
 .:5353 {
+    bufsize 1232
     errors
     health {
         lameduck 20s
