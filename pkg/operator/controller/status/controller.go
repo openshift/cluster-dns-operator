@@ -115,21 +115,44 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 	co.Status.RelatedObjects = related
 
-	co.Status.Versions = r.computeOperatorStatusVersions(state.haveDNS, &state.dns, oldStatus.Versions)
+	newVersions := []configv1.OperandVersion{
+		{
+			Name:    OperatorVersionName,
+			Version: r.OperatorReleaseVersion,
+		},
+		{
+			Name:    CoreDNSVersionName,
+			Version: r.CoreDNSImage,
+		},
+		{
+			Name:    OpenshiftCLIVersionName,
+			Version: r.OpenshiftCLIImage,
+		},
+		{
+			Name:    KubeRBACProxyName,
+			Version: r.KubeRBACProxyImage,
+		},
+	}
 
+	operatorProgressingCondition := computeOperatorProgressingCondition(
+		state.haveDNS,
+		&state.dns,
+		oldStatus.Versions,
+		newVersions,
+		r.OperatorReleaseVersion,
+		r.CoreDNSImage,
+		r.OpenshiftCLIImage,
+		r.KubeRBACProxyImage,
+	)
 	co.Status.Conditions = mergeConditions(co.Status.Conditions,
 		computeOperatorAvailableCondition(state.haveDNS, &state.dns),
-		computeOperatorProgressingCondition(
-			state.haveDNS,
-			&state.dns,
-			oldStatus.Versions,
-			co.Status.Versions,
-			r.OperatorReleaseVersion,
-			r.CoreDNSImage,
-			r.OpenshiftCLIImage,
-			r.KubeRBACProxyImage,
-		),
+		operatorProgressingCondition,
 		computeOperatorDegradedCondition(state.haveDNS, &state.dns),
+	)
+	co.Status.Versions = r.computeOperatorStatusVersions(
+		&operatorProgressingCondition,
+		oldStatus.Versions,
+		newVersions,
 	)
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
@@ -217,41 +240,15 @@ func (r *reconciler) getOperatorState() (operatorState, error) {
 }
 
 // computeOperatorStatusVersions computes the operator's current versions.
-func (r *reconciler) computeOperatorStatusVersions(haveDNS bool, dns *operatorv1.DNS, oldVersions []configv1.OperandVersion) []configv1.OperandVersion {
+func (r *reconciler) computeOperatorStatusVersions(operatorProgressingCondition *configv1.ClusterOperatorStatusCondition, oldVersions, newVersions []configv1.OperandVersion) []configv1.OperandVersion {
 	// We need to report old version until the operator fully transitions to the new version.
 	// https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusteroperator.md#version-reporting-during-an-upgrade
-	if !haveDNS {
+	switch operatorProgressingCondition.Status {
+	case configv1.ConditionTrue, configv1.ConditionUnknown:
 		return oldVersions
 	}
-	for _, c := range dns.Status.Conditions {
-		if c.Type != operatorv1.OperatorStatusTypeProgressing {
-			continue
-		}
-		switch c.Status {
-		case operatorv1.ConditionTrue, operatorv1.ConditionUnknown:
-			return oldVersions
-		}
-		break
-	}
 
-	return []configv1.OperandVersion{
-		{
-			Name:    OperatorVersionName,
-			Version: r.OperatorReleaseVersion,
-		},
-		{
-			Name:    CoreDNSVersionName,
-			Version: r.CoreDNSImage,
-		},
-		{
-			Name:    OpenshiftCLIVersionName,
-			Version: r.OpenshiftCLIImage,
-		},
-		{
-			Name:    KubeRBACProxyName,
-			Version: r.KubeRBACProxyImage,
-		},
-	}
+	return newVersions
 }
 
 // checkDNSAvailable checks if the dns is available.
