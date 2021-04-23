@@ -71,8 +71,7 @@ spec:
           name: metrics-tls
           readOnly: true
       dnsPolicy: Default
-      nodeSelector:
-        kubernetes.io/os: linux      
+      # nodeSelector is set at runtime.
       volumes:
       - name: config-volume
         configMap:
