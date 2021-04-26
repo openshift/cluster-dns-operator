@@ -3,6 +3,8 @@ package controller
 import (
 	"testing"
 
+	operatorv1 "github.com/openshift/api/operator/v1"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -16,7 +18,13 @@ func TestDesiredNodeResolverDaemonset(t *testing.T) {
 	clusterIP := "172.30.77.10"
 	openshiftCLIImage := "openshift/origin-cli:test"
 
-	if want, ds, err := desiredNodeResolverDaemonSet(clusterIP, clusterDomain, openshiftCLIImage); err != nil {
+	dns := &operatorv1.DNS{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: DefaultDNSController,
+		},
+	}
+
+	if want, ds, err := desiredNodeResolverDaemonSet(dns, clusterIP, clusterDomain, openshiftCLIImage); err != nil {
 		t.Errorf("invalid node resolver daemonset: %v", err)
 	} else if !want {
 		t.Error("expected the node resolver daemonset desired to be true, got false")
