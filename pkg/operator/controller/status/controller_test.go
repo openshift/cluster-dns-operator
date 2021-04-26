@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	configv1 "github.com/openshift/api/config/v1"
+	operatorv1 "github.com/openshift/api/operator/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -19,19 +20,37 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 
 	testCases := []struct {
 		description       string
+		dnsMissing        bool
 		dnsAvailable      bool
+		dnsProgressing    bool
 		reportedVersions  versions
 		oldVersions       versions
 		curVersions       versions
 		expectProgressing configv1.ConditionStatus
 	}{
 		{
-			description:       "dns available",
+			description:       "dns does not exist",
+			dnsMissing:        true,
+			expectProgressing: configv1.ConditionTrue,
+		},
+		{
+			description:       "dns not available, not progressing",
+			expectProgressing: configv1.ConditionFalse,
+		},
+		{
+			description:       "dns not available but progressing",
+			dnsProgressing:    true,
+			expectProgressing: configv1.ConditionTrue,
+		},
+		{
+			description:       "dns available, not progressing",
 			dnsAvailable:      true,
 			expectProgressing: configv1.ConditionFalse,
 		},
 		{
-			description:       "dns not available",
+			description:       "dns available and progressing",
+			dnsAvailable:      true,
+			dnsProgressing:    true,
 			expectProgressing: configv1.ConditionTrue,
 		},
 		{
@@ -101,6 +120,32 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		var (
+			haveDNS bool
+			dns     *operatorv1.DNS
+		)
+		if !tc.dnsMissing {
+			haveDNS = true
+			availableStatus := operatorv1.ConditionFalse
+			if tc.dnsAvailable {
+				availableStatus = operatorv1.ConditionTrue
+			}
+			progressingStatus := operatorv1.ConditionFalse
+			if tc.dnsProgressing {
+				progressingStatus = operatorv1.ConditionTrue
+			}
+			dns = &operatorv1.DNS{
+				Status: operatorv1.DNSStatus{
+					Conditions: []operatorv1.OperatorCondition{{
+						Type:   operatorv1.OperatorStatusTypeAvailable,
+						Status: availableStatus,
+					}, {
+						Type:   operatorv1.OperatorStatusTypeProgressing,
+						Status: progressingStatus,
+					}},
+				},
+			}
+		}
 		oldVersions := []configv1.OperandVersion{
 			{
 				Name:    OperatorVersionName,
@@ -143,13 +188,13 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 			Status: tc.expectProgressing,
 		}
 
-		actual := computeOperatorProgressingCondition(tc.dnsAvailable, oldVersions, reportedVersions,
+		actual := computeOperatorProgressingCondition(haveDNS, dns, oldVersions, reportedVersions,
 			tc.curVersions.operator, tc.curVersions.operand, tc.curVersions.operand, tc.curVersions.operand)
 		conditionsCmpOpts := []cmp.Option{
 			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
 		}
 		if !cmp.Equal(actual, expected, conditionsCmpOpts...) {
-			t.Fatalf("%q: expected %#v, got %#v", tc.description, expected, actual)
+			t.Errorf("%q: expected %#v, got %#v", tc.description, expected, actual)
 		}
 	}
 }
@@ -381,7 +426,7 @@ func TestOperatorStatusesEqual(t *testing.T) {
 
 	for _, tc := range testCases {
 		if actual := operatorStatusesEqual(tc.a, tc.b); actual != tc.expected {
-			t.Fatalf("%q: expected %v, got %v", tc.description, tc.expected, actual)
+			t.Errorf("%q: expected %v, got %v", tc.description, tc.expected, actual)
 		}
 	}
 }
@@ -396,75 +441,99 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 		description      string
 		oldVersions      versions
 		curVersions      versions
-		dnsAvailable     bool
+		dnsMissing       bool
+		dnsProgressing   bool
 		expectedVersions versions
 	}{
 		{
-			description:      "initialize versions, operator is available",
+			description:      "initialize versions, operator is not progressing",
 			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
 			curVersions:      versions{"v1", "dns-v1"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "initialize versions, operator is not available",
+			description:      "initialize versions, dns does not exist",
 			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
 			curVersions:      versions{"v1", "dns-v1"},
+			dnsMissing:       true,
+			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue},
+		},
+		{
+			description:      "initialize versions, operator is progressing",
+			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
+			curVersions:      versions{"v1", "dns-v1"},
+			dnsProgressing:   true,
 			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue},
 		},
 		{
 			description:      "update with no change",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v1"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator version, operator is not available",
+			description:      "update operator version, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v1"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator version, operator is available",
+			description:      "update operator version, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v1"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v2", "dns-v1"},
 		},
 		{
-			description:      "update operand image, operator is not available",
+			description:      "update operand image, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v2"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operand image, operator is available",
+			description:      "update operand image, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v1", "dns-v2"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v1", "dns-v2"},
 		},
 		{
-			description:      "update operator and operand image, operator is not available",
+			description:      "update operator and operand image, operator is progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v2"},
+			dnsProgressing:   true,
 			expectedVersions: versions{"v1", "dns-v1"},
 		},
 		{
-			description:      "update operator and operandr image, operator is available",
+			description:      "update operator and operand image, operator is not progressing",
 			oldVersions:      versions{"v1", "dns-v1"},
 			curVersions:      versions{"v2", "dns-v2"},
-			dnsAvailable:     true,
 			expectedVersions: versions{"v2", "dns-v2"},
 		},
 	}
 
 	for _, tc := range testCases {
 		var (
+			haveDNS          bool
+			dns              *operatorv1.DNS
 			oldVersions      []configv1.OperandVersion
 			expectedVersions []configv1.OperandVersion
 		)
+
+		if !tc.dnsMissing {
+			haveDNS = true
+			progressingStatus := operatorv1.ConditionFalse
+			if tc.dnsProgressing {
+				progressingStatus = operatorv1.ConditionTrue
+			}
+			dns = &operatorv1.DNS{
+				Status: operatorv1.DNSStatus{
+					Conditions: []operatorv1.OperatorCondition{{
+						Type:   operatorv1.OperatorStatusTypeProgressing,
+						Status: progressingStatus,
+					}}},
+			}
+		}
 
 		oldVersions = []configv1.OperandVersion{
 			{
@@ -511,13 +580,13 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 				KubeRBACProxyImage:     tc.curVersions.operand,
 			},
 		}
-		versions := r.computeOperatorStatusVersions(oldVersions, tc.dnsAvailable)
+		versions := r.computeOperatorStatusVersions(haveDNS, dns, oldVersions)
 		versionsCmpOpts := []cmp.Option{
 			cmpopts.EquateEmpty(),
 			cmpopts.SortSlices(func(a, b configv1.OperandVersion) bool { return a.Name < b.Name }),
 		}
 		if !cmp.Equal(versions, expectedVersions, versionsCmpOpts...) {
-			t.Fatalf("%q: expected %v, got %v", tc.description, expectedVersions, versions)
+			t.Errorf("%q: expected %v, got %v", tc.description, expectedVersions, versions)
 		}
 	}
 }
