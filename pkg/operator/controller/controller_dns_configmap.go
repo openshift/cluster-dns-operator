@@ -27,6 +27,7 @@ var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Se
     {{with .ForwardPlugin -}}
     forward .{{range .Upstreams}} {{.}}{{end}}
     {{- end}}
+    errors
 }
 {{end -}}
 .:5353 {

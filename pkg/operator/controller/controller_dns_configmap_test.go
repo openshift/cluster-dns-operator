@@ -36,10 +36,12 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 	expectedCorefile := `# foo
 foo.com:5353 {
     forward . 1.1.1.1 2.2.2.2:5353
+    errors
 }
 # bar
 bar.com:5353 example.com:5353 {
     forward . 3.3.3.3
+    errors
 }
 .:5353 {
     errors
