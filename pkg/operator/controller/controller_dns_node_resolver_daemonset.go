@@ -9,6 +9,8 @@ import (
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
+	operatorv1 "github.com/openshift/api/operator/v1"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
@@ -40,12 +42,12 @@ var (
 // should or does not exist if it should not exist.  Returns a Boolean
 // indicating whether the daemonset exists, the daemonset if it does exist, and
 // an error value.
-func (r *reconciler) ensureNodeResolverDaemonSet(clusterIP, clusterDomain string) (bool, *appsv1.DaemonSet, error) {
+func (r *reconciler) ensureNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain string) (bool, *appsv1.DaemonSet, error) {
 	haveDS, current, err := r.currentNodeResolverDaemonSet()
 	if err != nil {
 		return false, nil, err
 	}
-	wantDS, desired, err := desiredNodeResolverDaemonSet(clusterIP, clusterDomain, r.OpenshiftCLIImage)
+	wantDS, desired, err := desiredNodeResolverDaemonSet(dns, clusterIP, clusterDomain, r.OpenshiftCLIImage)
 	if err != nil {
 		return haveDS, current, fmt.Errorf("failed to build node resolver daemonset: %v", err)
 	}
@@ -73,7 +75,7 @@ func (r *reconciler) ensureNodeResolverDaemonSet(clusterIP, clusterDomain string
 }
 
 // desiredNodeResolverDaemonSet returns the desired node resolver daemonset.
-func desiredNodeResolverDaemonSet(clusterIP, clusterDomain, openshiftCLIImage string) (bool, *appsv1.DaemonSet, error) {
+func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, openshiftCLIImage string) (bool, *appsv1.DaemonSet, error) {
 	hostPathFile := corev1.HostPathFile
 	maxUnavailable := intstr.FromString("10%")
 	envs := []corev1.EnvVar{{
@@ -98,6 +100,9 @@ func desiredNodeResolverDaemonSet(clusterIP, clusterDomain, openshiftCLIImage st
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name.Name,
 			Namespace: name.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				dnsOwnerRef(dns),
+			},
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Selector: NodeResolverDaemonSetPodSelector(),

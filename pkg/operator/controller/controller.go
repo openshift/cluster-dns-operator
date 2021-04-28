@@ -380,7 +380,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		}
 	}
 
-	haveNodeResolverDaemonset, nodeResolverDaemonset, err := r.ensureNodeResolverDaemonSet(clusterIP, clusterDomain)
+	haveNodeResolverDaemonset, nodeResolverDaemonset, err := r.ensureNodeResolverDaemonSet(dns, clusterIP, clusterDomain)
 	if err != nil {
 		errs = append(errs, err)
 	}
