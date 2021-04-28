@@ -233,6 +233,11 @@ func nodeResolverDaemonSetConfigChanged(current, expected *appsv1.DaemonSet) (bo
 	changed := false
 	updated := current.DeepCopy()
 
+	if !cmp.Equal(current.Spec.UpdateStrategy, expected.Spec.UpdateStrategy, cmpopts.EquateEmpty()) {
+		updated.Spec.UpdateStrategy = expected.Spec.UpdateStrategy
+		changed = true
+	}
+
 	if len(current.Spec.Template.Spec.Containers) != len(expected.Spec.Template.Spec.Containers) {
 		updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
 		changed = true
