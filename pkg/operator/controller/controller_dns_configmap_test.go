@@ -37,13 +37,16 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 foo.com:5353 {
     forward . 1.1.1.1 2.2.2.2:5353
     errors
+    bufsize 1232
 }
 # bar
 bar.com:5353 example.com:5353 {
     forward . 3.3.3.3
     errors
+    bufsize 1232
 }
 .:5353 {
+    bufsize 1232
     errors
     health {
         lameduck 20s
