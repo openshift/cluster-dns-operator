@@ -99,7 +99,12 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 		// have modified.
 		//
 		// TODO: Remove TopologyKeys when the service topology feature gate is enabled.
-		cmpopts.IgnoreFields(corev1.ServiceSpec{}, "ClusterIP", "ClusterIPs", "TopologyKeys"),
+		cmpopts.IgnoreFields(
+			corev1.ServiceSpec{},
+			"ClusterIP", "ClusterIPs",
+			"IPFamilies", "IPFamilyPolicy",
+			"TopologyKeys",
+		),
 		cmp.Comparer(cmpServiceAffinity),
 		cmp.Comparer(cmpServiceType),
 		cmpopts.EquateEmpty(),

@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // TestDesiredNodeResolverDaemonset verifies that desiredNodeResolverDaemonSet
@@ -59,6 +60,7 @@ func TestDesiredNodeResolverDaemonset(t *testing.T) {
 // nodeResolverDaemonSetConfigChanged correctly detects changes that should
 // trigger updates and ignores changes that should be ignored.
 func TestNodeResolverDaemonsetConfigChanged(t *testing.T) {
+	pointerTo := func(ios intstr.IntOrString) *intstr.IntOrString { return &ios }
 	testCases := []struct {
 		description string
 		mutate      func(*appsv1.DaemonSet)
@@ -138,6 +140,18 @@ func TestNodeResolverDaemonsetConfigChanged(t *testing.T) {
 			description: "if the hosts-file path value changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				daemonset.Spec.Template.Spec.Volumes[0].HostPath.Path = "/foo"
+			},
+			expect: true,
+		},
+		{
+			description: "if the update strategy changes",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.UpdateStrategy = appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: pointerTo(intstr.FromString("10%")),
+					},
+				}
 			},
 			expect: true,
 		},

@@ -85,6 +85,8 @@ spec:
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
+      # TODO: Consider setting maxSurge to a positive value.
+      maxSurge: 0
       # Note: The daemon controller rounds the percentage up
       # (unlike the deployment controller, which rounds down).
       maxUnavailable: 10%

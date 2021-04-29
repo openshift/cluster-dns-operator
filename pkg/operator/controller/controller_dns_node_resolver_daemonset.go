@@ -77,6 +77,8 @@ func (r *reconciler) ensureNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP,
 // desiredNodeResolverDaemonSet returns the desired node resolver daemonset.
 func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, openshiftCLIImage string) (bool, *appsv1.DaemonSet, error) {
 	hostPathFile := corev1.HostPathFile
+	// TODO: Consider setting maxSurge to a positive value.
+	maxSurge := intstr.FromInt(0)
 	maxUnavailable := intstr.FromString("10%")
 	envs := []corev1.EnvVar{{
 		Name:  "SERVICES",
@@ -168,6 +170,7 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				Type: appsv1.RollingUpdateDaemonSetStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+					MaxSurge:       &maxSurge,
 					MaxUnavailable: &maxUnavailable,
 				},
 			},
@@ -229,6 +232,11 @@ func (r *reconciler) updateNodeResolverDaemonSet(current, desired *appsv1.Daemon
 func nodeResolverDaemonSetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.DaemonSet) {
 	changed := false
 	updated := current.DeepCopy()
+
+	if !cmp.Equal(current.Spec.UpdateStrategy, expected.Spec.UpdateStrategy, cmpopts.EquateEmpty()) {
+		updated.Spec.UpdateStrategy = expected.Spec.UpdateStrategy
+		changed = true
+	}
 
 	if len(current.Spec.Template.Spec.Containers) != len(expected.Spec.Template.Spec.Containers) {
 		updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers

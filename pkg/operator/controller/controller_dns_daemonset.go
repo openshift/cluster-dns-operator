@@ -169,8 +169,12 @@ func (r *reconciler) updateDNSDaemonSet(current, desired *appsv1.DaemonSet) (boo
 		ignored := updated.DeepCopy()
 		updated.Spec.Template.Spec.Tolerations = current.Spec.Template.Spec.Tolerations
 		updated.Spec.Template.Spec.NodeSelector = current.Spec.Template.Spec.NodeSelector
-		diff := cmp.Diff(ignored, updated, cmpopts.EquateEmpty())
+		diff := cmp.Diff(updated, ignored, cmpopts.EquateEmpty())
 		logrus.Warnf("skipping unsafe update to the node-placement parameters for dns daemonset %s/%s: %s; ignored: %v", updated.Namespace, updated.Name, reason, diff)
+		changed, _ := daemonsetConfigChanged(current, updated)
+		if !changed {
+			return false, nil
+		}
 	}
 
 	// Diff before updating because the client may mutate the object.
