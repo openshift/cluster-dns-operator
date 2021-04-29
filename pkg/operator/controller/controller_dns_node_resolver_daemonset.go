@@ -30,7 +30,7 @@ const (
 	services = "image-registry.openshift-image-registry.svc"
 
 	// workloadPartitioningManagement contains the management workload annotation
-	workloadPartitioningManagement = "workload.openshift.io/management"
+	workloadPartitioningManagement = "target.workload.openshift.io/management"
 )
 
 var (
