@@ -1,6 +1,10 @@
 .PHONY: all
 all: generate build
 
+include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
+    targets/openshift/operator/profile-manifests.mk \
+)
+
 PACKAGE=github.com/openshift/cluster-dns-operator
 MAIN_PACKAGE=$(PACKAGE)/cmd/dns-operator
 
@@ -12,6 +16,14 @@ GO=GO111MODULE=on GOFLAGS=-mod=vendor go
 GO_BUILD_RECIPE=CGO_ENABLED=0 $(GO) build -o $(BIN) $(MAIN_PACKAGE)
 
 TEST ?= .*
+
+# This will include additional actions on the update and verify targets to ensure that profile patches are applied
+# to manifest files
+# $0 - macro name
+# $1 - target name
+# $2 - profile patches directory
+# $3 - manifests directory
+$(call add-profile-manifests,manifests,./profile-patches,./manifests)
 
 .PHONY: build
 build:
@@ -26,7 +38,7 @@ cluster-build:
 	hack/start-build.sh
 
 .PHONY: generate
-generate: bindata crd
+generate: bindata crd update
 
 .PHONY: bindata
 bindata:

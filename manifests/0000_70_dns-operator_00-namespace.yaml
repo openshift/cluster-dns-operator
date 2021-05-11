@@ -2,8 +2,11 @@ kind: Namespace
 apiVersion: v1
 metadata:
   annotations:
+    include.release.openshift.io/ibm-cloud-managed: "true"
     include.release.openshift.io/self-managed-high-availability: "true"
     openshift.io/node-selector: ""
+    include.release.openshift.io/single-node-developer: "true"
+    workload.openshift.io/allowed: "management"
   name: openshift-dns-operator
   labels:
     # set value to avoid depending on kube admission that depends on openshift apis

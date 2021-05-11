@@ -10,14 +10,14 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 )
 
 const operatorNamespace = "openshift-dns-operator"
 
 func main() {
-	metrics.DefaultBindAddress = ":60000"
+	metrics.DefaultBindAddress = "127.0.0.1:60000"
 
 	// Collect operator configuration.
 	releaseVersion := os.Getenv("RELEASE_VERSION")

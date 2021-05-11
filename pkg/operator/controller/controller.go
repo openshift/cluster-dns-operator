@@ -85,7 +85,7 @@ type reconciler struct {
 
 // Reconcile expects request to refer to a dns and will do all the work
 // to ensure the dns is in the desired state.
-func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	errs := []error{}
 	result := reconcile.Result{}
 
@@ -98,7 +98,7 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 	}
 	// Get the current dns state.
 	dns := &operatorv1.DNS{}
-	if err := r.client.Get(context.TODO(), request.NamespacedName, dns); err != nil {
+	if err := r.client.Get(ctx, request.NamespacedName, dns); err != nil {
 		if errors.IsNotFound(err) {
 			// This means the dns was already deleted/finalized and there are
 			// stale queue entries (or something edge triggering from a related
@@ -130,7 +130,7 @@ func (r *reconciler) Reconcile(request reconcile.Request) (reconcile.Result, err
 				if slice.ContainsString(dns.Finalizers, DNSControllerFinalizer) {
 					updated := dns.DeepCopy()
 					updated.Finalizers = slice.RemoveString(updated.Finalizers, DNSControllerFinalizer)
-					if err := r.client.Update(context.TODO(), updated); err != nil {
+					if err := r.client.Update(ctx, updated); err != nil {
 						errs = append(errs, fmt.Errorf("failed to remove finalizer from dns %s: %v", dns.Name, err))
 					}
 				}
@@ -268,6 +268,21 @@ func (r *reconciler) ensureDNSNamespace() error {
 		logrus.Infof("created dns service account: %s/%s", sa.Namespace, sa.Name)
 	}
 
+	nodeResolverServiceAccount := manifests.NodeResolverServiceAccount()
+	nodeResolverServiceAccountName := types.NamespacedName{
+		Namespace: nodeResolverServiceAccount.Namespace,
+		Name:      nodeResolverServiceAccount.Name,
+	}
+	if err := r.client.Get(context.TODO(), nodeResolverServiceAccountName, nodeResolverServiceAccount); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get serviceaccount %s: %w", nodeResolverServiceAccountName, err)
+		}
+		if err := r.client.Create(context.TODO(), nodeResolverServiceAccount); err != nil {
+			return fmt.Errorf("failed to create serviceaccount %s: %w", nodeResolverServiceAccountName, err)
+		}
+		logrus.Infof("created serviceaccount %s", nodeResolverServiceAccountName)
+	}
+
 	return nil
 }
 
@@ -334,17 +349,19 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	}
 
 	errs := []error{}
-	if haveDS, daemonset, err := r.ensureDNSDaemonSet(dns, clusterIP, clusterDomain); err != nil {
+
+	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns)
+	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
-	} else if !haveDS {
+	} else if !haveDNSDaemonset {
 		errs = append(errs, fmt.Errorf("failed to get daemonset for dns %s", dns.Name))
 	} else {
 		trueVar := true
 		daemonsetRef := metav1.OwnerReference{
 			APIVersion: "apps/v1",
 			Kind:       "DaemonSet",
-			Name:       daemonset.Name,
-			UID:        daemonset.UID,
+			Name:       dnsDaemonset.Name,
+			UID:        dnsDaemonset.UID,
 			Controller: &trueVar,
 		}
 
@@ -361,10 +378,15 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		} else if err := r.ensureMetricsIntegration(dns, svc, daemonsetRef); err != nil {
 			errs = append(errs, fmt.Errorf("failed to integrate metrics with openshift-monitoring for dns %s: %v", dns.Name, err))
 		}
+	}
 
-		if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, daemonset); err != nil {
-			errs = append(errs, fmt.Errorf("failed to sync status of dns %s/%s: %v", daemonset.Namespace, daemonset.Name, err))
-		}
+	haveNodeResolverDaemonset, nodeResolverDaemonset, err := r.ensureNodeResolverDaemonSet(dns, clusterIP, clusterDomain)
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset); err != nil {
+		errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 	}
 
 	return utilerrors.NewAggregate(errs)

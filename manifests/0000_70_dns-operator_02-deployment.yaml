@@ -5,6 +5,7 @@ metadata:
   namespace: openshift-dns-operator
   annotations:
     include.release.openshift.io/self-managed-high-availability: "true"
+    include.release.openshift.io/single-node-developer: "true"
 spec:
   replicas: 1
   selector:
@@ -12,6 +13,8 @@ spec:
       name: dns-operator
   template:
     metadata:
+      annotations:
+        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
       labels:
         name: dns-operator
     spec:
@@ -40,6 +43,7 @@ spec:
         resources:
           requests:
             cpu: 10m
+            memory: 29Mi
       - name: kube-rbac-proxy
         image: quay.io/openshift/origin-kube-rbac-proxy:latest
         args:

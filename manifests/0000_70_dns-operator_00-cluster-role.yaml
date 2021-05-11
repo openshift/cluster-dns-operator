@@ -4,7 +4,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: openshift-dns-operator
   annotations:
+    include.release.openshift.io/ibm-cloud-managed: "true"
     include.release.openshift.io/self-managed-high-availability: "true"
+    include.release.openshift.io/single-node-developer: "true"
 rules:
 - apiGroups:
   - operator.openshift.io
@@ -37,8 +39,17 @@ rules:
   - configmaps
   - endpoints
   - pods
+  - nodes
   verbs:
   - "*"
+
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
 
 - apiGroups:
   - monitoring.coreos.com

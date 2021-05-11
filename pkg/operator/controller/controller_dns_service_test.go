@@ -80,6 +80,18 @@ func TestDNSServiceChanged(t *testing.T) {
 			description: "if .spec.clusterIP changes",
 			mutate: func(service *corev1.Service) {
 				service.Spec.ClusterIP = "1.2.3.4"
+				service.Spec.ClusterIPs = []string{"1.2.3.4"}
+			},
+			expect: false,
+		},
+		{
+			description: "if .spec.ipFamilies or .spec.ipFamilyPolicy change",
+			mutate: func(service *corev1.Service) {
+				service.Spec.IPFamilies = []corev1.IPFamily{
+					corev1.IPv4Protocol,
+				}
+				ipFamilyPolicy := corev1.IPFamilyPolicySingleStack
+				service.Spec.IPFamilyPolicy = &ipFamilyPolicy
 			},
 			expect: false,
 		},

@@ -36,27 +36,33 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 	expectedCorefile := `# foo
 foo.com:5353 {
     forward . 1.1.1.1 2.2.2.2:5353
+    errors
+    bufsize 1232
 }
 # bar
 bar.com:5353 example.com:5353 {
     forward . 3.3.3.3
+    errors
+    bufsize 1232
 }
 .:5353 {
+    bufsize 1232
     errors
     health {
-        lameduck 60s
+        lameduck 20s
     }
     ready
     kubernetes cluster.local in-addr.arpa ip6.arpa {
         pods insecure
-        upstream
         fallthrough in-addr.arpa ip6.arpa
     }
-    prometheus :9153
+    prometheus 127.0.0.1:9153
     forward . /etc/resolv.conf {
         policy sequential
     }
-    cache 30
+    cache 900 {
+        denial 9984 30
+    }
     reload
 }
 `
