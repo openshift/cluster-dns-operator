@@ -51,7 +51,7 @@ func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDa
 	}
 
 	conditions := []operatorv1.OperatorCondition{
-		computeDNSDegradedCondition(oldDegradedCondition, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset),
+		computeDNSDegradedCondition(oldDegradedCondition, clusterIP, haveDNSDaemonset, dnsDaemonset),
 		computeDNSProgressingCondition(oldProgressingCondition, dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset),
 		computeDNSAvailableCondition(oldAvailableCondition, clusterIP, haveDNSDaemonset, dnsDaemonset),
 	}
@@ -60,8 +60,9 @@ func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDa
 }
 
 // computeDNSDegradedCondition computes the dns Degraded status condition
-// based on the status of clusterIP and the DNS and node-resolver daemonsets.
-func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet) operatorv1.OperatorCondition {
+// based on the status of clusterIP and the DNS daemonset.  The node-resolver
+// daemonset is not a part of the calculation of degraded condition.
+func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet) operatorv1.OperatorCondition {
 	degradedCondition := &operatorv1.OperatorCondition{
 		Type: operatorv1.OperatorStatusTypeDegraded,
 	}
@@ -104,37 +105,7 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 			messages = append(messages, fmt.Sprintf("Too many DNS pods are unavailable (%d > %d max unavailable).", numberUnavailable, maxUnavailable))
 		}
 	}
-	if !haveNodeResolverDaemonset {
-		status = operatorv1.ConditionTrue
-		degradedReasons = append(degradedReasons, "NoNodeResolverDaemonSet")
-		messages = append(messages, "The node-resolver daemonset does not exist.")
-	} else {
-		want := nodeResolverDaemonset.Status.DesiredNumberScheduled
-		have := nodeResolverDaemonset.Status.NumberAvailable
-		numberUnavailable := want - have
-		maxUnavailableIntStr := intstr.FromInt(1)
-		if nodeResolverDaemonset.Spec.UpdateStrategy.RollingUpdate != nil && nodeResolverDaemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable != nil {
-			maxUnavailableIntStr = *nodeResolverDaemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable
-		}
-		maxUnavailable, intstrErr := intstr.GetScaledValueFromIntOrPercent(&maxUnavailableIntStr, int(want), true)
-		switch {
-		case want == 0:
-			status = operatorv1.ConditionTrue
-			degradedReasons = append(degradedReasons, "NoNodeResolverPodsDesired")
-			messages = append(messages, "No node-resolver pods are desired; this could mean all nodes are tainted or unschedulable.")
-		case have == 0:
-			status = operatorv1.ConditionTrue
-			degradedReasons = append(degradedReasons, "NoNodeResolverPodsAvailable")
-			messages = append(messages, "No node-resolver pods are available.")
-		case intstrErr != nil:
-			degradedReasons = append(degradedReasons, "InvalidNodeResolverMaxUnavailable")
-			messages = append(messages, fmt.Sprintf("The node-resolver daemonset has an invalid MaxUnavailable value: %v", intstrErr))
-		case int(numberUnavailable) > maxUnavailable:
-			status = operatorv1.ConditionTrue
-			degradedReasons = append(degradedReasons, "MaxUnavailableNodeResolverPodsExceeded")
-			messages = append(messages, fmt.Sprintf("Too many node-resolver pods are unavailable (%d > %d max unavailable).", numberUnavailable, maxUnavailable))
-		}
-	}
+
 	if len(degradedReasons) != 0 {
 		degradedCondition.Status = status
 		degradedCondition.Reason = strings.Join(degradedReasons, "")
@@ -142,7 +113,7 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 	} else {
 		degradedCondition.Status = operatorv1.ConditionFalse
 		degradedCondition.Reason = "AsExpected"
-		degradedCondition.Message = "Enough DNS and node-resolver pods are available, and the DNS service has a cluster IP address."
+		degradedCondition.Message = "Enough DNS pods are available, and the DNS service has a cluster IP address."
 	}
 
 	return setDNSLastTransitionTime(degradedCondition, oldCondition)
@@ -202,7 +173,7 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 }
 
 // computeDNSAvailableCondition computes the dns Available status condition
-// based on the status of clusterIP and the DNS and node-resolver daemonsets.
+// based on the status of clusterIP and the DNS daemonset.
 func computeDNSAvailableCondition(oldCondition *operatorv1.OperatorCondition, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet) operatorv1.OperatorCondition {
 	availableCondition := &operatorv1.OperatorCondition{
 		Type: operatorv1.OperatorStatusTypeAvailable,

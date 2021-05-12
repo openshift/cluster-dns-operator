@@ -149,7 +149,7 @@ func TestNodeResolverDaemonsetConfigChanged(t *testing.T) {
 				daemonset.Spec.UpdateStrategy = appsv1.DaemonSetUpdateStrategy{
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-						MaxUnavailable: pointerTo(intstr.FromString("10%")),
+						MaxUnavailable: pointerTo(intstr.FromString("33%")),
 					},
 				}
 			},
