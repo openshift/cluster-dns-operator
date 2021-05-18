@@ -149,7 +149,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		operatorProgressingCondition,
 		computeOperatorDegradedCondition(state.haveDNS, &state.dns),
 	)
-	co.Status.Versions = r.computeOperatorStatusVersions(
+	co.Status.Versions = computeOperatorStatusVersions(
 		&operatorProgressingCondition,
 		oldStatus.Versions,
 		newVersions,
@@ -240,7 +240,7 @@ func (r *reconciler) getOperatorState() (operatorState, error) {
 }
 
 // computeOperatorStatusVersions computes the operator's current versions.
-func (r *reconciler) computeOperatorStatusVersions(operatorProgressingCondition *configv1.ClusterOperatorStatusCondition, oldVersions, newVersions []configv1.OperandVersion) []configv1.OperandVersion {
+func computeOperatorStatusVersions(operatorProgressingCondition *configv1.ClusterOperatorStatusCondition, oldVersions, newVersions []configv1.OperandVersion) []configv1.OperandVersion {
 	// We need to report old version until the operator fully transitions to the new version.
 	// https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusteroperator.md#version-reporting-during-an-upgrade
 	switch operatorProgressingCondition.Status {

@@ -1,7 +1,6 @@
 package status
 
 import (
-	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -584,15 +583,7 @@ func TestComputeOperatorStatusVersions(t *testing.T) {
 			Type:   configv1.OperatorProgressing,
 		}
 
-		r := &reconciler{
-			Config: operatorconfig.Config{
-				OperatorReleaseVersion: tc.curVersions.operator,
-				CoreDNSImage:           tc.curVersions.operand,
-				OpenshiftCLIImage:      tc.curVersions.operand,
-				KubeRBACProxyImage:     tc.curVersions.operand,
-			},
-		}
-		versions := r.computeOperatorStatusVersions(&operatorProgressingCondition, oldVersions, newVersions)
+		versions := computeOperatorStatusVersions(&operatorProgressingCondition, oldVersions, newVersions)
 		versionsCmpOpts := []cmp.Option{
 			cmpopts.EquateEmpty(),
 			cmpopts.SortSlices(func(a, b configv1.OperandVersion) bool { return a.Name < b.Name }),
