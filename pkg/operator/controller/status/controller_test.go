@@ -1,14 +1,17 @@
 package status
 
 import (
-	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -21,10 +24,9 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 	testCases := []struct {
 		description       string
 		dnsMissing        bool
-		dnsAvailable      bool
 		dnsProgressing    bool
-		reportedVersions  versions
 		oldVersions       versions
+		newVersions       versions
 		curVersions       versions
 		expectProgressing configv1.ConditionStatus
 	}{
@@ -34,87 +36,64 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 			expectProgressing: configv1.ConditionTrue,
 		},
 		{
-			description:       "dns not available, not progressing",
-			expectProgressing: configv1.ConditionFalse,
-		},
-		{
-			description:       "dns not available but progressing",
-			dnsProgressing:    true,
-			expectProgressing: configv1.ConditionTrue,
-		},
-		{
-			description:       "dns available, not progressing",
-			dnsAvailable:      true,
-			expectProgressing: configv1.ConditionFalse,
-		},
-		{
-			description:       "dns available and progressing",
-			dnsAvailable:      true,
+			description:       "dns progressing",
 			dnsProgressing:    true,
 			expectProgressing: configv1.ConditionTrue,
 		},
 		{
 			description:       "versions match",
-			dnsAvailable:      true,
-			reportedVersions:  versions{"v1", "dns-v1"},
 			oldVersions:       versions{"v1", "dns-v1"},
+			newVersions:       versions{"v1", "dns-v1"},
 			curVersions:       versions{"v1", "dns-v1"},
 			expectProgressing: configv1.ConditionFalse,
 		},
 		{
 			description:       "operator upgrade in progress",
-			dnsAvailable:      true,
-			reportedVersions:  versions{"v1", "dns-v1"},
 			oldVersions:       versions{"v1", "dns-v1"},
-			curVersions:       versions{"v2", "dns-v1"},
+			newVersions:       versions{"v2", "dns-v1"},
+			curVersions:       versions{"v1", "dns-v1"},
 			expectProgressing: configv1.ConditionTrue,
 		},
 		{
 			description:       "operand upgrade in progress",
-			dnsAvailable:      true,
-			reportedVersions:  versions{"v1", "dns-v1"},
 			oldVersions:       versions{"v1", "dns-v1"},
-			curVersions:       versions{"v1", "dns-v2"},
+			newVersions:       versions{"v1", "dns-v2"},
+			curVersions:       versions{"v1", "dns-v1"},
 			expectProgressing: configv1.ConditionTrue,
 		},
 		{
 			description:       "operator and operand upgrade in progress",
-			dnsAvailable:      true,
-			reportedVersions:  versions{"v1", "dns-v1"},
 			oldVersions:       versions{"v1", "dns-v1"},
-			curVersions:       versions{"v2", "dns-v2"},
+			newVersions:       versions{"v2", "dns-v2"},
+			curVersions:       versions{"v1", "dns-v1"},
 			expectProgressing: configv1.ConditionTrue,
 		},
 		{
 			description:       "operator upgrade done",
-			dnsAvailable:      true,
-			reportedVersions:  versions{"v2", "dns-v1"},
 			oldVersions:       versions{"v1", "dns-v1"},
+			newVersions:       versions{"v2", "dns-v1"},
 			curVersions:       versions{"v2", "dns-v1"},
 			expectProgressing: configv1.ConditionFalse,
 		},
 		{
 			description:       "operand upgrade done",
-			dnsAvailable:      true,
-			reportedVersions:  versions{"v1", "dns-v2"},
 			oldVersions:       versions{"v1", "dns-v1"},
+			newVersions:       versions{"v1", "dns-v2"},
 			curVersions:       versions{"v1", "dns-v2"},
 			expectProgressing: configv1.ConditionFalse,
 		},
 		{
 			description:       "operator and operand upgrade done",
-			dnsAvailable:      true,
-			reportedVersions:  versions{"v2", "dns-v2"},
 			oldVersions:       versions{"v1", "dns-v1"},
+			newVersions:       versions{"v2", "dns-v2"},
 			curVersions:       versions{"v2", "dns-v2"},
 			expectProgressing: configv1.ConditionFalse,
 		},
 		{
 			description:       "operator upgrade in progress, operand upgrade done",
-			dnsAvailable:      true,
-			reportedVersions:  versions{"v2", "dns-v1"},
 			oldVersions:       versions{"v1", "dns-v1"},
-			curVersions:       versions{"v2", "dns-v2"},
+			newVersions:       versions{"v2", "dns-v2"},
+			curVersions:       versions{"v1", "dns-v2"},
 			expectProgressing: configv1.ConditionTrue,
 		},
 	}
@@ -126,10 +105,6 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 		)
 		if !tc.dnsMissing {
 			haveDNS = true
-			availableStatus := operatorv1.ConditionFalse
-			if tc.dnsAvailable {
-				availableStatus = operatorv1.ConditionTrue
-			}
 			progressingStatus := operatorv1.ConditionFalse
 			if tc.dnsProgressing {
 				progressingStatus = operatorv1.ConditionTrue
@@ -137,50 +112,29 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 			dns = &operatorv1.DNS{
 				Status: operatorv1.DNSStatus{
 					Conditions: []operatorv1.OperatorCondition{{
-						Type:   operatorv1.OperatorStatusTypeAvailable,
-						Status: availableStatus,
-					}, {
 						Type:   operatorv1.OperatorStatusTypeProgressing,
 						Status: progressingStatus,
 					}},
 				},
 			}
 		}
-		oldVersions := []configv1.OperandVersion{
-			{
-				Name:    OperatorVersionName,
-				Version: tc.oldVersions.operator,
-			},
-			{
-				Name:    CoreDNSVersionName,
-				Version: tc.oldVersions.operand,
-			},
-			{
-				Name:    OpenshiftCLIVersionName,
-				Version: tc.oldVersions.operand,
-			},
-			{
-				Name:    KubeRBACProxyName,
-				Version: tc.oldVersions.operand,
-			},
+		oldVersions := map[string]string{
+			OperatorVersionName:     tc.oldVersions.operator,
+			CoreDNSVersionName:      tc.oldVersions.operand,
+			OpenshiftCLIVersionName: tc.oldVersions.operand,
+			KubeRBACProxyName:       tc.oldVersions.operand,
 		}
-		reportedVersions := []configv1.OperandVersion{
-			{
-				Name:    OperatorVersionName,
-				Version: tc.reportedVersions.operator,
-			},
-			{
-				Name:    CoreDNSVersionName,
-				Version: tc.reportedVersions.operand,
-			},
-			{
-				Name:    OpenshiftCLIVersionName,
-				Version: tc.reportedVersions.operand,
-			},
-			{
-				Name:    KubeRBACProxyName,
-				Version: tc.reportedVersions.operand,
-			},
+		newVersions := map[string]string{
+			OperatorVersionName:     tc.newVersions.operator,
+			CoreDNSVersionName:      tc.newVersions.operand,
+			OpenshiftCLIVersionName: tc.newVersions.operand,
+			KubeRBACProxyName:       tc.newVersions.operand,
+		}
+		curVersions := map[string]string{
+			OperatorVersionName:     tc.curVersions.operator,
+			CoreDNSVersionName:      tc.curVersions.operand,
+			OpenshiftCLIVersionName: tc.curVersions.operand,
+			KubeRBACProxyName:       tc.curVersions.operand,
 		}
 
 		expected := configv1.ClusterOperatorStatusCondition{
@@ -188,8 +142,7 @@ func TestComputeOperatorProgressingCondition(t *testing.T) {
 			Status: tc.expectProgressing,
 		}
 
-		actual := computeOperatorProgressingCondition(haveDNS, dns, oldVersions, reportedVersions,
-			tc.curVersions.operator, tc.curVersions.operand, tc.curVersions.operand, tc.curVersions.operand)
+		actual := computeOperatorProgressingCondition(haveDNS, dns, oldVersions, newVersions, curVersions)
 		conditionsCmpOpts := []cmp.Option{
 			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
 		}
@@ -431,173 +384,249 @@ func TestOperatorStatusesEqual(t *testing.T) {
 	}
 }
 
-func TestComputeOperatorStatusVersions(t *testing.T) {
+// TestComputeCurrentVersions verifies that computeCurrentVersions returns the
+// expected values.
+func TestComputeCurrentVersions(t *testing.T) {
+	newPod := func(available bool, containers []corev1.Container) corev1.Pod {
+		readyStatus := corev1.ConditionFalse
+		if available {
+			readyStatus = corev1.ConditionTrue
+		}
+		anHourAgo := metav1.Time{Time: clock.Now().Add(-1 * time.Hour)}
+		return corev1.Pod{
+			Spec: corev1.PodSpec{
+				Containers: containers,
+			},
+			Status: corev1.PodStatus{
+				Conditions: []corev1.PodCondition{{
+					Type:               corev1.PodReady,
+					Status:             readyStatus,
+					LastTransitionTime: anHourAgo,
+				}},
+			},
+		}
+	}
+	dnsPod := func(available bool, version string) corev1.Pod {
+		containers := []corev1.Container{
+			{
+				Name:  "dns",
+				Image: version,
+			},
+			{
+				Name:  "kube-rbac-proxy",
+				Image: version,
+			},
+		}
+		return newPod(available, containers)
+	}
+	nodeResolverPod := func(available bool, version string) corev1.Pod {
+		containers := []corev1.Container{
+			{Name: "dns-node-resolver", Image: version},
+		}
+		return newPod(available, containers)
+	}
 	type versions struct {
-		operator string
-		operand  string
+		operator      string
+		coredns       string
+		kubeRBACProxy string
+		openshiftCLI  string
 	}
 
 	testCases := []struct {
 		description      string
 		oldVersions      versions
-		curVersions      versions
-		progressing      configv1.ConditionStatus
+		newVersions      versions
+		dnsPods          []corev1.Pod
+		nodeResolverPods []corev1.Pod
 		expectedVersions versions
 	}{
 		{
-			description:      "initialize versions, operator is not progressing",
-			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
-			curVersions:      versions{"v1", "dns-v1"},
-			progressing:      configv1.ConditionFalse,
-			expectedVersions: versions{"v1", "dns-v1"},
+			description: "initialize versions, operands at level",
+			oldVersions: versions{"unknown", "unknown", "unknown", "unknown"},
+			newVersions: versions{"v1", "v1", "v1", "v1"},
+			dnsPods: []corev1.Pod{
+				dnsPod(true, "v1"),
+				dnsPod(true, "v1"),
+				dnsPod(true, "v1"),
+			},
+			nodeResolverPods: []corev1.Pod{
+				nodeResolverPod(true, "v1"),
+				nodeResolverPod(true, "v1"),
+				nodeResolverPod(true, "v1"),
+			},
+			expectedVersions: versions{"v1", "v1", "v1", "v1"},
 		},
 		{
-			description:      "initialize versions, progressing status unknown",
-			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
-			curVersions:      versions{"v1", "dns-v1"},
-			progressing:      configv1.ConditionUnknown,
-			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue},
+			description: "starting upgrade",
+			oldVersions: versions{"v1", "v1", "v1", "v1"},
+			newVersions: versions{"v2", "v2", "v2", "v2"},
+			dnsPods: []corev1.Pod{
+				dnsPod(true, "v1"),
+				dnsPod(true, "v1"),
+				dnsPod(true, "v1"),
+			},
+			nodeResolverPods: []corev1.Pod{
+				nodeResolverPod(true, "v1"),
+				nodeResolverPod(true, "v1"),
+				nodeResolverPod(true, "v1"),
+			},
+			expectedVersions: versions{"v1", "v1", "v1", "v1"},
 		},
 		{
-			description:      "initialize versions, operator is progressing",
-			oldVersions:      versions{UnknownVersionValue, UnknownVersionValue},
-			curVersions:      versions{"v1", "dns-v1"},
-			progressing:      configv1.ConditionTrue,
-			expectedVersions: versions{UnknownVersionValue, UnknownVersionValue},
+			description: "partly upgraded",
+			oldVersions: versions{"v1", "v1", "v1", "v1"},
+			newVersions: versions{"v2", "v2", "v2", "v2"},
+			dnsPods: []corev1.Pod{
+				dnsPod(true, "v2"),
+				dnsPod(false, "v1"),
+				dnsPod(true, "v1"),
+				dnsPod(true, "v1"),
+			},
+			nodeResolverPods: []corev1.Pod{
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(false, "v1"),
+				nodeResolverPod(true, "v1"),
+				nodeResolverPod(true, "v1"),
+			},
+			expectedVersions: versions{"v1", "v1", "v1", "v1"},
 		},
 		{
-			description:      "update with no change",
-			oldVersions:      versions{"v1", "dns-v1"},
-			curVersions:      versions{"v1", "dns-v1"},
-			progressing:      configv1.ConditionFalse,
-			expectedVersions: versions{"v1", "dns-v1"},
+			description: "partly upgraded, extra pods",
+			oldVersions: versions{"v1", "v1", "v1", "v1"},
+			newVersions: versions{"v2", "v2", "v2", "v2"},
+			dnsPods: []corev1.Pod{
+				dnsPod(false, "v3"),
+				dnsPod(true, "v3"),
+				dnsPod(false, "v2"),
+				dnsPod(true, "v2"),
+				dnsPod(true, "v2"),
+				dnsPod(true, "v1"),
+				dnsPod(true, "v1"),
+				dnsPod(true, "v1"),
+			},
+			nodeResolverPods: []corev1.Pod{
+				nodeResolverPod(false, "v3"),
+				nodeResolverPod(true, "v3"),
+				nodeResolverPod(true, "v3"),
+				nodeResolverPod(false, "v2"),
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v1"),
+				nodeResolverPod(true, "v1"),
+				nodeResolverPod(true, "v1"),
+			},
+			expectedVersions: versions{"v1", "v1", "v1", "v1"},
 		},
 		{
-			description:      "update operator version, operator is progressing",
-			oldVersions:      versions{"v1", "dns-v1"},
-			curVersions:      versions{"v2", "dns-v1"},
-			progressing:      configv1.ConditionTrue,
-			expectedVersions: versions{"v1", "dns-v1"},
+			description: "dns upgraded, node-resolver upgrading",
+			oldVersions: versions{"v1", "v1", "v1", "v1"},
+			newVersions: versions{"v2", "v2", "v2", "v2"},
+			dnsPods: []corev1.Pod{
+				dnsPod(true, "v2"),
+				dnsPod(true, "v2"),
+				dnsPod(true, "v2"),
+			},
+			nodeResolverPods: []corev1.Pod{
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v1"),
+			},
+			expectedVersions: versions{"v1", "v2", "v2", "v1"},
 		},
 		{
-			description:      "update operator version, operator is not progressing",
-			oldVersions:      versions{"v1", "dns-v1"},
-			curVersions:      versions{"v2", "dns-v1"},
-			progressing:      configv1.ConditionFalse,
-			expectedVersions: versions{"v2", "dns-v1"},
+			description: "dns upgrading, node-resolver upgraded",
+			oldVersions: versions{"v1", "v1", "v1", "v1"},
+			newVersions: versions{"v2", "v2", "v2", "v2"},
+			dnsPods: []corev1.Pod{
+				dnsPod(true, "v1"),
+				dnsPod(true, "v1"),
+				dnsPod(true, "v2"),
+			},
+			nodeResolverPods: []corev1.Pod{
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v2"),
+			},
+			expectedVersions: versions{"v1", "v1", "v1", "v2"},
 		},
 		{
-			description:      "update operand image, operator is progressing",
-			oldVersions:      versions{"v1", "dns-v1"},
-			curVersions:      versions{"v1", "dns-v2"},
-			progressing:      configv1.ConditionTrue,
-			expectedVersions: versions{"v1", "dns-v1"},
+			description: "dns upgraded, node-resolver upgraded",
+			oldVersions: versions{"v1", "v1", "v1", "v1"},
+			newVersions: versions{"v2", "v2", "v2", "v2"},
+			dnsPods: []corev1.Pod{
+				dnsPod(true, "v2"),
+				dnsPod(true, "v2"),
+				dnsPod(true, "v2"),
+			},
+			nodeResolverPods: []corev1.Pod{
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v2"),
+			},
+			expectedVersions: versions{"v2", "v2", "v2", "v2"},
 		},
 		{
-			description:      "update operand image, operator is not progressing",
-			oldVersions:      versions{"v1", "dns-v1"},
-			curVersions:      versions{"v1", "dns-v2"},
-			progressing:      configv1.ConditionFalse,
-			expectedVersions: versions{"v1", "dns-v2"},
-		},
-		{
-			description: "update operator and operand image, operator is progressing",
-			oldVersions: versions{"v1", "dns-v1"},
-			curVersions: versions{"v2", "dns-v2"},
-			progressing: configv1.ConditionTrue,
-
-			expectedVersions: versions{"v1", "dns-v1"},
-		},
-		{
-			description:      "update operator and operand image, operator is not progressing",
-			oldVersions:      versions{"v1", "dns-v1"},
-			curVersions:      versions{"v2", "dns-v2"},
-			progressing:      configv1.ConditionFalse,
-			expectedVersions: versions{"v2", "dns-v2"},
+			description: "upgraded, extra pods",
+			oldVersions: versions{"v1", "v1", "v1", "v1"},
+			newVersions: versions{"v2", "v2", "v2", "v2"},
+			dnsPods: []corev1.Pod{
+				dnsPod(true, "v2"),
+				dnsPod(true, "v2"),
+				dnsPod(true, "v2"),
+				dnsPod(true, "v3"),
+			},
+			nodeResolverPods: []corev1.Pod{
+				nodeResolverPod(true, "v1"),
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v2"),
+				nodeResolverPod(true, "v2"),
+			},
+			expectedVersions: versions{"v2", "v2", "v2", "v2"},
 		},
 	}
 
 	for _, tc := range testCases {
-		var (
-			oldVersions      []configv1.OperandVersion
-			newVersions      []configv1.OperandVersion
-			expectedVersions []configv1.OperandVersion
-		)
-
-		oldVersions = []configv1.OperandVersion{
+		oldVersions := computeOldVersions([]configv1.OperandVersion{
 			{
 				Name:    OperatorVersionName,
 				Version: tc.oldVersions.operator,
 			},
 			{
 				Name:    CoreDNSVersionName,
-				Version: tc.oldVersions.operand,
+				Version: tc.oldVersions.coredns,
 			},
 			{
 				Name:    OpenshiftCLIVersionName,
-				Version: tc.oldVersions.operand,
+				Version: tc.oldVersions.openshiftCLI,
 			},
 			{
 				Name:    KubeRBACProxyName,
-				Version: tc.oldVersions.operand,
+				Version: tc.oldVersions.kubeRBACProxy,
+			},
+		})
+		newVersions := computeNewVersions(
+			tc.newVersions.operator,
+			tc.newVersions.coredns,
+			tc.newVersions.openshiftCLI,
+			tc.newVersions.kubeRBACProxy,
+		)
+		dnsDaemonSet := &appsv1.DaemonSet{
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: int32(3),
 			},
 		}
-		newVersions = []configv1.OperandVersion{
-			{
-				Name:    OperatorVersionName,
-				Version: tc.curVersions.operator,
-			},
-			{
-				Name:    CoreDNSVersionName,
-				Version: tc.curVersions.operand,
-			},
-			{
-				Name:    OpenshiftCLIVersionName,
-				Version: tc.curVersions.operand,
-			},
-			{
-				Name:    KubeRBACProxyName,
-				Version: tc.curVersions.operand,
+		nodeResolverDaemonSet := &appsv1.DaemonSet{
+			Status: appsv1.DaemonSetStatus{
+				DesiredNumberScheduled: int32(3),
 			},
 		}
-		expectedVersions = []configv1.OperandVersion{
-			{
-				Name:    OperatorVersionName,
-				Version: tc.expectedVersions.operator,
-			},
-			{
-				Name:    CoreDNSVersionName,
-				Version: tc.expectedVersions.operand,
-			},
-			{
-				Name:    OpenshiftCLIVersionName,
-				Version: tc.expectedVersions.operand,
-			},
-			{
-				Name:    KubeRBACProxyName,
-				Version: tc.expectedVersions.operand,
-			},
+		expectedVersions := map[string]string{
+			OperatorVersionName:     tc.expectedVersions.operator,
+			CoreDNSVersionName:      tc.expectedVersions.coredns,
+			OpenshiftCLIVersionName: tc.expectedVersions.openshiftCLI,
+			KubeRBACProxyName:       tc.expectedVersions.kubeRBACProxy,
 		}
-
-		operatorProgressingCondition := configv1.ClusterOperatorStatusCondition{
-			Status: tc.progressing,
-			Type:   configv1.OperatorProgressing,
-		}
-
-		r := &reconciler{
-			Config: operatorconfig.Config{
-				OperatorReleaseVersion: tc.curVersions.operator,
-				CoreDNSImage:           tc.curVersions.operand,
-				OpenshiftCLIImage:      tc.curVersions.operand,
-				KubeRBACProxyImage:     tc.curVersions.operand,
-			},
-		}
-		versions := r.computeOperatorStatusVersions(&operatorProgressingCondition, oldVersions, newVersions)
-		versionsCmpOpts := []cmp.Option{
-			cmpopts.EquateEmpty(),
-			cmpopts.SortSlices(func(a, b configv1.OperandVersion) bool { return a.Name < b.Name }),
-		}
-		if !cmp.Equal(versions, expectedVersions, versionsCmpOpts...) {
+		versions := computeCurrentVersions(oldVersions, newVersions, dnsDaemonSet, nodeResolverDaemonSet, tc.dnsPods, tc.nodeResolverPods)
+		if !cmp.Equal(versions, expectedVersions, cmpopts.EquateEmpty()) {
 			t.Errorf("%q: expected %v, got %v", tc.description, expectedVersions, versions)
 		}
 	}

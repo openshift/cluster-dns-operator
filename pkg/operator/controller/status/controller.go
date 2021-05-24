@@ -13,12 +13,16 @@ import (
 
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
+
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilclock "k8s.io/apimachinery/pkg/util/clock"
+
+	podutil "k8s.io/kubectl/pkg/util/podutils"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -115,45 +119,45 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 	co.Status.RelatedObjects = related
 
-	newVersions := []configv1.OperandVersion{
-		{
-			Name:    OperatorVersionName,
-			Version: r.OperatorReleaseVersion,
-		},
-		{
-			Name:    CoreDNSVersionName,
-			Version: r.CoreDNSImage,
-		},
-		{
-			Name:    OpenshiftCLIVersionName,
-			Version: r.OpenshiftCLIImage,
-		},
-		{
-			Name:    KubeRBACProxyName,
-			Version: r.KubeRBACProxyImage,
-		},
-	}
-
-	operatorProgressingCondition := computeOperatorProgressingCondition(
-		state.haveDNS,
-		&state.dns,
-		oldStatus.Versions,
-		newVersions,
+	// oldVersions is what's reported in status now.
+	oldVersions := computeOldVersions(co.Status.Versions)
+	// newVersions is the versions with which the operator is configured.
+	// If these differ from oldVersions, then these are the versions to
+	// which the operator is trying to upgrade.
+	newVersions := computeNewVersions(
 		r.OperatorReleaseVersion,
 		r.CoreDNSImage,
 		r.OpenshiftCLIImage,
 		r.KubeRBACProxyImage,
+	)
+	// curVersions is the versions that the operator can presently report
+	// as "current".  For operands, the current version is set to the new
+	// version once the desired number of pods are running the new version.
+	// For the operator itself, the current version is the last version of
+	// the operator that observed all its operands' current versions to be
+	// equal to their respective new versions.
+	curVersions := computeCurrentVersions(
+		oldVersions,
+		newVersions,
+		&state.dnsDaemonSet,
+		&state.nodeResolverDaemonSet,
+		state.dnsPodList.Items,
+		state.nodeResolverPodList.Items,
+	)
+
+	operatorProgressingCondition := computeOperatorProgressingCondition(
+		state.haveDNS,
+		&state.dns,
+		oldVersions,
+		newVersions,
+		curVersions,
 	)
 	co.Status.Conditions = mergeConditions(co.Status.Conditions,
 		computeOperatorAvailableCondition(state.haveDNS, &state.dns),
 		operatorProgressingCondition,
 		computeOperatorDegradedCondition(state.haveDNS, &state.dns),
 	)
-	co.Status.Versions = r.computeOperatorStatusVersions(
-		&operatorProgressingCondition,
-		oldStatus.Versions,
-		newVersions,
-	)
+	co.Status.Versions = computeOperatorStatusVersions(curVersions)
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(ctx, co); err != nil {
@@ -202,10 +206,34 @@ func initializeClusterOperator(co *configv1.ClusterOperator) {
 }
 
 type operatorState struct {
+	// haveNamespace indicates whether the operand namespace exists.
 	haveNamespace bool
-	namespace     corev1.Namespace
-	haveDNS       bool
-	dns           operatorv1.DNS
+
+	// namespace is the operand namespace.
+	namespace corev1.Namespace
+
+	// haveDNS indicates whether the "default" dnses.operator.openshift.io
+	// CR exists.
+	haveDNS bool
+
+	// dns is the "default" dnses.operator.openshift.io CR if it exists.
+	dns operatorv1.DNS
+
+	// dnsDaemonSet is the "dns-default" daemonset if it exists.  If the
+	// daemonset does not exist, dnsDaemonSet will have the zero value.
+	dnsDaemonSet appsv1.DaemonSet
+
+	// nodeResolverDaemonSet is the "node-resolver" daemonset if it exists.
+	// If the daemonset does not exist, nodeResolverDaemonSet will have the
+	// zero value.
+	nodeResolverDaemonSet appsv1.DaemonSet
+
+	// dnsPodList is the list of pods belonging to dnsDaemonSet.
+	dnsPodList corev1.PodList
+
+	// nodeResolverPodList is the list of pods belonging to
+	// nodeResolverDaemonSet.
+	nodeResolverPodList corev1.PodList
 }
 
 // getOperatorState gets and returns the resources necessary to compute the
@@ -236,19 +264,67 @@ func (r *reconciler) getOperatorState() (operatorState, error) {
 		state.dns = dnsList.Items[0]
 	}
 
+	nodeResolverDaemonSetName := operatorcontroller.NodeResolverDaemonSetName()
+	if err := r.cache.Get(context.TODO(), nodeResolverDaemonSetName, &state.nodeResolverDaemonSet); err != nil {
+		if !errors.IsNotFound(err) {
+			return state, fmt.Errorf("failed to get node-resolver daemonset: %w", err)
+		}
+	}
+
+	nodeResolverLabelSelector, err := metav1.LabelSelectorAsSelector(operatorcontroller.NodeResolverDaemonSetPodSelector())
+	if err != nil {
+		return state, err
+	}
+
+	nodeResolverPodsListOpts := []client.ListOption{
+		client.MatchingLabelsSelector{
+			Selector: nodeResolverLabelSelector,
+		},
+		client.InNamespace(operatorcontroller.DefaultOperandNamespace),
+	}
+	if err := r.cache.List(context.TODO(), &state.nodeResolverPodList, nodeResolverPodsListOpts...); err != nil {
+		return state, fmt.Errorf("failed to list node-resolver pods: %w", err)
+	}
+
+	// We cannot look up the daemonset and pods without the dns.
+	if !state.haveDNS {
+		return state, nil
+	}
+
+	dnsDaemonSetName := operatorcontroller.DNSDaemonSetName(&state.dns)
+	if err := r.cache.Get(context.TODO(), dnsDaemonSetName, &state.dnsDaemonSet); err != nil {
+		if !errors.IsNotFound(err) {
+			return state, fmt.Errorf("failed to get dns daemonset: %w", err)
+		}
+	}
+
+	dnsLabelSelector, err := metav1.LabelSelectorAsSelector(operatorcontroller.DNSDaemonSetPodSelector(&state.dns))
+	if err != nil {
+		return state, err
+	}
+
+	dnsPodsListOpts := []client.ListOption{
+		client.MatchingLabelsSelector{
+			Selector: dnsLabelSelector,
+		},
+		client.InNamespace(operatorcontroller.DefaultOperandNamespace),
+	}
+	if err := r.cache.List(context.TODO(), &state.dnsPodList, dnsPodsListOpts...); err != nil {
+		return state, fmt.Errorf("failed to list dns pods: %w", err)
+	}
+
 	return state, nil
 }
 
 // computeOperatorStatusVersions computes the operator's current versions.
-func (r *reconciler) computeOperatorStatusVersions(operatorProgressingCondition *configv1.ClusterOperatorStatusCondition, oldVersions, newVersions []configv1.OperandVersion) []configv1.OperandVersion {
-	// We need to report old version until the operator fully transitions to the new version.
-	// https://github.com/openshift/cluster-version-operator/blob/master/docs/dev/clusteroperator.md#version-reporting-during-an-upgrade
-	switch operatorProgressingCondition.Status {
-	case configv1.ConditionTrue, configv1.ConditionUnknown:
-		return oldVersions
+func computeOperatorStatusVersions(newVersions map[string]string) []configv1.OperandVersion {
+	versions := make([]configv1.OperandVersion, len(newVersions))
+	i := 0
+	for n, v := range newVersions {
+		versions[i] = configv1.OperandVersion{Name: n, Version: v}
+		i++
 	}
-
-	return newVersions
+	return versions
 }
 
 // checkDNSAvailable checks if the dns is available.
@@ -295,7 +371,7 @@ func computeOperatorDegradedCondition(haveDNS bool, dns *operatorv1.DNS) configv
 }
 
 // computeOperatorProgressingCondition computes the operator's current Progressing status state.
-func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldVersions, curVersions []configv1.OperandVersion, operatorReleaseVersion, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) configv1.ClusterOperatorStatusCondition {
+func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldVersions, newVersions, curVersions map[string]string) configv1.ClusterOperatorStatusCondition {
 	progressingCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorProgressing,
 	}
@@ -330,41 +406,19 @@ func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldV
 		}
 	}
 
-	oldVersionsMap := make(map[string]string)
-	for _, opv := range oldVersions {
-		oldVersionsMap[opv.Name] = opv.Version
+	upgrading := false
+	for name, curVersion := range curVersions {
+		if oldVersion, ok := oldVersions[name]; ok && oldVersion != curVersion {
+			messages = append(messages, fmt.Sprintf("Upgraded %s to %q.", name, curVersion))
+		}
+		if newVersion, ok := newVersions[name]; ok && curVersion != newVersion {
+			upgrading = true
+			messages = append(messages, fmt.Sprintf("Upgrading %s to %q.", name, newVersion))
+		}
 	}
-
-	for _, opv := range curVersions {
-		if oldVersion, ok := oldVersionsMap[opv.Name]; ok && oldVersion != opv.Version {
-			messages = append(messages, fmt.Sprintf("Upgraded %s to %q.", opv.Name, opv.Version))
-		}
-		switch opv.Name {
-		case OperatorVersionName:
-			if opv.Version != operatorReleaseVersion {
-				status = configv1.ConditionTrue
-				progressingReasons = append(progressingReasons, "UpgradingOperator")
-				messages = append(messages, fmt.Sprintf("Moving to release version %q.", operatorReleaseVersion))
-			}
-		case CoreDNSVersionName:
-			if opv.Version != coreDNSImage {
-				status = configv1.ConditionTrue
-				progressingReasons = append(progressingReasons, "UpgradingCoreDNS")
-				messages = append(messages, fmt.Sprintf("Moving to coredns image version %q.", coreDNSImage))
-			}
-		case OpenshiftCLIVersionName:
-			if opv.Version != openshiftCLIImage {
-				status = configv1.ConditionTrue
-				progressingReasons = append(progressingReasons, "UpgradingOpenShiftCLI")
-				messages = append(messages, fmt.Sprintf("Moving to openshift-cli image version %q.", openshiftCLIImage))
-			}
-		case KubeRBACProxyName:
-			if opv.Version != kubeRBACProxyImage {
-				status = configv1.ConditionTrue
-				progressingReasons = append(progressingReasons, "UpgradingKubeRBACProxy")
-				messages = append(messages, fmt.Sprintf("Moving to kube-rbac-proxy image version %q.", kubeRBACProxyImage))
-			}
-		}
+	if upgrading {
+		status = configv1.ConditionTrue
+		progressingReasons = append(progressingReasons, "Upgrading")
 	}
 
 	if len(progressingReasons) != 0 {
@@ -378,6 +432,96 @@ func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldV
 	}
 
 	return progressingCondition
+}
+
+// computeOldVersions returns a map of operand name to version computed from the
+// given clusteroperator status.
+func computeOldVersions(oldVersions []configv1.OperandVersion) map[string]string {
+	result := make(map[string]string, 4)
+	for _, v := range oldVersions {
+		result[v.Name] = v.Version
+	}
+	return result
+}
+
+// computeNewVersions returns a map of operand name to version computed from the
+// given reconciler versions.
+func computeNewVersions(operatorReleaseVersion, coreDNSImage, openshiftCLIImage, kubeRBACProxyImage string) map[string]string {
+	return map[string]string{
+		OperatorVersionName:     operatorReleaseVersion,
+		CoreDNSVersionName:      coreDNSImage,
+		OpenshiftCLIVersionName: openshiftCLIImage,
+		KubeRBACProxyName:       kubeRBACProxyImage,
+	}
+}
+
+// computeCurrentVersions returns a map of operand name to version computed from
+// the operand pods and oldVersions and newVersions maps.
+func computeCurrentVersions(oldVersions, newVersions map[string]string, dnsDaemonSet, nodeResolverDaemonSet *appsv1.DaemonSet, dnsPods, nodeResolverPods []corev1.Pod) map[string]string {
+	var (
+		operatorVersion      = oldVersions[OperatorVersionName]
+		coreDNSVersion       = oldVersions[CoreDNSVersionName]
+		openshiftCLIVersion  = oldVersions[OpenshiftCLIVersionName]
+		kubeRBACProxyVersion = oldVersions[KubeRBACProxyName]
+	)
+
+	// Compute the number of instances of each operand that are at the new
+	// version.
+	available := map[string]int{}
+	versionNameForContainerName := map[string]string{
+		"dns":               CoreDNSVersionName,
+		"kube-rbac-proxy":   KubeRBACProxyName,
+		"dns-node-resolver": OpenshiftCLIVersionName,
+	}
+	updateAvailableFromPod := func(pod *corev1.Pod) {
+		for _, container := range pod.Spec.Containers {
+			versionName, ok := versionNameForContainerName[container.Name]
+			if !ok {
+				continue
+			}
+			if container.Image == newVersions[versionName] {
+				available[versionName]++
+			}
+		}
+	}
+	now := metav1.Time{Time: clock.Now()}
+	for _, pod := range dnsPods {
+		if !podutil.IsPodAvailable(&pod, dnsDaemonSet.Spec.MinReadySeconds, now) {
+			continue
+		}
+		updateAvailableFromPod(&pod)
+	}
+	for _, pod := range nodeResolverPods {
+		if !podutil.IsPodAvailable(&pod, nodeResolverDaemonSet.Spec.MinReadySeconds, now) {
+			continue
+		}
+		updateAvailableFromPod(&pod)
+	}
+	// If the desired number of pods are at the new version, bump the
+	// reported version.  Otherwise, keep the old version.
+	desiredDNS := int(dnsDaemonSet.Status.DesiredNumberScheduled)
+	coreDNSLevel := available[CoreDNSVersionName] >= desiredDNS
+	kubeRBACProxyLevel := available[KubeRBACProxyName] >= desiredDNS
+	if coreDNSLevel && kubeRBACProxyLevel {
+		coreDNSVersion = newVersions[CoreDNSVersionName]
+		kubeRBACProxyVersion = newVersions[KubeRBACProxyName]
+	}
+	desiredNR := int(nodeResolverDaemonSet.Status.DesiredNumberScheduled)
+	openshiftCLILevel := available[OpenshiftCLIVersionName] >= desiredNR
+	if openshiftCLILevel {
+		openshiftCLIVersion = newVersions[OpenshiftCLIVersionName]
+	}
+	// Bump the reported operator version if operands are all bumped.
+	if coreDNSLevel && kubeRBACProxyLevel && openshiftCLILevel {
+		operatorVersion = newVersions[OperatorVersionName]
+	}
+
+	return map[string]string{
+		OperatorVersionName:     operatorVersion,
+		CoreDNSVersionName:      coreDNSVersion,
+		OpenshiftCLIVersionName: openshiftCLIVersion,
+		KubeRBACProxyName:       kubeRBACProxyVersion,
+	}
 }
 
 // computeOperatorAvailableCondition computes the operator's current Available status state.
