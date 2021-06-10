@@ -8,12 +8,12 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/kevinburke/go-bindata v3.11.0+incompatible
-	github.com/openshift/api v0.0.0-20210416094334-c22782737ea0
-	github.com/openshift/build-machinery-go v0.0.0-20210409131504-b1828cc0cdad
+	github.com/openshift/api v0.0.0-20210601190906-e782d76c7bc4
+	github.com/openshift/build-machinery-go v0.0.0-20210423112049-9415d7ebd33e
 	github.com/sirupsen/logrus v1.6.0
 	golang.org/x/net v0.0.0-20210510120150-4163338589ed // indirect
-	k8s.io/api v0.21.0
-	k8s.io/apimachinery v0.21.0
+	k8s.io/api v0.21.1
+	k8s.io/apimachinery v0.21.1
 	k8s.io/client-go v0.21.0
 	k8s.io/kubectl v0.21.0
 	k8s.io/utils v0.0.0-20210305010621-2afb4311ab10 // indirect
