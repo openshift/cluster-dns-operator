@@ -19,6 +19,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilclock "k8s.io/apimachinery/pkg/util/clock"
 
@@ -29,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -61,7 +63,9 @@ type reconciler struct {
 // the logic for creating the ClusterOperator operator and updating its status.
 //
 // The controller watches DNS resources in the manager namespace and uses them
-// to compute the operator status.
+// to compute the operator status.  It also watches the clusteroperators
+// resource so that it reconciles the dns clusteroperator in case something else
+// updates or deletes it.
 func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controller, error) {
 	reconciler := &reconciler{
 		Config: config,
@@ -73,6 +77,25 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 		return nil, err
 	}
 	if err := c.Watch(&source.Kind{Type: &operatorv1.DNS{}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return nil, err
+	}
+	isDNSClusterOperator := func(meta metav1.Object, object runtime.Object) bool {
+		return meta.GetName() == operatorcontroller.DefaultOperatorName
+	}
+	clusteroperatorToDNS := func(a handler.MapObject) []reconcile.Request {
+		return []reconcile.Request{{
+			NamespacedName: types.NamespacedName{
+				Name: operatorcontroller.DefaultDNSName,
+			},
+		}}
+	}
+	if err := c.Watch(
+		&source.Kind{Type: &configv1.ClusterOperator{}},
+		&handler.EnqueueRequestsFromMapFunc{
+			ToRequests: handler.ToRequestsFunc(clusteroperatorToDNS),
+		},
+		predicate.NewPredicateFuncs(isDNSClusterOperator),
+	); err != nil {
 		return nil, err
 	}
 	return c, nil
