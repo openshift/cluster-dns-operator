@@ -75,6 +75,9 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 	if err := c.Watch(&source.Kind{Type: &operatorv1.DNS{}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return nil, err
 	}
+	if err := c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
