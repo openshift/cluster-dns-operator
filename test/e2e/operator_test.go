@@ -240,6 +240,33 @@ func TestCoreDNSDaemonSetReconciliation(t *testing.T) {
 	}
 }
 
+// TestOperatorRecreatesItsClusterOperator verifies that the DNS operator
+// recreates the "dns" clusteroperator if the clusteroperator is deleted.
+func TestOperatorRecreatesItsClusterOperator(t *testing.T) {
+	cl, err := getClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	co := &configv1.ClusterOperator{}
+	if err := cl.Get(context.TODO(), opName, co); err != nil {
+		t.Fatalf("failed to get clusteroperator %q: %v", opName.Name, err)
+	}
+	if err := cl.Delete(context.TODO(), co); err != nil {
+		t.Fatalf("failed to delete clusteroperator %q: %v", opName.Name, err)
+	}
+	err = wait.PollImmediate(1*time.Second, 30*time.Second, func() (bool, error) {
+		if err := cl.Get(context.TODO(), opName, co); err != nil {
+			t.Logf("failed to get clusteroperator %q: %v", opName.Name, err)
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("failed to observe recreation of clusteroperator %q: %v", opName.Name, err)
+	}
+}
+
 func TestDNSForwarding(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
