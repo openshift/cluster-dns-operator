@@ -37,8 +37,8 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 // computeDNSStatusConditions computes dns status conditions based on
 // the status of ds and clusterIP.
 func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet) []operatorv1.OperatorCondition {
-	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition *operatorv1.OperatorCondition
 	oldConditions := dns.Status.Conditions
+	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition, oldUpgradeableCondition *operatorv1.OperatorCondition
 	for i := range oldConditions {
 		switch oldConditions[i].Type {
 		case operatorv1.OperatorStatusTypeDegraded:
@@ -47,6 +47,8 @@ func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDa
 			oldProgressingCondition = &oldConditions[i]
 		case operatorv1.OperatorStatusTypeAvailable:
 			oldAvailableCondition = &oldConditions[i]
+		case operatorv1.OperatorStatusTypeUpgradeable:
+			oldUpgradeableCondition = &oldConditions[i]
 		}
 	}
 
@@ -54,6 +56,7 @@ func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDa
 		computeDNSDegradedCondition(oldDegradedCondition, clusterIP, haveDNSDaemonset, dnsDaemonset),
 		computeDNSProgressingCondition(oldProgressingCondition, dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset),
 		computeDNSAvailableCondition(oldAvailableCondition, clusterIP, haveDNSDaemonset, dnsDaemonset),
+		computeDNSUpgradeableCondition(oldUpgradeableCondition, dns),
 	}
 
 	return conditions
@@ -202,6 +205,24 @@ func computeDNSAvailableCondition(oldCondition *operatorv1.OperatorCondition, cl
 	}
 
 	return setDNSLastTransitionTime(availableCondition, oldCondition)
+}
+
+func computeDNSUpgradeableCondition(oldCondition *operatorv1.OperatorCondition, dns *operatorv1.DNS) operatorv1.OperatorCondition {
+	upgradeableCondition := &operatorv1.OperatorCondition{
+		Type: operatorv1.OperatorStatusTypeUpgradeable,
+	}
+
+	if dns.Spec.ManagementState == operatorv1.Unmanaged {
+		upgradeableCondition.Status = operatorv1.ConditionFalse
+		upgradeableCondition.Reason = "OperatorUnmanaged"
+		upgradeableCondition.Message = "Cannot upgrade while managementState is Unmanaged"
+	} else {
+		upgradeableCondition.Status = operatorv1.ConditionTrue
+		upgradeableCondition.Reason = "AsExpected"
+		upgradeableCondition.Message = "DNS Operator can be upgraded"
+	}
+
+	return setDNSLastTransitionTime(upgradeableCondition, oldCondition)
 }
 
 // setDNSLastTransitionTime sets LastTransitionTime for the given condition.

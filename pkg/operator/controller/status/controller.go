@@ -185,6 +185,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		computeOperatorDegradedCondition(state.haveDNS, &state.dns),
 	)
 	co.Status.Versions = computeOperatorStatusVersions(curVersions)
+	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorUpgradeableCondition(&state.dns))
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(ctx, co); err != nil {
@@ -363,6 +364,41 @@ func checkDNSAvailable(dns *operatorv1.DNS) bool {
 	}
 
 	return false
+}
+
+// computeOperatorUpgradeableCondition computes the operator's current
+// Upgradeable status state by examining the Upgradeable status of the DNS
+// operator
+func computeOperatorUpgradeableCondition(dns *operatorv1.DNS) configv1.ClusterOperatorStatusCondition {
+	upgradeable := true
+	message := ""
+	for _, cond := range dns.Status.Conditions {
+		if cond.Type == operatorv1.OperatorStatusTypeUpgradeable {
+			upgradeable = cond.Status == operatorv1.ConditionTrue
+			message = cond.Message
+		}
+	}
+	currentUpgradeableCondition := configv1.ClusterOperatorStatusCondition{
+		Type: configv1.OperatorUpgradeable,
+	}
+	if !upgradeable {
+		currentUpgradeableCondition.Status = configv1.ConditionFalse
+		currentUpgradeableCondition.Reason = "DNSNotUpgradeable"
+		if len(message) > 0 {
+			currentUpgradeableCondition.Message = fmt.Sprintf("DNS %s is not upgradeable: %s", dns.Name, message)
+		} else {
+			currentUpgradeableCondition.Message = fmt.Sprintf("DNS %s is not upgradeable", dns.Name)
+		}
+	} else {
+		currentUpgradeableCondition.Status = configv1.ConditionTrue
+		currentUpgradeableCondition.Reason = "DNSUpgradeable"
+		if len(message) > 0 {
+			currentUpgradeableCondition.Message = fmt.Sprintf("DNS %s is upgradeable: %s", dns.Name, message)
+		} else {
+			currentUpgradeableCondition.Message = fmt.Sprintf("DNS %s is upgradeable", dns.Name)
+		}
+	}
+	return currentUpgradeableCondition
 }
 
 // computeOperatorDegradedCondition computes the operator's current Degraded status state.
