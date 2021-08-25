@@ -89,4 +89,4 @@ spec:
       maxSurge: 0
       # Note: The daemon controller rounds the percentage up
       # (unlike the deployment controller, which rounds down).
-      maxUnavailable: 10%
+      maxUnavailable: 33%

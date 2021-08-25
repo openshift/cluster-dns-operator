@@ -7,6 +7,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
+	retry "github.com/openshift/cluster-ingress-operator/pkg/util/retryableerror"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
@@ -111,38 +112,76 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if dns != nil {
-		// Ensure we have all the necessary scaffolding on which to place dns instances.
-		if err := r.ensureDNSNamespace(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to ensure dns namespace: %v", err))
-		}
-
-		if dns.DeletionTimestamp != nil {
-			// Handle deletion.
-			if err := r.ensureOpenshiftExternalNameServiceDeleted(); err != nil {
-				errs = append(errs, fmt.Errorf("failed to delete external name for openshift service: %v", err))
+		switch dns.Spec.ManagementState {
+		case operatorv1.Unmanaged:
+			// When the operator is set to unmanaged, it should not make
+			// changes to the DNS or node resolver pods, but it should still
+			// update status
+			//
+			// TODO: fetch clusterDomain from higher level openshift resource
+			// when it is exposed
+			clusterDomain := "cluster.local"
+			clusterIP, err := r.getClusterIPFromNetworkConfig()
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to get cluster IP from network config: %v", err))
 			}
-			if err := r.ensureDNSDeleted(dns); err != nil {
-				errs = append(errs, fmt.Errorf("failed to ensure deletion for dns %s: %v", dns.Name, err))
+			haveDNSDaemonset, dnsDaemonset, err := r.currentDNSDaemonSet(dns)
+			if err != nil {
+				errs = append(errs, err)
 			}
-
-			if len(errs) == 0 {
-				// Clean up the finalizer to allow the dns to be deleted.
-				if slice.ContainsString(dns.Finalizers, DNSControllerFinalizer) {
-					updated := dns.DeepCopy()
-					updated.Finalizers = slice.RemoveString(updated.Finalizers, DNSControllerFinalizer)
-					if err := r.client.Update(ctx, updated); err != nil {
-						errs = append(errs, fmt.Errorf("failed to remove finalizer from dns %s: %v", dns.Name, err))
-					}
+			haveNodeResolverDaemonset, nodeResolverDaemonset, err := r.currentNodeResolverDaemonSet()
+			if err != nil {
+				errs = append(errs, err)
+			}
+			if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset); err != nil {
+				switch e := err.(type) {
+				case retry.Error:
+					// Got retryable error, requeue
+					return reconcile.Result{RequeueAfter: e.After()}, nil
+				default:
+					errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 				}
 			}
-		} else if err := r.enforceDNSFinalizer(dns); err != nil {
-			errs = append(errs, fmt.Errorf("failed to enforce finalizer for dns %s: %v", dns.Name, err))
-		} else {
-			// Handle everything else.
-			if err := r.ensureDNS(dns); err != nil {
-				errs = append(errs, fmt.Errorf("failed to ensure dns %s: %v", dns.Name, err))
-			} else if err := r.ensureExternalNameForOpenshiftService(); err != nil {
-				errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
+		default:
+			// Ensure we have all the necessary scaffolding on which to place dns instances.
+			if err := r.ensureDNSNamespace(); err != nil {
+				errs = append(errs, fmt.Errorf("failed to ensure dns namespace: %v", err))
+			}
+
+			if dns.DeletionTimestamp != nil {
+				// Handle deletion.
+				if err := r.ensureOpenshiftExternalNameServiceDeleted(); err != nil {
+					errs = append(errs, fmt.Errorf("failed to delete external name for openshift service: %v", err))
+				}
+				if err := r.ensureDNSDeleted(dns); err != nil {
+					errs = append(errs, fmt.Errorf("failed to ensure deletion for dns %s: %v", dns.Name, err))
+				}
+
+				if len(errs) == 0 {
+					// Clean up the finalizer to allow the dns to be deleted.
+					if slice.ContainsString(dns.Finalizers, DNSControllerFinalizer) {
+						updated := dns.DeepCopy()
+						updated.Finalizers = slice.RemoveString(updated.Finalizers, DNSControllerFinalizer)
+						if err := r.client.Update(ctx, updated); err != nil {
+							errs = append(errs, fmt.Errorf("failed to remove finalizer from dns %s: %v", dns.Name, err))
+						}
+					}
+				}
+			} else if err := r.enforceDNSFinalizer(dns); err != nil {
+				errs = append(errs, fmt.Errorf("failed to enforce finalizer for dns %s: %v", dns.Name, err))
+			} else {
+				// Handle everything else.
+				if err := r.ensureDNS(dns); err != nil {
+					switch e := err.(type) {
+					case retry.Error:
+						// Got retryable error, requeue
+						return reconcile.Result{RequeueAfter: e.After()}, nil
+					default:
+						errs = append(errs, fmt.Errorf("failed to ensure dns %s: %v", dns.Name, err))
+					}
+				} else if err := r.ensureExternalNameForOpenshiftService(); err != nil {
+					errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
+				}
 			}
 		}
 	}

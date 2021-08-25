@@ -79,7 +79,7 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 	hostPathFile := corev1.HostPathFile
 	// TODO: Consider setting maxSurge to a positive value.
 	maxSurge := intstr.FromInt(0)
-	maxUnavailable := intstr.FromString("10%")
+	maxUnavailable := intstr.FromString("33%")
 	envs := []corev1.EnvVar{{
 		Name:  "SERVICES",
 		Value: services,
