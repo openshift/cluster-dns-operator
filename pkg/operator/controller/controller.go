@@ -10,19 +10,18 @@ import (
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
+	retry "github.com/openshift/cluster-dns-operator/pkg/util/retryableerror"
 	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
 
+	"github.com/apparentlymart/go-cidr/cidr"
 	"github.com/sirupsen/logrus"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/apparentlymart/go-cidr/cidr"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -173,11 +172,20 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
-	// Log in case of errors as the controller's logs get eaten.
-	if len(errs) > 0 {
-		logrus.Errorf("failed to reconcile request %s: %v", request, utilerrors.NewAggregate(errs))
+	if err := retry.NewMaybeRetryableAggregate(errs); err != nil {
+		switch e := err.(type) {
+		case retry.Error:
+			// Got retryable error; requeue
+			logrus.Infof("got retryable error; requeueing after %s", e.After().String())
+			return reconcile.Result{RequeueAfter: e.After()}, nil
+		default:
+			// Log in case of errors as the controller's logs get eaten.
+			logrus.Errorf("failed to reconcile request %s: %v", request, err)
+			return result, err
+		}
 	}
-	return result, utilerrors.NewAggregate(errs)
+
+	return result, nil
 }
 
 // ensureExternalNameForOpenshiftService ensures 'openshift.default.svc'
@@ -415,7 +423,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return retry.NewMaybeRetryableAggregate(errs)
 }
 
 // getClusterIPFromNetworkConfig will return 10th IP from the service CIDR range

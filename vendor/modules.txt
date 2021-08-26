@@ -74,9 +74,6 @@ github.com/openshift/build-machinery-go/make/targets/golang
 github.com/openshift/build-machinery-go/make/targets/openshift
 github.com/openshift/build-machinery-go/make/targets/openshift/operator
 github.com/openshift/build-machinery-go/scripts
-# github.com/openshift/cluster-ingress-operator v0.0.0-20210824175145-977aa63c247d
-## explicit
-github.com/openshift/cluster-ingress-operator/pkg/util/retryableerror
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
