@@ -7,8 +7,9 @@ require (
 	github.com/google/go-cmp v0.5.5
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/kevinburke/go-bindata v3.11.0+incompatible
-	github.com/openshift/api v0.0.0-20210719174558-55d730c80aa9
+	github.com/openshift/api v0.0.0-20210722202039-91e26cfb36fc
 	github.com/openshift/build-machinery-go v0.0.0-20210712174854-1bb7fd1518d3
+	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0
 	golang.org/x/net v0.0.0-20210510120150-4163338589ed // indirect
 	k8s.io/api v0.21.1

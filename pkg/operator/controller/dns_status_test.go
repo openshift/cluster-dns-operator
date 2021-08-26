@@ -3,13 +3,17 @@ package controller
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	retry "github.com/openshift/cluster-dns-operator/pkg/util/retryableerror"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilclock "k8s.io/apimachinery/pkg/util/clock"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestDNSStatusConditions(t *testing.T) {
@@ -152,7 +156,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: upgradeable,
 			},
 		}
-		actual := computeDNSStatusConditions(&dns, clusterIP, tc.inputs.haveDNS, dnsDaemonset, tc.inputs.haveNR, nodeResolverDaemonset)
+		actual, _ := computeDNSStatusConditions(&dns, clusterIP, tc.inputs.haveDNS, dnsDaemonset, tc.inputs.haveNR, nodeResolverDaemonset)
 		gotExpected := true
 		if len(actual) != len(expected) {
 			gotExpected = false
@@ -197,6 +201,13 @@ func TestDNSStatusConditions(t *testing.T) {
 // TestComputeDNSDegradedCondition verifies the computeDNSDegradedCondition has
 // the expected behavior.
 func TestComputeDNSDegradedCondition(t *testing.T) {
+	// Inject a fake clock and don't forget to reset it
+	fakeClock := utilclock.NewFakeClock(time.Time{})
+	clock = fakeClock
+	defer func() {
+		clock = utilclock.RealClock{}
+	}()
+
 	makeDaemonSet := func(desired, available int, maxUnavailable intstr.IntOrString) *appsv1.DaemonSet {
 		return &appsv1.DaemonSet{
 			Spec: appsv1.DaemonSetSpec{
@@ -212,140 +223,191 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			},
 		}
 	}
+
+	defaultOldCondition := &operatorv1.OperatorCondition{
+		Type:   operatorv1.OperatorStatusTypeDegraded,
+		Status: operatorv1.ConditionUnknown,
+	}
+
 	testCases := []struct {
-		name         string
-		clusterIP    string
-		dnsDaemonset *appsv1.DaemonSet
-		nrDaemonset  *appsv1.DaemonSet
-		expected     operatorv1.ConditionStatus
+		name          string
+		clusterIP     string
+		dnsDaemonset  *appsv1.DaemonSet
+		oldCondition  *operatorv1.OperatorCondition
+		expected      operatorv1.ConditionStatus
+		expectRequeue bool
+		// A degraded condition will give a retry duration
+		// based on its grace period
+		expectAfter time.Duration
 	}{
 		{
-			name:         "0 available, DNS invalid MaxUnavailable",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("TEST")),
-			nrDaemonset:  makeDaemonSet(6, 0, intstr.FromString("33%")),
-			expected:     operatorv1.ConditionTrue,
-		},
-		{
-			name:         "node-resolver invalid MaxUnavailable is ok",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(10, 9, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 0, intstr.FromString("TEST")),
-			expected:     operatorv1.ConditionFalse,
+			name:          "0 available, DNS invalid MaxUnavailable",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(6, 0, intstr.FromString("TEST")),
+			oldCondition:  defaultOldCondition,
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
 		},
 		{
 			name:         "DNS invalid MaxUnavailable (string with digits without a percent sign)",
 			clusterIP:    "172.30.0.10",
 			dnsDaemonset: makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%")),
+			oldCondition: defaultOldCondition,
 			expected:     operatorv1.ConditionUnknown,
-		},
-		{
-			name:         "node-resolver invalid MaxUnavailable (string with digits without a percent sign) is ok",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "33"}),
-			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "DNS invalid MaxUnavailable (string with letters)",
 			clusterIP:    "172.30.0.10",
 			dnsDaemonset: makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "TEST"}),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%")),
+			oldCondition: defaultOldCondition,
 			expected:     operatorv1.ConditionUnknown,
 		},
 		{
-			name:         "node-resolver invalid MaxUnavailable (string with letters) is ok",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "TEST"}),
-			expected:     operatorv1.ConditionFalse,
-		},
-		{
-			name:         "no clusterIP, 0 available",
-			clusterIP:    "",
-			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 0, intstr.FromString("33%")),
-			expected:     operatorv1.ConditionTrue,
+			name:          "no clusterIP, 0 available",
+			clusterIP:     "",
+			dnsDaemonset:  makeDaemonSet(6, 0, intstr.FromString("10%")),
+			oldCondition:  defaultOldCondition,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
+			expected:      operatorv1.ConditionTrue,
 		},
 		{
 			name:         "no clusterIP",
 			clusterIP:    "",
+			oldCondition: defaultOldCondition,
 			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%")),
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "0 desired",
 			clusterIP:    "172.30.0.10",
 			dnsDaemonset: makeDaemonSet(0, 0, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(0, 0, intstr.FromString("33%")),
+			oldCondition: defaultOldCondition,
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
-			name:         "0 available",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 0, intstr.FromString("33%")),
-			expected:     operatorv1.ConditionTrue,
+			name:          "0 available",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(6, 0, intstr.FromString("10%")),
+			oldCondition:  defaultOldCondition,
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
 		},
 		{
-			name:         "too few pods DNS pods available (percentage)",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(100, 89, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(100, 100, intstr.FromString("33%")),
-			expected:     operatorv1.ConditionTrue,
+			name:          "too few pods DNS pods available (percentage)",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(100, 89, intstr.FromString("10%")),
+			oldCondition:  defaultOldCondition,
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
 		},
 		{
-			name:         "node-resolver pods unavailable is ok (percentage)",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(100, 100, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(100, 65, intstr.FromString("33%")),
-			expected:     operatorv1.ConditionFalse,
-		},
-		{
-			name:         "too few DNS pods available (integer)",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 4, intstr.FromInt(1)),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromInt(1)),
-			expected:     operatorv1.ConditionTrue,
-		},
-		{
-			name:         "node-resolver pods unavailable is ok (integer)",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromInt(1)),
-			nrDaemonset:  makeDaemonSet(6, 4, intstr.FromInt(1)),
-			expected:     operatorv1.ConditionFalse,
+			name:          "too few DNS pods available (integer)",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(6, 4, intstr.FromInt(1)),
+			oldCondition:  defaultOldCondition,
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
 		},
 		{
 			name:         "enough available (percentage)",
 			clusterIP:    "172.30.0.10",
 			dnsDaemonset: makeDaemonSet(100, 90, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(100, 67, intstr.FromString("33%")),
+			oldCondition: defaultOldCondition,
 			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "enough available (integer)",
 			clusterIP:    "172.30.0.10",
 			dnsDaemonset: makeDaemonSet(6, 5, intstr.FromInt(1)),
-			nrDaemonset:  makeDaemonSet(6, 5, intstr.FromInt(1)),
+			oldCondition: defaultOldCondition,
 			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "all available",
 			clusterIP:    "172.30.0.10",
 			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%")),
+			oldCondition: defaultOldCondition,
 			expected:     operatorv1.ConditionFalse,
+		},
+		{
+			name:          "no DNS pods available, check requeue",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(6, 0, intstr.FromString("10%")),
+			oldCondition:  defaultOldCondition,
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
+		},
+		{
+			name:          "not enough DNS pods available, check requeue",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(10, 8, intstr.FromString("10%")),
+			oldCondition:  defaultOldCondition,
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
+		},
+		{
+			name:          "no DNS pods available for <5m",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(6, 0, intstr.FromString("10%")),
+			oldCondition:  cond(DNSControllerDegradedConditionType, operatorv1.ConditionTrue, "", clock.Now().Add(time.Minute*-4)),
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 1,
+			expectRequeue: true,
+		},
+		{
+			name:          "not enough DNS pods available for <5m",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(10, 8, intstr.FromString("10%")),
+			oldCondition:  cond(DNSControllerDegradedConditionType, operatorv1.ConditionTrue, "", clock.Now().Add(time.Minute*-4)),
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 1,
+			expectRequeue: true,
+		},
+		{
+			name:          "no DNS pods available for >5m",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(6, 0, intstr.FromString("10%")),
+			oldCondition:  cond(DNSControllerDegradedConditionType, operatorv1.ConditionTrue, "", clock.Now().Add(time.Minute*-6)),
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
+		},
+		{
+			name:          "not enough DNS pods available for >5m",
+			clusterIP:     "172.30.0.10",
+			dnsDaemonset:  makeDaemonSet(10, 8, intstr.FromString("10%")),
+			oldCondition:  cond(DNSControllerDegradedConditionType, operatorv1.ConditionTrue, "", clock.Now().Add(time.Minute*-6)),
+			expected:      operatorv1.ConditionTrue,
+			expectAfter:   time.Minute * 5,
+			expectRequeue: true,
 		},
 	}
 
 	for _, tc := range testCases {
-		oldCondition := &operatorv1.OperatorCondition{
-			Type:   operatorv1.OperatorStatusTypeDegraded,
-			Status: operatorv1.ConditionUnknown,
+		actual, retryErr := computeDNSDegradedCondition(tc.oldCondition, tc.clusterIP, true, tc.dnsDaemonset)
+		switch e := retryErr.(type) {
+		case retry.Error:
+			if !tc.expectRequeue {
+				t.Errorf("%q: expected not to be told to requeue", tc.name)
+			}
+			if tc.expectAfter.Seconds() != e.After().Seconds() {
+				t.Errorf("%q: expected requeue after %s, got %s", tc.name, tc.expectAfter.String(), e.After().String())
+			}
+		case nil:
+			if tc.expectRequeue {
+				t.Errorf("%q: expected to be told to requeue", tc.name)
+			}
+		default:
+			t.Errorf("%q: unexpected error: %v", tc.name, retryErr)
+			continue
 		}
-		actual := computeDNSDegradedCondition(oldCondition, tc.clusterIP, true, tc.dnsDaemonset)
 		if actual.Status != tc.expected {
 			t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
 		}
@@ -685,5 +747,14 @@ func TestDNSStatusesEqual(t *testing.T) {
 		if actual := dnsStatusesEqual(tc.a, tc.b); actual != tc.expected {
 			t.Fatalf("%q: expected %v, got %v", tc.description, tc.expected, actual)
 		}
+	}
+}
+
+func cond(t string, status operatorv1.ConditionStatus, reason string, lt time.Time) *operatorv1.OperatorCondition {
+	return &operatorv1.OperatorCondition{
+		Type:               t,
+		Status:             status,
+		Reason:             reason,
+		LastTransitionTime: metav1.NewTime(lt),
 	}
 }
