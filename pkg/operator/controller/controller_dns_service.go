@@ -107,6 +107,7 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 		),
 		cmp.Comparer(cmpServiceAffinity),
 		cmp.Comparer(cmpServiceType),
+		cmp.Comparer(cmpServiceInternalTrafficPolicyType),
 		cmpopts.EquateEmpty(),
 	}
 
@@ -148,4 +149,15 @@ func cmpServiceType(a, b corev1.ServiceType) bool {
 		b = corev1.ServiceTypeClusterIP
 	}
 	return a == b
+}
+
+func cmpServiceInternalTrafficPolicyType(a, b *corev1.ServiceInternalTrafficPolicyType) bool {
+	defaultPolicy := corev1.ServiceInternalTrafficPolicyCluster
+	if a == nil {
+		a = &defaultPolicy
+	}
+	if b == nil {
+		b = &defaultPolicy
+	}
+	return *a == *b
 }
