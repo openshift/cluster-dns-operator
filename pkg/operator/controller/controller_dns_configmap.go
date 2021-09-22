@@ -29,6 +29,9 @@ var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Se
     {{- end}}
     errors
     bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
 }
 {{end -}}
 .:5353 {
