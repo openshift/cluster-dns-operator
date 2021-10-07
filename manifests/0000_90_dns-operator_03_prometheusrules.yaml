@@ -38,6 +38,7 @@ spec:
         for: 5m
         labels:
           severity: warning
+          namespace: openshift-dns-operator
         annotations:
           summary: CoreDNS serverfail
           description: "CoreDNS is returning SERVFAIL for {{ $value | humanizePercentage }} of requests."
