@@ -31,9 +31,9 @@ spec:
           description: "CoreDNS Health Checks are slowing down (instance {{ $labels.instance }})"
       - alert: CoreDNSErrorsHigh
         expr: |
-          (sum(rate(coredns_dns_responses_total{rcode="SERVFAIL"}[5m]))
+          (sum by(namespace) (rate(coredns_dns_responses_total{rcode="SERVFAIL"}[5m]))
             /
-          sum(rate(coredns_dns_responses_total[5m])))
+          sum by(namespace) (rate(coredns_dns_responses_total[5m])))
           > 0.01
         for: 5m
         labels:
