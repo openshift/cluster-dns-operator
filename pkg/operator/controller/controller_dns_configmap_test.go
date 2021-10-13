@@ -21,6 +21,7 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 					Zones: []string{"foo.com"},
 					ForwardPlugin: operatorv1.ForwardPlugin{
 						Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+						Policy:    operatorv1.RoundRobinForwardingPolicy,
 					},
 				},
 				{
@@ -28,6 +29,22 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 					Zones: []string{"bar.com", "example.com"},
 					ForwardPlugin: operatorv1.ForwardPlugin{
 						Upstreams: []string{"3.3.3.3"},
+						Policy:    operatorv1.RandomForwardingPolicy,
+					},
+				},
+				{
+					Name:  "fizz",
+					Zones: []string{"fizz.com"},
+					ForwardPlugin: operatorv1.ForwardPlugin{
+						Upstreams: []string{"5.5.5.5", "6.6.6.6"},
+						Policy:    operatorv1.SequentialForwardingPolicy,
+					},
+				},
+				{
+					Name:  "buzz",
+					Zones: []string{"buzz.com", "example.buzz.com"},
+					ForwardPlugin: operatorv1.ForwardPlugin{
+						Upstreams: []string{"4.4.4.4"},
 					},
 				},
 			},
@@ -35,7 +52,9 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 	}
 	expectedCorefile := `# foo
 foo.com:5353 {
-    forward . 1.1.1.1 2.2.2.2:5353
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
     errors
     bufsize 512
     cache 900 {
@@ -44,7 +63,31 @@ foo.com:5353 {
 }
 # bar
 bar.com:5353 example.com:5353 {
-    forward . 3.3.3.3
+    forward . 3.3.3.3 {
+        policy random
+    }
+    errors
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+# fizz
+fizz.com:5353 {
+    forward . 5.5.5.5 6.6.6.6 {
+        policy sequential
+    }
+    errors
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+# buzz
+buzz.com:5353 example.buzz.com:5353 {
+    forward . 4.4.4.4 {
+        policy random
+    }
     errors
     bufsize 512
     cache 900 {

@@ -21,11 +21,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Servers -}}
+var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.FuncMap{
+	"CoreDNSForwardingPolicy": coreDNSPolicy,
+}).Parse(`{{range .Servers -}}
 # {{.Name}}
 {{range .Zones}}{{.}}:5353 {{end}}{
     {{with .ForwardPlugin -}}
-    forward .{{range .Upstreams}} {{.}}{{end}}
+    forward .{{range .Upstreams}} {{.}}{{end}} {
+        policy {{ CoreDNSForwardingPolicy .Policy }}
+    }
     {{- end}}
     errors
     bufsize 512
@@ -104,9 +108,11 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.Con
 	corefileParameters := struct {
 		ClusterDomain string
 		Servers       interface{}
+		PolicyStr     func(policy operatorv1.ForwardingPolicy) string
 	}{
 		ClusterDomain: clusterDomain,
 		Servers:       dns.Spec.Servers,
+		PolicyStr:     coreDNSPolicy,
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {
@@ -153,4 +159,16 @@ func corefileChanged(current, expected *corev1.ConfigMap) (bool, *corev1.ConfigM
 	updated := current.DeepCopy()
 	updated.Data = expected.Data
 	return true, updated
+}
+
+func coreDNSPolicy(policy operatorv1.ForwardingPolicy) string {
+	switch policy {
+	case operatorv1.RandomForwardingPolicy:
+		return "random"
+	case operatorv1.RoundRobinForwardingPolicy:
+		return "round_robin"
+	case operatorv1.SequentialForwardingPolicy:
+		return "sequential"
+	}
+	return "random"
 }
