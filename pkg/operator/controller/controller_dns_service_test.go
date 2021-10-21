@@ -70,6 +70,22 @@ func TestDNSServiceChanged(t *testing.T) {
 			expect: true,
 		},
 		{
+			description: "if .spec.internalTrafficPolicy is defaulted",
+			mutate: func(service *corev1.Service) {
+				policy := corev1.ServiceInternalTrafficPolicyCluster
+				service.Spec.InternalTrafficPolicy = &policy
+			},
+			expect: false,
+		},
+		{
+			description: "if .spec.internalTrafficPolicy is set to a non-default value",
+			mutate: func(service *corev1.Service) {
+				policy := corev1.ServiceInternalTrafficPolicyLocal
+				service.Spec.InternalTrafficPolicy = &policy
+			},
+			expect: true,
+		},
+		{
 			description: "if .spec.publishNotReadyAddresses changes",
 			mutate: func(service *corev1.Service) {
 				service.Spec.PublishNotReadyAddresses = true
