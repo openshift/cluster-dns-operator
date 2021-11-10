@@ -52,6 +52,7 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 	}
 	expectedCorefile := `# foo
 foo.com:5353 {
+    prometheus 127.0.0.1:9153
     forward . 1.1.1.1 2.2.2.2:5353 {
         policy round_robin
     }
@@ -63,6 +64,7 @@ foo.com:5353 {
 }
 # bar
 bar.com:5353 example.com:5353 {
+    prometheus 127.0.0.1:9153
     forward . 3.3.3.3 {
         policy random
     }
@@ -74,6 +76,7 @@ bar.com:5353 example.com:5353 {
 }
 # fizz
 fizz.com:5353 {
+    prometheus 127.0.0.1:9153
     forward . 5.5.5.5 6.6.6.6 {
         policy sequential
     }
@@ -85,6 +88,7 @@ fizz.com:5353 {
 }
 # buzz
 buzz.com:5353 example.buzz.com:5353 {
+    prometheus 127.0.0.1:9153
     forward . 4.4.4.4 {
         policy random
     }
