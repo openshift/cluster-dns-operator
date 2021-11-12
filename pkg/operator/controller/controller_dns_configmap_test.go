@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -334,5 +336,741 @@ foo.com:5353 {
 		t.Errorf("invalid dns configmap: %v", err)
 	} else if cmToCheckTraceLogLevel.Data["Corefile"] == expectedCorefileToCheckIfTraceLogLevelIsSet {
 		t.Errorf("unexpected Corefile; got:\n%s\nexpected:\n%s\n", cmToCheckTraceLogLevel.Data["Corefile"], expectedCorefileToCheckIfTraceLogLevelIsSet)
+	}
+}
+
+func TestDesiredDNSConfigmapUpstreamResolvers(t *testing.T) {
+	testCases := []struct {
+		name             string
+		dns              *operatorv1.DNS
+		expectedCoreFile string
+		expectedError    error
+	}{
+		{
+			name: "CR of 5 upstreams in upstreamResolvers should return a coreFile with 5 upstreams defined",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						//{"1.2.3.4", "9.8.7.6", "6.4.3.2:53", "2.3.4.5:5353", "127.0.0.53"},
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1.2.3.4",
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "9.8.7.6",
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "6.4.3.2",
+								Port:    53,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "2.3.4.5",
+								Port:    5353,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "127.0.0.53",
+							},
+						},
+						Policy: operatorv1.RoundRobinForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . 1.2.3.4 9.8.7.6 6.4.3.2:53 2.3.4.5:5353 127.0.0.53 {
+        policy round_robin
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with upstreamResolvers containing just policy should return coreFile with default upstream /etc/resolv.conf and that policy",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Policy: operatorv1.RoundRobinForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf {
+        policy round_robin
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with upstreamResolvers containing empty Upstreams array should return coreFile with default upstream /etc/resolv.conf and that policy",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{},
+						Policy:    operatorv1.RoundRobinForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf {
+        policy round_robin
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with upstreamResolvers containing a network upstream without address should return error",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type: operatorv1.NetworkResolverType,
+							},
+						},
+						Policy: operatorv1.RoundRobinForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: "",
+			expectedError:    errInvalidNetworkUpstream,
+		},
+		{
+			name: "CR with upstreamResolvers containing 1 Network NS and no policy should return coreFile with 1 upstream and policy sequential",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1.2.3.4",
+							},
+						},
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . 1.2.3.4 {
+        policy sequential
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with upstreamResolvers containing 1 Network NS and policy should return coreFile with 1 upstream defined and that policy",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1.2.3.4",
+							},
+						},
+						Policy: operatorv1.RandomForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . 1.2.3.4 {
+        policy random
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with upstreamResolvers containing 1 SystemResolvConf NS and policy should return a coreFile with 1 upstream defined and that policy",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type: operatorv1.SystemResolveConfType,
+							},
+						},
+						Policy: operatorv1.RandomForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf {
+        policy random
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR without upstreamResolvers defined should return coreFile with forwardPlugin upstream /etc/resolv.conf in sequential policy",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf {
+        policy sequential
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with multiple upstreamResolvers, of which /etc/resolv.conf is one, should return Corefile with all the upstreams",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type: operatorv1.SystemResolveConfType,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1.3.4.5",
+							},
+						},
+						Policy: operatorv1.RandomForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf 1.3.4.5 {
+        policy random
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with upstreamResolvers containing 1 SystemResolvConf NS with Address  should return coreFile with 1 /etc/resolv.conf ignoring Address",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type:    operatorv1.SystemResolveConfType,
+								Address: "1.2.3.4",
+							},
+						},
+						Policy: operatorv1.RandomForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf {
+        policy random
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with upstreamResolvers containing 1 SystemResolvConf NS with Port should return coreFile with 1 /etc/resolv.conf ignoring port",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type: operatorv1.SystemResolveConfType,
+								Port: 54,
+							},
+						},
+						Policy: operatorv1.RandomForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf {
+        policy random
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+	}
+
+	clusterDomain := "cluster.local"
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain); err != nil {
+				if !errors.Is(err, tc.expectedError) {
+					t.Errorf("Unexpected error : %v", err)
+				}
+			} else if tc.expectedError != nil {
+				t.Errorf("Error %v was expected", tc.expectedError)
+			} else if diff := cmp.Diff(cm.Data["Corefile"], tc.expectedCoreFile); diff != "" {
+				t.Errorf("unexpected Corefile;\n%s", diff)
+			}
+		})
 	}
 }
