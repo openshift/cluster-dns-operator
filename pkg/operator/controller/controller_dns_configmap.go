@@ -33,6 +33,9 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
     }
     {{- end}}
     errors
+    log . {
+        {{$.LogLevel}}
+    }
     bufsize 512
     cache 900 {
         denial 9984 30
@@ -42,6 +45,9 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
 .:5353 {
     bufsize 512
     errors
+    log . {
+        {{.LogLevel}}
+    }
     health {
         lameduck 20s
     }
@@ -110,10 +116,12 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.Con
 		ClusterDomain string
 		Servers       interface{}
 		PolicyStr     func(policy operatorv1.ForwardingPolicy) string
+		LogLevel      string
 	}{
 		ClusterDomain: clusterDomain,
 		Servers:       dns.Spec.Servers,
 		PolicyStr:     coreDNSPolicy,
+		LogLevel:      coreDNSLogLevel(dns),
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {
@@ -172,4 +180,15 @@ func coreDNSPolicy(policy operatorv1.ForwardingPolicy) string {
 		return "sequential"
 	}
 	return "random"
+}
+func coreDNSLogLevel(dns *operatorv1.DNS) string {
+	switch dns.Spec.LogLevel {
+	case operatorv1.DNSLogLevelNormal:
+		return "class error"
+	case operatorv1.DNSLogLevelDebug:
+		return "class denial error"
+	case operatorv1.DNSLogLevelTrace:
+		return "class all"
+	}
+	return "class error"
 }

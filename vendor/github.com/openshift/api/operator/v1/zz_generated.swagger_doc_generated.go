@@ -422,10 +422,12 @@ func (DNSNodePlacement) SwaggerDoc() map[string]string {
 }
 
 var map_DNSSpec = map[string]string{
-	"":                "DNSSpec is the specification of the desired behavior of the DNS.",
-	"servers":         "servers is a list of DNS resolvers that provide name query delegation for one or more subdomains outside the scope of the cluster domain. If servers consists of more than one Server, longest suffix match will be used to determine the Server.\n\nFor example, if there are two Servers, one for \"foo.com\" and another for \"a.foo.com\", and the name query is for \"www.a.foo.com\", it will be routed to the Server with Zone \"a.foo.com\".\n\nIf this field is nil, no servers are created.",
-	"nodePlacement":   "nodePlacement provides explicit control over the scheduling of DNS pods.\n\nGenerally, it is useful to run a DNS pod on every node so that DNS queries are always handled by a local DNS pod instead of going over the network to a DNS pod on another node.  However, security policies may require restricting the placement of DNS pods to specific nodes. For example, if a security policy prohibits pods on arbitrary nodes from communicating with the API, a node selector can be specified to restrict DNS pods to nodes that are permitted to communicate with the API.  Conversely, if running DNS pods on nodes with a particular taint is desired, a toleration can be specified for that taint.\n\nIf unset, defaults are used. See nodePlacement for more details.",
-	"managementState": "managementState indicates whether the DNS operator should manage cluster DNS",
+	"":                 "DNSSpec is the specification of the desired behavior of the DNS.",
+	"servers":          "servers is a list of DNS resolvers that provide name query delegation for one or more subdomains outside the scope of the cluster domain. If servers consists of more than one Server, longest suffix match will be used to determine the Server.\n\nFor example, if there are two Servers, one for \"foo.com\" and another for \"a.foo.com\", and the name query is for \"www.a.foo.com\", it will be routed to the Server with Zone \"a.foo.com\".\n\nIf this field is nil, no servers are created.",
+	"nodePlacement":    "nodePlacement provides explicit control over the scheduling of DNS pods.\n\nGenerally, it is useful to run a DNS pod on every node so that DNS queries are always handled by a local DNS pod instead of going over the network to a DNS pod on another node.  However, security policies may require restricting the placement of DNS pods to specific nodes. For example, if a security policy prohibits pods on arbitrary nodes from communicating with the API, a node selector can be specified to restrict DNS pods to nodes that are permitted to communicate with the API.  Conversely, if running DNS pods on nodes with a particular taint is desired, a toleration can be specified for that taint.\n\nIf unset, defaults are used. See nodePlacement for more details.",
+	"managementState":  "managementState indicates whether the DNS operator should manage cluster DNS",
+	"operatorLogLevel": "operatorLogLevel controls the logging level of the DNS Operator. Valid values are: \"Normal\", \"Debug\", \"Trace\". Defaults to \"Normal\". setting operatorLogLevel: Trace will produce extremely verbose logs.",
+	"logLevel":         "logLevel describes the desired logging verbosity for CoreDNS. Any one of the following values may be specified: * Normal logs errors from upstream resolvers. * Debug logs errors, NXDOMAIN responses, and NODATA responses. * Trace logs errors and all responses.\n Setting logLevel: Trace will produce extremely verbose logs.\nValid values are: \"Normal\", \"Debug\", \"Trace\". Defaults to \"Normal\".",
 }
 
 func (DNSSpec) SwaggerDoc() map[string]string {
@@ -562,6 +564,15 @@ func (GCPLoadBalancerParameters) SwaggerDoc() map[string]string {
 	return map_GCPLoadBalancerParameters
 }
 
+var map_HTTPCompressionPolicy = map[string]string{
+	"":          "httpCompressionPolicy turns on compression for the specified MIME types.\n\nThis field is optional, and its absence implies that compression should not be enabled globally in HAProxy.\n\nIf httpCompressionPolicy exists, compression should be enabled only for the specified MIME types.",
+	"mimeTypes": "mimeTypes is a list of MIME types that should have compression applied. This list can be empty, in which case the ingress controller does not apply compression.\n\nNote: Not all MIME types benefit from compression, but HAProxy will still use resources to try to compress if instructed to.  Generally speaking, text (html, css, js, etc.) formats benefit from compression, but formats that are already compressed (image, audio, video, etc.) benefit little in exchange for the time and cpu spent on compressing again. See https://joehonton.medium.com/the-gzip-penalty-d31bd697f1a2",
+}
+
+func (HTTPCompressionPolicy) SwaggerDoc() map[string]string {
+	return map_HTTPCompressionPolicy
+}
+
 var map_HostNetworkStrategy = map[string]string{
 	"":         "HostNetworkStrategy holds parameters for the HostNetwork endpoint publishing strategy.",
 	"protocol": "protocol specifies whether the IngressController expects incoming connections to use plain TCP or whether the IngressController expects PROXY protocol.\n\nPROXY protocol can be used with load balancers that support it to communicate the source addresses of client connections when forwarding those connections to the IngressController.  Using PROXY protocol enables the IngressController to report those source addresses instead of reporting the load balancer's address in HTTP headers and logs.  Note that enabling PROXY protocol on the IngressController will cause connections to fail if you are not using a load balancer that uses PROXY protocol to forward connections to the IngressController.  See http://www.haproxy.org/download/2.2/doc/proxy-protocol.txt for information about PROXY protocol.\n\nThe following values are valid for this field:\n\n* The empty string. * \"TCP\". * \"PROXY\".\n\nThe empty string specifies the default, which is TCP without PROXY protocol.  Note that the default is subject to change.",
@@ -677,6 +688,7 @@ var map_IngressControllerSpec = map[string]string{
 	"httpEmptyRequestsPolicy":    "httpEmptyRequestsPolicy describes how HTTP connections should be handled if the connection times out before a request is received. Allowed values for this field are \"Respond\" and \"Ignore\".  If the field is set to \"Respond\", the ingress controller sends an HTTP 400 or 408 response, logs the connection (if access logging is enabled), and counts the connection in the appropriate metrics.  If the field is set to \"Ignore\", the ingress controller closes the connection without sending a response, logging the connection, or incrementing metrics.  The default value is \"Respond\".\n\nTypically, these connections come from load balancers' health probes or Web browsers' speculative connections (\"preconnect\") and can be safely ignored.  However, these requests may also be caused by network errors, and so setting this field to \"Ignore\" may impede detection and diagnosis of problems.  In addition, these requests may be caused by port scans, in which case logging empty requests may aid in detecting intrusion attempts.",
 	"tuningOptions":              "tuningOptions defines parameters for adjusting the performance of ingress controller pods. All fields are optional and will use their respective defaults if not set. See specific tuningOptions fields for more details.\n\nSetting fields within tuningOptions is generally not recommended. The default values are suitable for most configurations.",
 	"unsupportedConfigOverrides": "unsupportedConfigOverrides allows specifying unsupported configuration options.  Its use is unsupported.",
+	"httpCompression":            "httpCompression defines a policy for HTTP traffic compression. By default, there is no HTTP compression.",
 }
 
 func (IngressControllerSpec) SwaggerDoc() map[string]string {
@@ -785,10 +797,11 @@ func (RouteAdmissionPolicy) SwaggerDoc() map[string]string {
 }
 
 var map_SyslogLoggingDestinationParameters = map[string]string{
-	"":         "SyslogLoggingDestinationParameters describes parameters for the Syslog logging destination type.",
-	"address":  "address is the IP address of the syslog endpoint that receives log messages.",
-	"port":     "port is the UDP port number of the syslog endpoint that receives log messages.",
-	"facility": "facility specifies the syslog facility of log messages.\n\nIf this field is empty, the facility is \"local1\".",
+	"":          "SyslogLoggingDestinationParameters describes parameters for the Syslog logging destination type.",
+	"address":   "address is the IP address of the syslog endpoint that receives log messages.",
+	"port":      "port is the UDP port number of the syslog endpoint that receives log messages.",
+	"facility":  "facility specifies the syslog facility of log messages.\n\nIf this field is empty, the facility is \"local1\".",
+	"maxLength": "maxLength is the maximum length of the syslog message\n\nIf this field is empty, the maxLength is set to \"1024\".",
 }
 
 func (SyslogLoggingDestinationParameters) SwaggerDoc() map[string]string {

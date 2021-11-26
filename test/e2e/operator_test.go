@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -392,7 +393,7 @@ func TestDNSForwarding(t *testing.T) {
 	// Verify that the Corefile of DNS DaemonSet pods have been updated.
 	dnsDaemonSet := &appsv1.DaemonSet{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DNSDaemonSetName(defaultDNS), dnsDaemonSet); err != nil {
-		fmt.Errorf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
+		_ = fmt.Errorf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(dnsDaemonSet.Spec.Selector)
 	if err != nil {
@@ -407,7 +408,7 @@ func TestDNSForwarding(t *testing.T) {
 		if err := lookForStringInPodExec(pod.Namespace, pod.Name, "dns", catCmd, upstreamIP, 2*time.Minute); err != nil {
 			// If we failed to find the expected IP in the pod's corefile, log the pod's status.
 			currPod := &corev1.Pod{}
-			if err := cl.Get(context.TODO(), types.NamespacedName{pod.Name, pod.Namespace}, currPod); err != nil {
+			if err := cl.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, currPod); err != nil {
 				t.Logf("failed to get pod %s: %v", pod.Name, err)
 			}
 			t.Fatalf("failed to find %s in %s of pod %s/%s: %v, pod status: %v", upstreamIP, catCmd[1], pod.Namespace, pod.Name, err, currPod.Status)
@@ -469,8 +470,178 @@ func TestDNSForwarding(t *testing.T) {
 	}
 	// Scrape the upstream resolver logs for the "NOERROR" message.
 	logMsg := "NOERROR"
-	if err := lookForStringInPodLog(upstreamResolver.Namespace, upstreamResolver.Name, upstreamResolver.Name, logMsg, 30*time.Second); err != nil {
+	if err := lookForStringInPodLog(upstreamResolver.Namespace, upstreamResolver.Name, upstreamResolver.Name, logMsg, 120*time.Second); err != nil {
 		t.Fatalf("failed to parse %q from pod %s/%s logs: %v", logMsg, upstreamResolver.Namespace, upstreamResolver.Name, err)
+	}
+}
+
+func TestDNSLogging(t *testing.T) {
+	cl, err := getClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get the CoreDNS image used by the test upstream resolver.
+	co := &configv1.ClusterOperator{}
+	if err := cl.Get(context.TODO(), opName, co); err != nil {
+		t.Fatalf("failed to get clusteroperator %s: %v", opName, err)
+	}
+
+	// Update cluster DNS forwarding with the upstream resolver's Service IP address.
+	defaultDNS := &operatorv1.DNS{}
+	if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DefaultDNSController}, defaultDNS); err != nil {
+		t.Fatalf("failed to get default dns: %v", err)
+	}
+
+	logLevel := operatorv1.DNSSpec{
+		LogLevel:         "Debug",
+		OperatorLogLevel: "Debug",
+	}
+
+	defaultDNS.Spec.LogLevel = logLevel.LogLevel
+	defaultDNS.Spec.OperatorLogLevel = logLevel.OperatorLogLevel
+	if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+		t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+	}
+	defer func() {
+		defaultDNS = &operatorv1.DNS{}
+		if err := cl.Get(context.TODO(), types.NamespacedName{Name: "default"}, defaultDNS); err != nil {
+			t.Fatalf("failed to get default dns: %v", err)
+		}
+
+		if defaultDNS.Spec.LogLevel != "" && defaultDNS.Spec.OperatorLogLevel != "" {
+			// dnses.operator/default has a nil spec by default.
+			defaultDNS.Spec = operatorv1.DNSSpec{}
+			if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+				t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+			}
+		}
+	}()
+
+	// Verify that default DNS pods are all available before inspecting them.
+	if err := waitForDNSConditions(t, cl, 1*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
+	// Verify that the Corefile of DNS DaemonSet pods have been updated.
+	dnsDaemonSet := &appsv1.DaemonSet{}
+	if err := cl.Get(context.TODO(), operatorcontroller.DNSDaemonSetName(defaultDNS), dnsDaemonSet); err != nil {
+		_ = fmt.Errorf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
+	}
+	selector, err := metav1.LabelSelectorAsSelector(dnsDaemonSet.Spec.Selector)
+	if err != nil {
+		t.Fatalf("daemonset %s/%s has invalid spec.selector: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
+	}
+	coreDNSPods := &corev1.PodList{}
+	if err := cl.List(context.TODO(), coreDNSPods, client.MatchingLabelsSelector{Selector: selector}, client.InNamespace(dnsDaemonSet.Namespace)); err != nil {
+		t.Fatalf("failed to list pods for dns daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
+	}
+	catCmd := []string{"cat", "/etc/coredns/Corefile"}
+
+	// Get the openshift-cli image.
+	var (
+		cliImage      string
+		cliImageFound bool
+	)
+	for _, ver := range co.Status.Versions {
+		if ver.Name == statuscontroller.OpenshiftCLIVersionName {
+			if len(ver.Version) == 0 {
+				break
+			}
+			cliImage = ver.Version
+			cliImageFound = true
+			break
+		}
+	}
+	if !cliImageFound {
+		t.Fatalf("failed to find the %s version for clusteroperator %s", statuscontroller.OpenshiftCLIVersionName, co.Name)
+	}
+
+	// Create the client Pod.
+	testClientForDNSLogging := buildPod("test-client-dnslogging", "default", cliImage, []string{"sleep", "3600"})
+	if err := cl.Create(context.TODO(), testClientForDNSLogging); err != nil {
+		t.Fatalf("failed to create pod %s/%s: %v", testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, err)
+	}
+	defer func() {
+		if err := cl.Delete(context.TODO(), testClientForDNSLogging); err != nil {
+			t.Fatalf("failed to delete pod %s/%s: %v", testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, err)
+		}
+	}()
+	// Wait for the client Pod to be ready.
+	name := types.NamespacedName{Namespace: testClientForDNSLogging.Namespace, Name: testClientForDNSLogging.Name}
+	err = wait.PollImmediate(1*time.Second, 60*time.Second, func() (bool, error) {
+		if err := cl.Get(context.TODO(), name, testClientForDNSLogging); err != nil {
+			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
+			return false, nil
+		}
+		for _, cond := range testClientForDNSLogging.Status.Conditions {
+			if cond.Type == corev1.ContainersReady &&
+				cond.Status == corev1.ConditionTrue {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, err)
+	}
+
+	found := 0
+	for _, corednspod := range coreDNSPods.Items {
+
+		// Dig the example dns forwarding host.
+		digCmd := []string{"dig", "test.svc.cluster.local"}
+		if err := lookForStringInPodExec(testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, testClientForDNSLogging.Name, digCmd, "NXDOMAIN", 120*time.Second); err != nil {
+			t.Fatalf("failed to dig %v", err)
+		}
+
+		if err := lookForStringInPodExec(corednspod.Namespace, corednspod.Name, "dns", catCmd, "class denial error", 2*time.Minute); err != nil {
+			t.Fatal(" failed to set Debug logLevel for operator")
+		}
+
+		// Get the CoreDNS image used by the test upstream resolver.
+		co := &configv1.ClusterOperator{}
+		if err := cl.Get(context.TODO(), opName, co); err != nil {
+			t.Fatalf("failed to get clusteroperator %s: %v", opName, err)
+		}
+
+		if found == 0 {
+			if err := lookForSubStringsInPodLog(corednspod.Namespace, corednspod.Name, "dns", 2*time.Minute, "A IN test.svc.cluster.local.", "NXDOMAIN"); err != nil {
+				found = 0
+			} else {
+				found = 1
+			}
+		}
+
+	}
+
+	if found == 0 {
+		t.Fatalf("failed to get NXDOMAIN entry for test.svc.cluster.local. which does not exist")
+	}
+
+	dns := &operatorv1.DNS{}
+	if err := cl.Get(context.TODO(), dnsName, dns); err != nil {
+		t.Fatalf("failed to get DNS operator %s: %v", dnsName.Name, err)
+	}
+
+	dnsOperatorDeployment := &appsv1.Deployment{}
+	if err := cl.Get(context.TODO(), operatorcontroller.DefaultDNSOperatorDeploymentName(), dnsOperatorDeployment); err != nil {
+		_ = fmt.Errorf("failed to get deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
+	}
+	operatorSelector, err := metav1.LabelSelectorAsSelector(dnsOperatorDeployment.Spec.Selector)
+	if err != nil {
+		t.Fatalf("daemonset %s/%s has invalid spec.selector: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
+	}
+
+	dnsOperatorPods := &corev1.PodList{}
+	if err := cl.List(context.TODO(), dnsOperatorPods, client.MatchingLabelsSelector{Selector: operatorSelector}, client.InNamespace(dnsOperatorDeployment.Namespace)); err != nil {
+		t.Fatalf("failed to list pods for dns deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
+	}
+
+	for _, dnsOperatorPod := range dnsOperatorPods.Items {
+		if err := lookForStringInPodLog(operatorcontroller.DefaultOperatorNamespace, dnsOperatorPod.Name, operatorcontroller.ContainerNameOfDNSOperator, "level=info", 30*time.Second); err != nil {
+			t.Fatal(" failed to set Debug logLevel for operator")
+		}
 	}
 }
 
@@ -514,7 +685,7 @@ func TestDNSNodePlacement(t *testing.T) {
 	dnsDaemonSet := &appsv1.DaemonSet{}
 	dnsDaemonSetName := operatorcontroller.DNSDaemonSetName(defaultDNS)
 	if err := cl.Get(context.TODO(), dnsDaemonSetName, dnsDaemonSet); err != nil {
-		fmt.Errorf("failed to get daemonset %s: %v", dnsDaemonSetName, err)
+		fmt.Printf("failed to get daemonset %s: %v", dnsDaemonSetName, err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(dnsDaemonSet.Spec.Selector)
 	if err != nil {
