@@ -69,12 +69,17 @@ verify:
 
 .PHONY: local-image
 local-image:
-ifdef USE_BUILDAH
-	@echo "  - Building with buildah ... "
+ifeq ($(CONTAINER_ENGINE), USE_BUILDAH)
+	echo "  - Building with buildah ... "
 	buildah bud -t $(IMAGE_TAG) .
-else
-	@echo "  - Building with docker ... "
+else ifeq ($(CONTAINER_ENGINE), docker)
+	echo "  - Building with docker ... "
 	docker build -t $(IMAGE_TAG) .
+else ifeq ($(CONTAINER_ENGINE), podman)
+	echo "  - Building with podman ... "
+	podman build -t $(IMAGE_TAG) .
+else
+	echo "  Please pass a container engine ... "
 endif
 
 .PHONY: run-local

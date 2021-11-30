@@ -56,12 +56,28 @@ func lookForStringInPodLog(ns, pod, container, expectedString string, timeout ti
 	return nil
 }
 
+// lookForStringInPodLog looks for the given string in the log of the
+// specified pod container every 2 seconds until the timeout is reached
+// or the string is found. Returns an error if the string was not found.
+func lookForSubStringsInPodLog(ns, pod, container string, timeout time.Duration, expectedStrings ...string) error {
+	cmdPath, err := exec.LookPath("oc")
+	if err != nil {
+		return err
+	}
+	args := []string{"logs", pod, "-c", container, fmt.Sprintf("--namespace=%v", ns)}
+	if bool, err := lookForSubStrings(cmdPath, args, timeout, expectedStrings); err != nil && !bool {
+		return err
+	}
+	return nil
+}
+
 // lookForString looks for the given string using cmd and args every
 // 2 seconds until the timeout is reached or the string is found.
 // Returns an error if the string was not found.
 func lookForString(cmd string, args []string, expectedString string, timeout time.Duration) error {
 	err := wait.PollImmediate(2*time.Second, timeout, func() (bool, error) {
 		result, err := runCmd(cmd, args)
+		//fmt.Printf("\n result %v", result)
 		if err != nil {
 			return false, nil
 		}
@@ -74,6 +90,41 @@ func lookForString(cmd string, args []string, expectedString string, timeout tim
 		return fmt.Errorf("failed to find %q", expectedString)
 	}
 	return nil
+}
+func lookForSubStrings(cmd string, args []string, timeout time.Duration, expectedStrings []string) (bool, error) {
+	err := wait.PollImmediate(2*time.Second, timeout, func() (bool, error) {
+		result, err := runCmd(cmd, args)
+		if err != nil {
+			return false, nil
+		}
+		slicedResult := strings.Split(result, "\"")
+		slicedResultToString := strings.Join(slicedResult, " ")
+		if bool, err := checkSubStrings(slicedResultToString, expectedStrings); err != nil && !bool {
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to find %q", expectedStrings)
+	}
+	return true, nil
+}
+
+func checkSubStrings(str string, subs []string) (bool, error) {
+	isCompleteMatch := true
+
+	for _, sub := range subs {
+		if strings.Contains(str, sub) {
+		} else {
+			isCompleteMatch = false
+		}
+	}
+
+	if !isCompleteMatch {
+		return false, fmt.Errorf("failed to find a match %q", strings.Join(subs, ""))
+	}
+
+	return isCompleteMatch, nil
 }
 
 // runCmd runs command cmd with arguments args and returns the output

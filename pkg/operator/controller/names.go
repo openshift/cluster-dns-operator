@@ -28,6 +28,12 @@ const (
 
 	// DefaultDNSName is the default name of dns resource.
 	DefaultDNSName = "default"
+
+	DefaultOperatorNamespace = "openshift-dns-operator"
+
+	ContainerNameOfDNSOperator = "dns-operator"
+
+	DeploymentNameOfDNSOperator = "dns-operator"
 )
 
 // DNSClusterOperatorName returns the namespaced name of the ClusterOperator
@@ -35,6 +41,13 @@ const (
 func DNSClusterOperatorName() types.NamespacedName {
 	return types.NamespacedName{
 		Name: DefaultOperatorName,
+	}
+}
+
+func DefaultDNSOperatorDeploymentName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      DeploymentNameOfDNSOperator,
+		Namespace: DefaultOperatorNamespace,
 	}
 }
 

@@ -111,6 +111,16 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if dns != nil {
+		switch dns.Spec.OperatorLogLevel {
+		case operatorv1.DNSLogLevelNormal:
+			logrus.SetLevel(logrus.InfoLevel)
+		case operatorv1.DNSLogLevelDebug:
+			logrus.SetLevel(logrus.DebugLevel)
+		case operatorv1.DNSLogLevelTrace:
+			logrus.SetLevel(logrus.TraceLevel)
+		default:
+			logrus.SetLevel(logrus.InfoLevel)
+		}
 		switch dns.Spec.ManagementState {
 		case operatorv1.Unmanaged:
 			// When the operator is set to unmanaged, it should not make
