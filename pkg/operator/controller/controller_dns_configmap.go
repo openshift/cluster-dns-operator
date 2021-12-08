@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"text/template"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
@@ -21,8 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const resolvConf = "/etc/resolv.conf"
+
+var errInvalidNetworkUpstream = fmt.Errorf("The address field is mandatory for upstream of type Network, but was not provided")
 var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.FuncMap{
-	"CoreDNSForwardingPolicy": coreDNSPolicy,
+	"CoreDNSForwardingPolicy": coreDNSPolicy, "UpstreamResolver": coreDNSResolver,
 }).Parse(`{{range .Servers -}}
 # {{.Name}}
 {{range .Zones}}{{.}}:5353 {{end}}{
@@ -57,9 +61,11 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         fallthrough in-addr.arpa ip6.arpa
     }
     prometheus 127.0.0.1:9153
-    forward . /etc/resolv.conf {
-        policy sequential
+	{{- with .UpstreamResolvers }}
+    forward .{{range .Upstreams}} {{UpstreamResolver .}}{{end}} {
+        policy {{ CoreDNSForwardingPolicy .Policy }}
     }
+	{{- end}}
     cache 900 {
         denial 9984 30
     }
@@ -112,16 +118,40 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.Con
 		clusterDomain = "cluster.local"
 	}
 
+	upstreamResolvers := operatorv1.UpstreamResolvers{
+		Upstreams: []operatorv1.Upstream{
+			{
+				Type: operatorv1.SystemResolveConfType,
+			},
+		},
+		Policy: operatorv1.SequentialForwardingPolicy,
+	}
+
+	if len(dns.Spec.UpstreamResolvers.Upstreams) > 0 {
+		upstreamResolvers.Upstreams = dns.Spec.UpstreamResolvers.Upstreams
+		for _, upstream := range upstreamResolvers.Upstreams {
+			if upstream.Type == operatorv1.NetworkResolverType && upstream.Address == "" {
+				return nil, errInvalidNetworkUpstream
+			}
+		}
+	}
+
+	if dns.Spec.UpstreamResolvers.Policy != "" {
+		upstreamResolvers.Policy = dns.Spec.UpstreamResolvers.Policy
+	}
+
 	corefileParameters := struct {
-		ClusterDomain string
-		Servers       interface{}
-		PolicyStr     func(policy operatorv1.ForwardingPolicy) string
-		LogLevel      string
+		ClusterDomain     string
+		Servers           interface{}
+		UpstreamResolvers operatorv1.UpstreamResolvers
+		PolicyStr         func(policy operatorv1.ForwardingPolicy) string
+		LogLevel          string
 	}{
-		ClusterDomain: clusterDomain,
-		Servers:       dns.Spec.Servers,
-		PolicyStr:     coreDNSPolicy,
-		LogLevel:      coreDNSLogLevel(dns),
+		ClusterDomain:     clusterDomain,
+		Servers:           dns.Spec.Servers,
+		UpstreamResolvers: upstreamResolvers,
+		PolicyStr:         coreDNSPolicy,
+		LogLevel:          coreDNSLogLevel(dns),
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {
@@ -170,6 +200,20 @@ func corefileChanged(current, expected *corev1.ConfigMap) (bool, *corev1.ConfigM
 	return true, updated
 }
 
+func coreDNSResolver(upstream operatorv1.Upstream) (string, error) {
+	if upstream.Type == operatorv1.NetworkResolverType {
+		if upstream.Address == "" {
+			return "", errInvalidNetworkUpstream
+		}
+		if upstream.Port > 0 {
+			return net.JoinHostPort(upstream.Address, fmt.Sprintf("%d", upstream.Port)), nil
+		} else {
+			return upstream.Address, nil
+		}
+	}
+	return resolvConf, nil
+}
+
 func coreDNSPolicy(policy operatorv1.ForwardingPolicy) string {
 	switch policy {
 	case operatorv1.RandomForwardingPolicy:
@@ -181,6 +225,7 @@ func coreDNSPolicy(policy operatorv1.ForwardingPolicy) string {
 	}
 	return "random"
 }
+
 func coreDNSLogLevel(dns *operatorv1.DNS) string {
 	switch dns.Spec.LogLevel {
 	case operatorv1.DNSLogLevelNormal:

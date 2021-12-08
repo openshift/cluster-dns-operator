@@ -622,7 +622,7 @@ func (ConditionalUpdateRisk) SwaggerDoc() map[string]string {
 
 var map_PromQLClusterCondition = map[string]string{
 	"":       "PromQLClusterCondition represents a cluster condition based on PromQL.",
-	"promql": "PromQL is a PromQL query classifying clusters. This query query should return a 1 in the match case and a 0 in the does-not-match case case. Queries which return no time series, or which return values besides 0 or 1, are evaluation failures.",
+	"promql": "PromQL is a PromQL query classifying clusters. This query query should return a 1 in the match case and a 0 in the does-not-match case. Queries which return no time series, or which return values besides 0 or 1, are evaluation failures.",
 }
 
 func (PromQLClusterCondition) SwaggerDoc() map[string]string {
@@ -1513,15 +1513,6 @@ func (OAuth) SwaggerDoc() map[string]string {
 	return map_OAuth
 }
 
-var map_OAuthAudit = map[string]string{
-	"":        "OAuthAudit specifies the Audit profile in use.",
-	"profile": "profile is a simple drop in profile type that can be turned off by setting it to \"None\" or it can be turned on by setting it to \"WriteLoginEvents\". By default the profile is set to \"WriteLoginEvents\".",
-}
-
-func (OAuthAudit) SwaggerDoc() map[string]string {
-	return map_OAuthAudit
-}
-
 var map_OAuthList = map[string]string{
 	"": "Compatibility level 1: Stable within a major release for a minimum of 12 months or 3 minor releases (whichever is longer).",
 }
@@ -1547,7 +1538,6 @@ var map_OAuthSpec = map[string]string{
 	"identityProviders": "identityProviders is an ordered list of ways for a user to identify themselves. When this list is empty, no identities are provisioned for users.",
 	"tokenConfig":       "tokenConfig contains options for authorization and access tokens",
 	"templates":         "templates allow you to customize pages like the login page.",
-	"audit":             "audit specifies what should be audited in the context of OAuthServer. By default the Audit is turned on.",
 }
 
 func (OAuthSpec) SwaggerDoc() map[string]string {
