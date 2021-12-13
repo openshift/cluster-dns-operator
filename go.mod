@@ -8,7 +8,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/kevinburke/go-bindata v3.11.0+incompatible
 	github.com/openshift/api v0.0.0-20211201130627-34f305c3af47
-	github.com/openshift/build-machinery-go v0.0.0-20210712174854-1bb7fd1518d3
+	github.com/openshift/build-machinery-go v0.0.0-20211213093930-7e33a7eb4ce3
 	github.com/sirupsen/logrus v1.8.1
 	k8s.io/api v0.22.4
 	k8s.io/apimachinery v0.22.4

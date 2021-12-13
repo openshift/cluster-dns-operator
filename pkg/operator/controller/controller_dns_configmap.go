@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"text/template"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
@@ -23,6 +24,7 @@ import (
 )
 
 const resolvConf = "/etc/resolv.conf"
+const defaultDNSPort = 53
 
 var errInvalidNetworkUpstream = fmt.Errorf("The address field is mandatory for upstream of type Network, but was not provided")
 var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.FuncMap{
@@ -128,12 +130,22 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string) (*corev1.Con
 	}
 
 	if len(dns.Spec.UpstreamResolvers.Upstreams) > 0 {
-		upstreamResolvers.Upstreams = dns.Spec.UpstreamResolvers.Upstreams
-		for _, upstream := range upstreamResolvers.Upstreams {
-			if upstream.Type == operatorv1.NetworkResolverType && upstream.Address == "" {
-				return nil, errInvalidNetworkUpstream
+		//Upstreams are defined, we can remove the default one
+		upstreamResolvers.Upstreams = []operatorv1.Upstream{}
+
+		for _, upstream := range dns.Spec.UpstreamResolvers.Upstreams {
+			if upstream.Type == operatorv1.NetworkResolverType {
+				if upstream.Address == "" {
+					return nil, errInvalidNetworkUpstream
+				}
+			}
+			upstreamCopy := *upstream.DeepCopy()
+			//appending only if there are no duplicates
+			if !contains(upstreamResolvers.Upstreams, upstream) {
+				upstreamResolvers.Upstreams = append(upstreamResolvers.Upstreams, upstreamCopy)
 			}
 		}
+
 	}
 
 	if dns.Spec.UpstreamResolvers.Policy != "" {
@@ -236,4 +248,29 @@ func coreDNSLogLevel(dns *operatorv1.DNS) string {
 		return "class all"
 	}
 	return "class error"
+}
+
+func contains(upstreams []operatorv1.Upstream, upstream operatorv1.Upstream) bool {
+	for _, anUpstream := range upstreams {
+		if cmp.Equal(upstream, anUpstream, cmp.Comparer(cmpPort), cmp.Comparer(cmpAddress)) {
+			return true
+		}
+	}
+	return false
+}
+
+func cmpPort(a, b uint32) bool {
+	aVal := uint32(defaultDNSPort)
+	if a != 0 {
+		aVal = a
+	}
+	bVal := uint32(defaultDNSPort)
+	if b != 0 {
+		bVal = b
+	}
+	return aVal == bVal
+}
+
+func cmpAddress(a, b string) bool {
+	return strings.EqualFold(a, b)
 }

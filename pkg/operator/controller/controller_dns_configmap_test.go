@@ -724,6 +724,101 @@ foo.com:5353 {
 `,
 		},
 		{
+			name: "CR with duplicates in upstreamResolvers.upstreams should return coreFile without duplicates",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type: operatorv1.SystemResolveConfType,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1001:AAAA:BBBB:CCCC::2222",
+								Port:    5353,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1001:AAAA:BBBB:CCCC::2222",
+								Port:    5353,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "10.0.0.1",
+								Port:    53,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "10.0.0.1",
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1001:AAAA:BBBB:CCCC::2222",
+								Port:    5354,
+							},
+							{
+								Type: operatorv1.SystemResolveConfType,
+								Port: 53,
+							},
+						},
+						Policy: operatorv1.RandomForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf [1001:AAAA:BBBB:CCCC::2222]:5353 10.0.0.1:53 [1001:AAAA:BBBB:CCCC::2222]:5354 {
+        policy random
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
 			name: "CR with upstreamResolvers containing 1 SystemResolvConf NS and policy should return a coreFile with 1 upstream defined and that policy",
 			dns: &operatorv1.DNS{
 				ObjectMeta: metav1.ObjectMeta{
