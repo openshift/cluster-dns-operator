@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"text/template"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
@@ -206,9 +207,9 @@ func coreDNSResolver(upstream operatorv1.Upstream) (string, error) {
 			return "", errInvalidNetworkUpstream
 		}
 		if upstream.Port > 0 {
-			return net.JoinHostPort(upstream.Address, fmt.Sprintf("%d", upstream.Port)), nil
+			return net.JoinHostPort(strings.ToUpper(upstream.Address), fmt.Sprintf("%d", upstream.Port)), nil
 		} else {
-			return upstream.Address, nil
+			return strings.ToUpper(upstream.Address), nil
 		}
 	}
 	return resolvConf, nil
