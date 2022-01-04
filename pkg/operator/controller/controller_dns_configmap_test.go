@@ -366,7 +366,7 @@ func TestDesiredDNSConfigmapUpstreamResolvers(t *testing.T) {
 							},
 							{
 								Type:    operatorv1.NetworkResolverType,
-								Address: "6.4.3.2",
+								Address: "1001:AAAA:bbbb:cCcC::2222",
 								Port:    53,
 							},
 							{
@@ -423,7 +423,7 @@ foo.com:5353 {
         fallthrough in-addr.arpa ip6.arpa
     }
     prometheus 127.0.0.1:9153
-    forward . 1.2.3.4 9.8.7.6 6.4.3.2:53 2.3.4.5:5353 127.0.0.53 {
+    forward . 1.2.3.4 9.8.7.6 [1001:AAAA:BBBB:CCCC::2222]:53 2.3.4.5:5353 127.0.0.53 {
         policy round_robin
     }
     cache 900 {
@@ -1047,6 +1047,74 @@ foo.com:5353 {
     }
     prometheus 127.0.0.1:9153
     forward . /etc/resolv.conf {
+        policy random
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+`,
+		},
+		{
+			name: "CR with upstreamResolvers containing 1 Network IPv6 NS and policy should return coreFile with 1 upstream defined and that policy",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1001:AAAA:bbbb:cCcC::2222",
+							},
+						},
+						Policy: operatorv1.RandomForwardingPolicy,
+					},
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: `# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . 1001:AAAA:BBBB:CCCC::2222 {
         policy random
     }
     cache 900 {
