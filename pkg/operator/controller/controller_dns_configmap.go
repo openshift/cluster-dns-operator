@@ -252,11 +252,21 @@ func coreDNSLogLevel(dns *operatorv1.DNS) string {
 
 func contains(upstreams []operatorv1.Upstream, upstream operatorv1.Upstream) bool {
 	for _, anUpstream := range upstreams {
-		if cmp.Equal(upstream, anUpstream, cmp.Comparer(cmpPort), cmp.Comparer(cmpAddress)) {
+		if cmp.Equal(upstream, anUpstream, cmp.Comparer(cmpPort), cmp.Comparer(cmpAddress), cmp.Comparer(cmpUpstreamType)) {
 			return true
 		}
 	}
 	return false
+}
+
+func cmpUpstreamType(a, b operatorv1.UpstreamType) bool {
+	if a == "" {
+		a = operatorv1.SystemResolveConfType
+	}
+	if b == "" {
+		b = operatorv1.SystemResolveConfType
+	}
+	return a == b
 }
 
 func cmpPort(a, b uint32) bool {
