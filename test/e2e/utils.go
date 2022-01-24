@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 package e2e
@@ -162,7 +163,7 @@ func upstreamContainer(container, image string) corev1.Container {
 		Scheme: "HTTP",
 	}
 	healthProbe := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: getAction,
 		},
 		InitialDelaySeconds: int32(10),
