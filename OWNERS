@@ -10,6 +10,7 @@ approvers:
   - candita
   - rfredette
   - alebedev87
+  - gcs278
 reviewers:
   - ironcladlou
   - knobunc
@@ -22,4 +23,5 @@ reviewers:
   - candita
   - rfredette
   - alebedev87
+  - gcs278
 component: DNS
