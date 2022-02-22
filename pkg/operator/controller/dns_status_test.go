@@ -89,6 +89,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: appsv1.DaemonSetStatus{
 					DesiredNumberScheduled: tc.inputs.desireDNS,
 					NumberAvailable:        tc.inputs.availDNS,
+					UpdatedNumberScheduled: tc.inputs.availDNS,
 				},
 			}
 			dnsDaemonset.Spec.Template.Spec.NodeSelector = nodeSelectorForDNS(&operatorv1.DNS{})
@@ -373,6 +374,7 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: int32(desired),
 				NumberAvailable:        int32(available),
+				UpdatedNumberScheduled: int32(available),
 			},
 		}
 	}
