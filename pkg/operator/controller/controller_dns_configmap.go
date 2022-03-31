@@ -42,14 +42,14 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
     log . {
         {{$.LogLevel}}
     }
-    bufsize 512
+    bufsize 1232
     cache 900 {
         denial 9984 30
     }
 }
 {{end -}}
 .:5353 {
-    bufsize 512
+    bufsize 1232
     errors
     log . {
         {{.LogLevel}}
