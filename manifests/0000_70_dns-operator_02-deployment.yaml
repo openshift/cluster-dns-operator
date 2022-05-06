@@ -23,6 +23,11 @@ spec:
         kubernetes.io/os: linux
         node-role.kubernetes.io/master: ''
       restartPolicy: Always
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
       priorityClassName: system-cluster-critical
       serviceAccountName: dns-operator
       containers:
@@ -44,6 +49,11 @@ spec:
           requests:
             cpu: 10m
             memory: 29Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
       - name: kube-rbac-proxy
         image: quay.io/openshift/origin-kube-rbac-proxy:latest
         args:
@@ -60,6 +70,11 @@ spec:
           requests:
             cpu: 10m
             memory: 40Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - mountPath: /etc/tls/private
           name: metrics-tls

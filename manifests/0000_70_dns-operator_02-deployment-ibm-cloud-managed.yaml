@@ -36,6 +36,11 @@ spec:
           requests:
             cpu: 10m
             memory: 29Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         terminationMessagePolicy: FallbackToLogsOnError
       - args:
         - --logtostderr
@@ -53,6 +58,11 @@ spec:
           requests:
             cpu: 10m
             memory: 40Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - mountPath: /etc/tls/private
           name: metrics-tls
@@ -62,6 +72,11 @@ spec:
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical
       restartPolicy: Always
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: dns-operator
       terminationGracePeriodSeconds: 2
       tolerations:
