@@ -2,7 +2,6 @@ package controller
 
 import (
 	operatorv1 "github.com/openshift/api/operator/v1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -34,6 +33,12 @@ const (
 	ContainerNameOfDNSOperator = "dns-operator"
 
 	DeploymentNameOfDNSOperator = "dns-operator"
+
+	// GlobalUserSpecifiedConfigNamespace is the namespace for configuring OpenShift.
+	GlobalUserSpecifiedConfigNamespace = "openshift-config"
+
+	// caBundleFileName is the file name used for CA bundle.
+	caBundleFileName = "ca-bundle.crt"
 )
 
 // DNSClusterOperatorName returns the namespaced name of the ClusterOperator
@@ -89,6 +94,14 @@ func DNSConfigMapName(dns *operatorv1.DNS) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: "openshift-dns",
 		Name:      "dns-" + dns.Name,
+	}
+}
+
+// CABundleConfigMapName returns the namespaced name for the dns ca bundle config map.
+func CABundleConfigMapName(sourceName string) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: "openshift-dns",
+		Name:      "ca-" + sourceName,
 	}
 }
 

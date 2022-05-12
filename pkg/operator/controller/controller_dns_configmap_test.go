@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	v1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -129,12 +130,59 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 			},
 			expectedCoreFile: mustLoadTestFile(t, "trace_loglevel"),
 		},
+		{
+			name: "Check the expected DNS-over-TLS settings",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								TransportConfig: operatorv1.DNSTransportConfig{
+									Transport: operatorv1.TLSTransport,
+									TLS: &operatorv1.DNSOverTLSConfig{
+										ServerName: "dns.foo.com",
+									},
+								},
+								Policy: operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+						{
+							Name:  "bar",
+							Zones: []string{"bar.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								TransportConfig: operatorv1.DNSTransportConfig{
+									Transport: operatorv1.TLSTransport,
+									TLS: &operatorv1.DNSOverTLSConfig{
+										ServerName: "dns.bar.com",
+										CABundle: v1.ConfigMapNameReference{
+											Name: "cacerts",
+										},
+									},
+								},
+								Policy: operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "forwardplugin_tls"),
+		},
 	}
 
 	clusterDomain := "cluster.local"
+	cmMap := make(map[string]string)
+	cmMap["cacerts"] = "ca-cacerts-2"
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain); err != nil {
+			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain, cmMap); err != nil {
 				if !errors.Is(err, tc.expectedError) {
 					t.Errorf("Unexpected error : %v", err)
 				}
@@ -625,13 +673,170 @@ func TestDesiredDNSConfigmapUpstreamResolvers(t *testing.T) {
 			},
 			expectedCoreFile: mustLoadTestFile(t, "1ipv6_and_policy"),
 		},
+		{
+			name: "CR of TLS-enabled upstreamResolvers including system resolve config should fail",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type: operatorv1.SystemResolveConfType,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "9.8.7.6",
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1001:AAAA:bbbb:cCcC::2222",
+								Port:    53,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "2.3.4.5",
+								Port:    5353,
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "127.0.0.53",
+							},
+						},
+						Policy: operatorv1.RoundRobinForwardingPolicy,
+						TransportConfig: operatorv1.DNSTransportConfig{
+							Transport: operatorv1.TLSTransport,
+							TLS: &operatorv1.DNSOverTLSConfig{
+								ServerName: "example.com",
+							},
+						},
+					},
+				},
+			},
+			expectedError: errTransportTLSConfiguredForSysResConf,
+		},
+		{
+			name: "CR of TLS-enabled forwardPlugin including a non-ip should fail",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"non-ip", "2.2.2.2:5353"},
+								TransportConfig: operatorv1.DNSTransportConfig{
+									Transport: operatorv1.TLSTransport,
+									TLS: &operatorv1.DNSOverTLSConfig{
+										ServerName: "example.com",
+									},
+								},
+								Policy: operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedError: errTransportTLSConfiguredForNonIP,
+		},
+		{
+			name: "CR of TLS-enabled forwardPlugin including a non-ip with port should fail",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"non-ip:5353", "2.2.2.2:5353"},
+								TransportConfig: operatorv1.DNSTransportConfig{
+									Transport: operatorv1.TLSTransport,
+									TLS: &operatorv1.DNSOverTLSConfig{
+										ServerName: "example.com",
+									},
+								},
+								Policy: operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedError: errTransportTLSConfiguredForNonIP,
+		},
+		{
+			name: "CR of TLS-enabled forwardPlugin having no serverName should fail",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								TransportConfig: operatorv1.DNSTransportConfig{
+									Transport: operatorv1.TLSTransport,
+								},
+								Policy: operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+					},
+				},
+			},
+			expectedError: errTransportTLSConfiguredWithoutServerName,
+		},
+		{
+			name: "CR with upstreamResolvers using TLS defining a CA bundle should return a coreFile containing upstreams with TLS and CA bundle",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "9.8.7.6",
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1001:AAAA:bbbb:cCcC::2222",
+								Port:    53,
+							},
+						},
+						Policy: operatorv1.RoundRobinForwardingPolicy,
+						TransportConfig: operatorv1.DNSTransportConfig{
+							Transport: operatorv1.TLSTransport,
+							TLS: &operatorv1.DNSOverTLSConfig{
+								ServerName: "example.com",
+								CABundle: v1.ConfigMapNameReference{
+									Name: "ca-bundle-config",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "upstreamresolvers_with_cabundle"),
+		},
 	}
 
 	clusterDomain := "cluster.local"
+	cmMap := make(map[string]string)
+	cmMap["ca-bundle-config"] = "ca-ca-bundle-config-1"
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain); err != nil {
+			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain, cmMap); err != nil {
 				if !errors.Is(err, tc.expectedError) {
 					t.Errorf("Unexpected error : %v", err)
 				}

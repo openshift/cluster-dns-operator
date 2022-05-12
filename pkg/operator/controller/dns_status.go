@@ -141,6 +141,12 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 			messages = append(messages, fmt.Sprintf("Have %d available DNS pods, want %d.", have, want))
 		}
 
+		have = dnsDaemonset.Status.UpdatedNumberScheduled
+		want = dnsDaemonset.Status.DesiredNumberScheduled
+		if have != want {
+			messages = append(messages, fmt.Sprintf("Have %d up-to-date DNS pods, want %d.", have, want))
+		}
+
 		haveSelector := dnsDaemonset.Spec.Template.Spec.NodeSelector
 		wantSelector := nodeSelectorForDNS(dns)
 		if !reflect.DeepEqual(haveSelector, wantSelector) {

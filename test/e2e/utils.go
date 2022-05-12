@@ -308,6 +308,9 @@ func waitForClusterOperatorConditions(t *testing.T, cl client.Client, timeout ti
 }
 
 func waitForDNSConditions(t *testing.T, cl client.Client, timeout time.Duration, name types.NamespacedName, conditions ...operatorv1.OperatorCondition) error {
+	// successCount prevents not waiting for a case where DNS is updated but not yet started reporting progressing=true.
+	// Without this, waitForDNSConditions returns nil and DNS starts an update, so the next code relaying this function fails sporadically.
+	successCount := 0
 	return wait.PollImmediate(1*time.Second, timeout, func() (bool, error) {
 		dns := &operatorv1.DNS{}
 		if err := cl.Get(context.TODO(), name, dns); err != nil {
@@ -316,7 +319,15 @@ func waitForDNSConditions(t *testing.T, cl client.Client, timeout time.Duration,
 		}
 		expected := operatorConditionMap(conditions...)
 		current := operatorConditionMap(dns.Status.Conditions...)
-		return conditionsMatchExpected(expected, current), nil
+
+		if conditionsMatchExpected(expected, current) {
+			successCount++
+		}
+
+		if successCount > 3 {
+			return true, nil
+		}
+		return false, nil
 	})
 }
 

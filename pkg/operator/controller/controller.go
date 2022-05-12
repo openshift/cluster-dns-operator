@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -71,6 +72,19 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
 		return nil, err
 	}
+
+	caBundleCMToDNS := func(o client.Object) []reconcile.Request {
+		return []reconcile.Request{{DefaultDNSNamespaceName()}}
+	}
+	isInNS := func(namespace string) func(o client.Object) bool {
+		return func(o client.Object) bool {
+			return o.GetNamespace() == namespace
+		}
+	}
+	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, handler.EnqueueRequestsFromMapFunc(caBundleCMToDNS), predicate.NewPredicateFuncs(isInNS(GlobalUserSpecifiedConfigNamespace))); err != nil {
+		return nil, err
+	}
+
 	return c, nil
 }
 
@@ -386,7 +400,16 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 
 	errs := []error{}
 
-	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns)
+	if err := r.ensureCABundleConfigMaps(dns); err != nil {
+		errs = append(errs, fmt.Errorf("failed to create ca bundle configmaps for dns %s: %w", dns.Name, err))
+	}
+
+	cmMap, err := r.caBundleRevisionMap(dns)
+	if err != nil {
+		return fmt.Errorf("failed to generate ca bundle revision map: %w", err)
+	}
+
+	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns, cmMap)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
 	} else if !haveDNSDaemonset {
@@ -401,7 +424,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 			Controller: &trueVar,
 		}
 
-		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain); err != nil {
+		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain, cmMap); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
 		}
 		if haveSvc, svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
@@ -426,6 +449,43 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 	}
 
 	return utilerrors.NewAggregate(errs)
+}
+
+// caBundleRevisionMap generates a map of ca bundle configmaps with their resource versions
+// to be used in Corefile as the path of ca bundles and in daemonset volume mount path.
+// Resource version is appended to enable automatic reload of Corefile when there is a change
+// in the source ca bundle configmap (e.g. cert rotation). Apart from resource versions,
+// server name is also used in the path of ca bundles in case the same ca bundle configmap
+// is specified for two different servers.
+func (r *reconciler) caBundleRevisionMap(dns *operatorv1.DNS) (map[string]string, error) {
+	caBundleRevisions := map[string]string{}
+	transportConfig := dns.Spec.UpstreamResolvers.TransportConfig
+	if transportConfig.Transport == operatorv1.TLSTransport {
+		if transportConfig.TLS != nil && transportConfig.TLS.CABundle.Name != "" {
+			name := CABundleConfigMapName(transportConfig.TLS.CABundle.Name)
+			cm := &corev1.ConfigMap{}
+			if err := r.client.Get(context.TODO(), name, cm); err != nil {
+				return caBundleRevisions, err
+			}
+			caBundleRevisions[transportConfig.TLS.CABundle.Name] = fmt.Sprintf("%s-%s", cm.Name, cm.ResourceVersion)
+		}
+	}
+
+	for _, server := range dns.Spec.Servers {
+		transportConfig := server.ForwardPlugin.TransportConfig
+		if transportConfig.Transport == operatorv1.TLSTransport {
+			if transportConfig.TLS != nil && transportConfig.TLS.CABundle.Name != "" {
+				name := CABundleConfigMapName(transportConfig.TLS.CABundle.Name)
+				cm := &corev1.ConfigMap{}
+				if err := r.client.Get(context.TODO(), name, cm); err != nil {
+					return caBundleRevisions, err
+				}
+				caBundleRevisions[transportConfig.TLS.CABundle.Name] = fmt.Sprintf("%s-%s", cm.Name, cm.ResourceVersion)
+			}
+		}
+	}
+
+	return caBundleRevisions, nil
 }
 
 // getClusterIPFromNetworkConfig will return 10th IP from the service CIDR range
