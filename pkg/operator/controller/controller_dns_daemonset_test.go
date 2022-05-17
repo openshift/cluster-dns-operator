@@ -27,6 +27,14 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 		t.Errorf("invalid dns daemonset: %v", err)
 	} else {
 		// Validate the daemonset
+		expectedPodAnnotations := map[string]string{
+			"cluster-autoscaler.kubernetes.io/enable-ds-eviction": "true",
+		}
+		actualPodAnnotations := ds.Spec.Template.Annotations
+		expectedPodLabels := map[string]string{
+			"dns.operator.openshift.io/daemonset-dns": "default",
+		}
+		actualPodLabels := ds.Spec.Template.Labels
 		expectedNodeSelector := map[string]string{"kubernetes.io/os": "linux"}
 		actualNodeSelector := ds.Spec.Template.Spec.NodeSelector
 		if !reflect.DeepEqual(actualNodeSelector, expectedNodeSelector) {
@@ -37,6 +45,12 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 			Key:      "node-role.kubernetes.io/master",
 			Operator: corev1.TolerationOpExists,
 		}}
+		if !reflect.DeepEqual(actualPodAnnotations, expectedPodAnnotations) {
+			t.Errorf("unexpected pod annotations: expected %#v, got %#v", expectedPodAnnotations, actualPodAnnotations)
+		}
+		if !reflect.DeepEqual(actualPodLabels, expectedPodLabels) {
+			t.Errorf("unexpected pod labels: expected %#v, got %#v", expectedPodLabels, actualPodLabels)
+		}
 		if !reflect.DeepEqual(actualTolerations, expectedTolerations) {
 			t.Errorf("unexpected tolerations: expected %#v, got %#v", expectedTolerations, actualTolerations)
 		}
@@ -259,6 +273,26 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 						MaxUnavailable: pointerTo(intstr.FromString("10%")),
 					},
 				}
+			},
+			expect: true,
+		},
+		{
+			description: "if an arbitrary annotation is added",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				if daemonset.Spec.Template.Annotations == nil {
+					daemonset.Spec.Template.Annotations = map[string]string{}
+				}
+				daemonset.Spec.Template.Annotations["foo"] = "bar"
+			},
+			expect: false,
+		},
+		{
+			description: "if the enable-ds-eviction annotation is added",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				if daemonset.Spec.Template.Annotations == nil {
+					daemonset.Spec.Template.Annotations = map[string]string{}
+				}
+				daemonset.Spec.Template.Annotations["cluster-autoscaler.kubernetes.io/enable-ds-eviction"] = "true"
 			},
 			expect: true,
 		},
