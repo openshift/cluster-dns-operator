@@ -793,6 +793,74 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	}
 }
 
+func TestDNSOverTLSToleratesMissingSourceCM(t *testing.T) {
+	cl, err := getClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that DNS is stable before starting the test.
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
+	// Update cluster DNS forwarding with the missing configmap.
+	defaultDNS := &operatorv1.DNS{}
+	if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DefaultDNSController}, defaultDNS); err != nil {
+		t.Fatalf("failed to get default dns: %v", err)
+	}
+
+	upstream := operatorv1.Server{
+		Name:  "test",
+		Zones: []string{"tls.com"},
+		ForwardPlugin: operatorv1.ForwardPlugin{
+			TransportConfig: operatorv1.DNSTransportConfig{
+				Transport: operatorv1.TLSTransport,
+				TLS: &operatorv1.DNSOverTLSConfig{
+					ServerName: "dns.tls.com",
+					CABundle:   configv1.ConfigMapNameReference{Name: "missing-cm"},
+				},
+			},
+			Upstreams: []string{"1.1.1.1"},
+		},
+	}
+
+	defaultDNS.Spec.Servers = []operatorv1.Server{upstream}
+	if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+		t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+	}
+	t.Cleanup(func() {
+		defaultDNS = &operatorv1.DNS{}
+		if err := cl.Get(context.TODO(), types.NamespacedName{Name: "default"}, defaultDNS); err != nil {
+			t.Fatalf("failed to get default dns: %v", err)
+		}
+		if len(defaultDNS.Spec.Servers) != 0 {
+			// dnses.operator/default has a nil spec by default.
+			defaultDNS.Spec = operatorv1.DNSSpec{}
+			if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+				t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+			}
+		}
+	})
+
+	// Verify that default DNS pods are all available before inspecting them.
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
+	dnsOperatorPods, err := getClusterDNSOperatorPods(cl)
+	if err != nil {
+		t.Errorf("unable to get operator pods: #{err}")
+	}
+
+	for _, dnsOperatorPod := range dnsOperatorPods.Items {
+		if err := lookForStringInPodLog(operatorcontroller.DefaultOperatorNamespace, dnsOperatorPod.Name, operatorcontroller.ContainerNameOfDNSOperator, "level=info", 30*time.Second); err != nil {
+			t.Fatal("source ca bundle config map")
+		}
+	}
+
+}
+
 func TestDNSLogging(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
@@ -1191,4 +1259,22 @@ func upstreamTLSPod(name, ns, image string, configMap *corev1.ConfigMap) *corev1
 			Containers: []corev1.Container{coreContainer},
 		},
 	}
+}
+
+func getClusterDNSOperatorPods(cl client.Client) (*corev1.PodList, error) {
+	dnsOperatorDeployment := &appsv1.Deployment{}
+	if err := cl.Get(context.TODO(), operatorcontroller.DefaultDNSOperatorDeploymentName(), dnsOperatorDeployment); err != nil {
+		return nil, fmt.Errorf("failed to get deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
+	}
+	operatorSelector, err := metav1.LabelSelectorAsSelector(dnsOperatorDeployment.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("daemonset %s/%s has invalid spec.selector: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
+	}
+
+	dnsOperatorPods := &corev1.PodList{}
+	if err := cl.List(context.TODO(), dnsOperatorPods, client.MatchingLabelsSelector{Selector: operatorSelector}, client.InNamespace(dnsOperatorDeployment.Namespace)); err != nil {
+		return nil, fmt.Errorf("failed to list pods for dns deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
+	}
+
+	return dnsOperatorPods, nil
 }

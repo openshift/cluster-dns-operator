@@ -406,10 +406,13 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.R
 		errs = append(errs, fmt.Errorf("failed to create ca bundle configmaps for dns %s: %w", dns.Name, err))
 	}
 
-	cmMap, err := r.caBundleRevisionMap(dns)
-	if err != nil {
-		return fmt.Errorf("failed to generate ca bundle revision map: %w", err)
-	}
+	// cmMap is a map of ca bundle configmaps' names and their resource versions used in
+	// the calculation of the path of ca bundles in Corefile and volume mount path in daemonset.
+	// When the map is empty or missing a configmap because it is not found on the cluster,
+	// the operator will print a warning, and it will not specify a path in Corefile for this configmap
+	// which will lead to the default behavior of using the system certificates.
+	// Also, the operator will not add a volume to daemonset for this configmap.
+	cmMap := r.caBundleRevisionMap(dns)
 
 	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns, cmMap)
 	if err != nil {
@@ -461,17 +464,19 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.R
 // in the source ca bundle configmap (e.g. cert rotation). Apart from resource versions,
 // server name is also used in the path of ca bundles in case the same ca bundle configmap
 // is specified for two different servers.
-func (r *reconciler) caBundleRevisionMap(dns *operatorv1.DNS) (map[string]string, error) {
+func (r *reconciler) caBundleRevisionMap(dns *operatorv1.DNS) map[string]string {
 	caBundleRevisions := map[string]string{}
 	transportConfig := dns.Spec.UpstreamResolvers.TransportConfig
 	if transportConfig.Transport == operatorv1.TLSTransport {
 		if transportConfig.TLS != nil && transportConfig.TLS.CABundle.Name != "" {
 			name := CABundleConfigMapName(transportConfig.TLS.CABundle.Name)
 			cm := &corev1.ConfigMap{}
-			if err := r.client.Get(context.TODO(), name, cm); err != nil {
-				return caBundleRevisions, err
+			err := r.client.Get(context.TODO(), name, cm)
+			if err != nil {
+				logrus.Warningf("failed to get destination ca bundle configmap %s: %v", name.Name, err)
+			} else {
+				caBundleRevisions[transportConfig.TLS.CABundle.Name] = fmt.Sprintf("%s-%s", cm.Name, cm.ResourceVersion)
 			}
-			caBundleRevisions[transportConfig.TLS.CABundle.Name] = fmt.Sprintf("%s-%s", cm.Name, cm.ResourceVersion)
 		}
 	}
 
@@ -481,15 +486,17 @@ func (r *reconciler) caBundleRevisionMap(dns *operatorv1.DNS) (map[string]string
 			if transportConfig.TLS != nil && transportConfig.TLS.CABundle.Name != "" {
 				name := CABundleConfigMapName(transportConfig.TLS.CABundle.Name)
 				cm := &corev1.ConfigMap{}
-				if err := r.client.Get(context.TODO(), name, cm); err != nil {
-					return caBundleRevisions, err
+				err := r.client.Get(context.TODO(), name, cm)
+				if err != nil {
+					logrus.Warningf("failed to get destination ca bundle configmap %s: %v", name.Name, err)
+				} else {
+					caBundleRevisions[transportConfig.TLS.CABundle.Name] = fmt.Sprintf("%s-%s", cm.Name, cm.ResourceVersion)
 				}
-				caBundleRevisions[transportConfig.TLS.CABundle.Name] = fmt.Sprintf("%s-%s", cm.Name, cm.ResourceVersion)
 			}
 		}
 	}
 
-	return caBundleRevisions, nil
+	return caBundleRevisions
 }
 
 // getClusterIPFromNetworkConfig will return 10th IP from the service CIDR range

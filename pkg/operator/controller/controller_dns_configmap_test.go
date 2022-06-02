@@ -828,6 +828,40 @@ func TestDesiredDNSConfigmapUpstreamResolvers(t *testing.T) {
 			},
 			expectedCoreFile: mustLoadTestFile(t, "upstreamresolvers_with_cabundle"),
 		},
+		{
+			name: "CR with upstreamResolvers using TLS defining a non-existing CA bundle should return a coreFile containing upstreams with TLS and no CA bundle",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "9.8.7.6",
+							},
+							{
+								Type:    operatorv1.NetworkResolverType,
+								Address: "1001:AAAA:bbbb:cCcC::2222",
+								Port:    53,
+							},
+						},
+						Policy: operatorv1.RoundRobinForwardingPolicy,
+						TransportConfig: operatorv1.DNSTransportConfig{
+							Transport: operatorv1.TLSTransport,
+							TLS: &operatorv1.DNSOverTLSConfig{
+								ServerName: "example.com",
+								CABundle: v1.ConfigMapNameReference{
+									Name: "ca-bundle-config-2",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "tls_with_non_existing_cabundle"),
+		},
 	}
 
 	clusterDomain := "cluster.local"

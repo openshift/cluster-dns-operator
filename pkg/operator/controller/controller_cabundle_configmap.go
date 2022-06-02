@@ -64,14 +64,18 @@ func (r *reconciler) ensureCABundleConfigMaps(dns *operatorv1.DNS) error {
 		}
 		haveSource, source, err := r.currentCABundleConfigMap(sourceName)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to get source ca bundle config map %s: %w", sourceName.Name, err))
+			errs = append(errs, fmt.Errorf("failed to get source ca bundle configmap %s: %w", sourceName.Name, err))
+			continue
+		}
+		if !haveSource {
+			logrus.Warningf("source ca bundle configmap %s does not exist", sourceName.Name)
 			continue
 		}
 
 		destName := CABundleConfigMapName(source.Name)
 		have, current, err := r.currentCABundleConfigMap(destName)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to get destination ca bundle config map %s: %w", destName.Name, err))
+			errs = append(errs, fmt.Errorf("failed to get destination ca bundle configmap %s: %w", destName.Name, err))
 			continue
 		}
 

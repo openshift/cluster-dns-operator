@@ -40,7 +40,7 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         {{- with $tls := .TransportConfig.TLS }}
         {{- with $serverName := $tls.ServerName }}
         tls_servername {{$serverName}}
-        tls {{- with $cm := $tls.CABundle.Name}} /etc/pki/{{$serverName}}-{{ index $.CABundleRevisionMap $cm }}/{{ $.CABundleFileName }}{{end}}
+        tls {{- with $.CABundleRevisionMap }}{{- with $cm := (index $.CABundleRevisionMap $tls.CABundle.Name) }} /etc/pki/{{$serverName}}-{{ $cm }}/{{ $.CABundleFileName }}{{end}}{{end}}
         {{- end}}
         {{- end}}
         policy {{ CoreDNSForwardingPolicy .Policy }}
@@ -76,7 +76,7 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         {{- with $tls := .TransportConfig.TLS }}
         {{- with $serverName := $tls.ServerName }}
         tls_servername {{$serverName}}
-        tls {{- with $cm := $tls.CABundle.Name}} /etc/pki/{{$serverName}}-{{ index $.CABundleRevisionMap $cm }}/{{ $.CABundleFileName }}{{end}}
+        tls {{- with $.CABundleRevisionMap }}{{- with $cm := (index $.CABundleRevisionMap $tls.CABundle.Name) }} /etc/pki/{{$serverName}}-{{ $cm }}/{{ $.CABundleFileName }}{{end}}{{end}}
         {{- end}}
         {{- end}}
         policy {{ CoreDNSForwardingPolicy .Policy }}
