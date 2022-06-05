@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -16,6 +17,26 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	// servingCertAnnotationKey is the annotation key to request
+	// a certificate/key pair from the serving cert signer.
+	servingCertAnnotationKey = "service.beta.openshift.io/serving-cert-secret-name"
+
+	// topologyAwareHintsAnnotationKey is the annotation key to enable topology aware hints
+	// on a service to prefer keeping traffic within a zone.
+	// For docs see: https://kubernetes.io/docs/concepts/services-networking/topology-aware-hints/
+	topologyAwareHintsAnnotationKey = "service.kubernetes.io/topology-aware-hints"
+)
+
+var (
+	// managedDNSServiceAnnotations is the set of keys for annotations that
+	// the operator manages for the DNS service.
+	managedDNSServiceAnnotations = sets.NewString(
+		servingCertAnnotationKey,
+		topologyAwareHintsAnnotationKey,
+	)
 )
 
 // ensureDNSService ensures that a service exists for a given DNS.
@@ -64,7 +85,8 @@ func desiredDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav
 	s.SetOwnerReferences([]metav1.OwnerReference{dnsOwnerRef(dns)})
 
 	s.Annotations = map[string]string{
-		MetricsServingCertAnnotation: DNSMetricsSecretName(dns),
+		MetricsServingCertAnnotation:    DNSMetricsSecretName(dns),
+		topologyAwareHintsAnnotationKey: "auto",
 	}
 
 	s.Labels = map[string]string{
@@ -95,6 +117,11 @@ func (r *reconciler) updateDNSService(current, desired *corev1.Service) (bool, e
 }
 
 func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
+	annotationCmpOpts := []cmp.Option{
+		cmpopts.IgnoreMapEntries(func(k, _ string) bool {
+			return !managedDNSServiceAnnotations.Has(k)
+		}),
+	}
 	serviceCmpOpts := []cmp.Option{
 		// Ignore fields that the API, other controllers, or user may
 		// have modified.
@@ -109,18 +136,32 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 		cmpopts.EquateEmpty(),
 	}
 
-	servingCertAnnotationKey := "service.beta.openshift.io/serving-cert-secret-name"
-	currentServingCertAnnotation := current.ObjectMeta.Annotations[servingCertAnnotationKey]
-	expectedServingCertAnnotation := expected.ObjectMeta.Annotations[servingCertAnnotationKey]
-	annotationMatches := currentServingCertAnnotation == expectedServingCertAnnotation
-
-	if cmp.Equal(current.Spec, expected.Spec, serviceCmpOpts...) && annotationMatches {
+	currentAnnotations := current.Annotations
+	if currentAnnotations == nil {
+		currentAnnotations = map[string]string{}
+	}
+	expectedAnnotations := expected.Annotations
+	if expectedAnnotations == nil {
+		expectedAnnotations = map[string]string{}
+	}
+	if cmp.Equal(current.Spec, expected.Spec, serviceCmpOpts...) && cmp.Equal(currentAnnotations, expectedAnnotations, annotationCmpOpts...) {
 		return false, nil
 	}
 
 	updated := current.DeepCopy()
 	updated.Spec = expected.Spec
-	updated.ObjectMeta.Annotations = expected.ObjectMeta.Annotations
+	if updated.Annotations == nil {
+		updated.Annotations = map[string]string{}
+	}
+	for k := range managedDNSServiceAnnotations {
+		currentVal, have := current.Annotations[k]
+		expectedVal, want := expected.Annotations[k]
+		if want && (!have || currentVal != expectedVal) {
+			updated.Annotations[k] = expected.Annotations[k]
+		} else if have && !want {
+			delete(updated.Annotations, k)
+		}
+	}
 
 	// Preserve fields that the API, other controllers, or user may have
 	// modified.
