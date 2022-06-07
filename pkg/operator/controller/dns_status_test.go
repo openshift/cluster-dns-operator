@@ -3,24 +3,23 @@ package controller
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestDNSStatusConditions(t *testing.T) {
 	type testIn struct {
-		haveClusterIP                   bool
-		haveDNS                         bool
-		availDNS, desireDNS, updatedDNS int32
-		haveNR                          bool
-		availNR, desireNR               int32
-		managementState                 operatorv1.ManagementState
+		haveClusterIP       bool
+		haveDNS             bool
+		availDNS, desireDNS int32
+		haveNR              bool
+		availNR, desireNR   int32
+		managementState     operatorv1.ManagementState
 	}
 	type testOut struct {
 		degraded, progressing, available, upgradeable bool
@@ -29,40 +28,39 @@ func TestDNSStatusConditions(t *testing.T) {
 		inputs  testIn
 		outputs testOut
 	}{
-		{testIn{false, false, 0, 0, 0, false, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 0, 0, 0, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 0, 0, 0, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 0, 2, 0, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 0, 2, 0, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 1, 2, 1, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 0, 2, 0, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 1, 2, 1, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 1, 2, 1, true, 2, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 2, 2, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{false, true, 2, 2, 2, true, 2, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{true, true, 0, 0, 0, true, 0, 0, operatorv1.Managed}, testOut{true, false, false, true}},
-		{testIn{true, true, 0, 0, 0, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{true, true, 0, 2, 0, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{true, true, 0, 2, 0, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{true, true, 0, 2, 0, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{true, true, 1, 2, 1, true, 0, 2, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 1, 2, 1, true, 1, 2, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 1, 2, 1, true, 2, 2, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 2, true, 0, 2, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 2, true, 2, 2, operatorv1.Managed}, testOut{false, false, true, true}},
-		{testIn{true, true, 1, 3, 1, true, 3, 3, operatorv1.Managed}, testOut{true, true, true, true}},
-		{testIn{true, true, 3, 3, 3, true, 0, 3, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 3, 2, true, 3, 3, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 0, 1, 0, true, 0, 1, operatorv1.Managed}, testOut{true, true, false, true}},
-		{testIn{true, true, 0, 0, 0, true, 0, 2, operatorv1.Unmanaged}, testOut{true, true, false, false}},
-		{testIn{true, true, 1, 3, 1, true, 3, 3, operatorv1.Unmanaged}, testOut{true, true, true, false}},
-		{testIn{true, true, 2, 2, 2, true, 0, 2, operatorv1.Unmanaged}, testOut{false, true, true, false}},
-		{testIn{true, true, 2, 2, 2, true, 2, 2, operatorv1.Unmanaged}, testOut{false, false, true, false}},
-		{testIn{true, true, 0, 0, 0, true, 0, 2, operatorv1.ManagementState("")}, testOut{true, true, false, true}},
-		{testIn{true, true, 1, 3, 1, true, 3, 3, operatorv1.ManagementState("")}, testOut{true, true, true, true}},
-		{testIn{true, true, 2, 2, 2, true, 0, 2, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 1, true, 2, 2, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 2, true, 2, 2, operatorv1.ManagementState("")}, testOut{false, false, true, true}},
+		{testIn{false, false, 0, 0, false, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 0, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 0, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 2, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 2, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 1, 2, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 0, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 1, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 1, 2, true, 2, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 2, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{false, true, 2, 2, true, 2, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 0, true, 0, 0, operatorv1.Managed}, testOut{true, false, false, true}},
+		{testIn{true, true, 0, 0, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 2, true, 0, 0, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 2, true, 0, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 2, true, 1, 2, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 1, 2, true, 0, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 1, 2, true, 1, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 1, 2, true, 2, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 2, true, 0, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 2, true, 2, 2, operatorv1.Managed}, testOut{false, false, true, true}},
+		{testIn{true, true, 1, 3, true, 3, 3, operatorv1.Managed}, testOut{true, true, true, true}},
+		{testIn{true, true, 3, 3, true, 0, 3, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 3, true, 3, 3, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 0, 1, true, 0, 1, operatorv1.Managed}, testOut{true, true, false, true}},
+		{testIn{true, true, 0, 0, true, 0, 2, operatorv1.Unmanaged}, testOut{true, true, false, false}},
+		{testIn{true, true, 1, 3, true, 3, 3, operatorv1.Unmanaged}, testOut{true, true, true, false}},
+		{testIn{true, true, 2, 2, true, 0, 2, operatorv1.Unmanaged}, testOut{false, true, true, false}},
+		{testIn{true, true, 2, 2, true, 2, 2, operatorv1.Unmanaged}, testOut{false, false, true, false}},
+		{testIn{true, true, 0, 0, true, 0, 2, operatorv1.ManagementState("")}, testOut{true, true, false, true}},
+		{testIn{true, true, 1, 3, true, 3, 3, operatorv1.ManagementState("")}, testOut{true, true, true, true}},
+		{testIn{true, true, 2, 2, true, 0, 2, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 2, true, 2, 2, operatorv1.ManagementState("")}, testOut{false, false, true, true}},
 	}
 
 	for i, tc := range testCases {
@@ -91,7 +89,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: appsv1.DaemonSetStatus{
 					DesiredNumberScheduled: tc.inputs.desireDNS,
 					NumberAvailable:        tc.inputs.availDNS,
-					UpdatedNumberScheduled: tc.inputs.updatedDNS,
+					UpdatedNumberScheduled: tc.inputs.availDNS,
 				},
 			}
 			dnsDaemonset.Spec.Template.Spec.NodeSelector = nodeSelectorForDNS(&operatorv1.DNS{})
@@ -155,7 +153,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: upgradeable,
 			},
 		}
-		actual := computeDNSStatusConditions(&dns, clusterIP, tc.inputs.haveDNS, dnsDaemonset, tc.inputs.haveNR, nodeResolverDaemonset, 0)
+		actual := computeDNSStatusConditions(&dns, clusterIP, tc.inputs.haveDNS, dnsDaemonset, tc.inputs.haveNR, nodeResolverDaemonset)
 		gotExpected := true
 		if len(actual) != len(expected) {
 			gotExpected = false
@@ -348,7 +346,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			Type:   operatorv1.OperatorStatusTypeDegraded,
 			Status: operatorv1.ConditionUnknown,
 		}
-		actual := computeDNSDegradedCondition(oldCondition, tc.clusterIP, true, tc.dnsDaemonset, 0, time.Time{})
+		actual := computeDNSDegradedCondition(oldCondition, tc.clusterIP, true, tc.dnsDaemonset)
 		if actual.Status != tc.expected {
 			t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
 		}
@@ -358,7 +356,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 // TestComputeDNSProgressingCondition verifies the
 // computeDNSProgressingCondition has the expected behavior.
 func TestComputeDNSProgressingCondition(t *testing.T) {
-	makeDaemonSet := func(desired, available, updated int, maxUnavailable intstr.IntOrString, nodeSelector map[string]string, tolerations []corev1.Toleration) *appsv1.DaemonSet {
+	makeDaemonSet := func(desired, available int, maxUnavailable intstr.IntOrString, nodeSelector map[string]string, tolerations []corev1.Toleration) *appsv1.DaemonSet {
 		return &appsv1.DaemonSet{
 			Spec: appsv1.DaemonSetSpec{
 				Template: corev1.PodTemplateSpec{
@@ -376,7 +374,7 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: int32(desired),
 				NumberAvailable:        int32(available),
-				UpdatedNumberScheduled: int32(updated),
+				UpdatedNumberScheduled: int32(available),
 			},
 		}
 	}
@@ -400,8 +398,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "no clusterIP",
 			clusterIP:    "",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -409,8 +407,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "0 desired",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(0, 0, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(0, 0, 0, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(0, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(0, 0, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionFalse,
@@ -418,8 +416,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "0/6 available DNS pods with MaxUnavailable 10%",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 0, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -427,8 +425,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods and 5/6 node-resolver pods available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 5, 5, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 5, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -436,8 +434,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods and 6/6 node-resolver pods available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionFalse,
@@ -445,8 +443,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods with custom node selector and tolerations",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), customSelector, customTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), customSelector, customTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: customSelector,
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionFalse,
@@ -454,8 +452,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "5/6 available with invalid MaxUnavailable",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 5, 5, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 5, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -463,8 +461,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 available with invalid MaxUnavailable",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionFalse,
@@ -472,8 +470,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods missing default node selector",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), emptySelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), emptySelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -481,8 +479,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods missing default tolerations",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, emptyTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -490,8 +488,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods missing custom node selector",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, customTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), defaultSelector, customTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: customSelector,
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -499,17 +497,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods missing custom tolerations",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), customSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
-			nodeSelector: customSelector,
-			tolerations:  customTolerations,
-			expected:     operatorv1.ConditionTrue,
-		},
-		{
-			name:         "6/6 DNS pods with 5 up-to-date",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 5, intstr.FromString("10%"), customSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%"), customSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
 			nodeSelector: customSelector,
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -532,142 +521,10 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 				Conditions: []operatorv1.OperatorCondition{oldCondition},
 			},
 		}
-		actual := computeDNSProgressingCondition(&oldCondition, dns, tc.clusterIP, true, tc.dnsDaemonset, true, tc.nrDaemonset, 0, time.Time{})
+		actual := computeDNSProgressingCondition(&oldCondition, dns, tc.clusterIP, true, tc.dnsDaemonset, true, tc.nrDaemonset)
 		if actual.Status != tc.expected {
 			t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
 		}
-	}
-}
-
-func TestSkippingStatusUpdates(t *testing.T) {
-	makeDaemonSet := func(desired, available, updated int, maxUnavailable intstr.IntOrString) *appsv1.DaemonSet {
-		return &appsv1.DaemonSet{
-			Spec: appsv1.DaemonSetSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						NodeSelector: nodeSelectorForDNS(&operatorv1.DNS{}),
-						Tolerations:  tolerationsForDNS(&operatorv1.DNS{}),
-					},
-				},
-				UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
-					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-						MaxUnavailable: &maxUnavailable,
-					},
-				},
-			},
-			Status: appsv1.DaemonSetStatus{
-				DesiredNumberScheduled: int32(desired),
-				NumberAvailable:        int32(available),
-				UpdatedNumberScheduled: int32(updated),
-			},
-		}
-	}
-	testCases := []struct {
-		name         string
-		clusterIP    string
-		oldCondition operatorv1.OperatorCondition
-		currentTime  time.Time
-		toleration   time.Duration
-		expected     operatorv1.ConditionStatus
-	}{
-		{
-			name:      "there is a clusterIP, and time toleration doesn't matter, should return Progressing=ConditionFalse",
-			clusterIP: "1.2.3.4",
-			oldCondition: operatorv1.OperatorCondition{
-				Type:   operatorv1.OperatorStatusTypeProgressing,
-				Status: operatorv1.ConditionFalse,
-			},
-			expected: operatorv1.ConditionFalse,
-		},
-		{
-			name:      "no clusterIP, should return Progressing=ConditionTrue",
-			clusterIP: "",
-			oldCondition: operatorv1.OperatorCondition{
-				Type:               operatorv1.OperatorStatusTypeProgressing,
-				Status:             operatorv1.ConditionFalse,
-				LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 19, 1, 10, 44, 0, time.UTC)),
-			},
-			currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 50, 0, time.UTC),
-			// last-curr = 6s, tolerate 5s, so shouldn't prevent the flap.
-			toleration: 5 * time.Second,
-			expected:   operatorv1.ConditionTrue,
-		},
-		{
-			name:      "no clusterIP, would return Progressing=ConditionTrue, but Progressing was set to false within tolerated duration, so returns Progressing=ConditionFalse",
-			clusterIP: "",
-			oldCondition: operatorv1.OperatorCondition{
-				Type:               operatorv1.OperatorStatusTypeProgressing,
-				Status:             operatorv1.ConditionFalse,
-				LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 19, 1, 0, 0, 0, time.UTC)),
-			},
-			currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 0, 0, time.UTC),
-			// last-curr = 10m, tolerate 1h, so should prevent the flap.
-			toleration: 1 * time.Hour,
-			expected:   operatorv1.ConditionFalse,
-		},
-		{
-			name:      "there is a clusterIP, and time toleration doesn't matter, should return Degraded=ConditionFalse",
-			clusterIP: "1.2.3.4",
-			oldCondition: operatorv1.OperatorCondition{
-				Type:   operatorv1.OperatorStatusTypeDegraded,
-				Status: operatorv1.ConditionFalse,
-			},
-			expected: operatorv1.ConditionFalse,
-		},
-		{
-			name:      "no clusterIP, should return Degraded=ConditionTrue",
-			clusterIP: "",
-			oldCondition: operatorv1.OperatorCondition{
-				Type:               operatorv1.OperatorStatusTypeDegraded,
-				Status:             operatorv1.ConditionFalse,
-				LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 12, 1, 10, 50, 0, time.UTC)),
-			},
-			currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 50, 0, time.UTC),
-			// last-curr = 1w, tolerate 5s, so shouldn't prevent the flap.
-			toleration: 5 * time.Second,
-			expected:   operatorv1.ConditionTrue,
-		},
-		{
-			name:      "no clusterIP, would return Progressing=ConditionTrue, but Degraded was set to false within tolerated duration, so returns Progressing=ConditionFalse",
-			clusterIP: "",
-			oldCondition: operatorv1.OperatorCondition{
-				Type:               operatorv1.OperatorStatusTypeDegraded,
-				Status:             operatorv1.ConditionFalse,
-				LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 19, 1, 9, 50, 0, time.UTC)),
-			},
-			currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 50, 0, time.UTC),
-			// last-curr = 1m, tolerate 1m, so should prevent the flap.
-			toleration: 1 * time.Minute,
-			expected:   operatorv1.ConditionFalse,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			dns := &operatorv1.DNS{
-				Spec: operatorv1.DNSSpec{
-					NodePlacement: operatorv1.DNSNodePlacement{
-						NodeSelector: nodeSelectorForDNS(&operatorv1.DNS{}),
-						Tolerations:  tolerationsForDNS(&operatorv1.DNS{}),
-					},
-				},
-				Status: operatorv1.DNSStatus{
-					Conditions: []operatorv1.OperatorCondition{tc.oldCondition},
-				},
-			}
-			dnsDaemonset := makeDaemonSet(6, 6, 6, intstr.FromString("10%"))
-			nrDaemonset := makeDaemonSet(6, 6, 6, intstr.FromString("33%"))
-			var actual operatorv1.OperatorCondition
-			if tc.oldCondition.Type == operatorv1.OperatorStatusTypeProgressing {
-				actual = computeDNSProgressingCondition(&tc.oldCondition, dns, tc.clusterIP, true, dnsDaemonset, true, nrDaemonset, tc.toleration, tc.currentTime)
-			} else if tc.oldCondition.Type == operatorv1.OperatorStatusTypeDegraded {
-				actual = computeDNSDegradedCondition(&tc.oldCondition, tc.clusterIP, true, dnsDaemonset, tc.toleration, tc.currentTime)
-			} else {
-				t.Fatalf("Unknown condition type: %s", tc.oldCondition.Type)
-			}
-			if actual.Status != tc.expected {
-				t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
-			}
-		})
 	}
 }
 
@@ -830,88 +687,5 @@ func TestDNSStatusesEqual(t *testing.T) {
 		if actual := dnsStatusesEqual(tc.a, tc.b); actual != tc.expected {
 			t.Fatalf("%q: expected %v, got %v", tc.description, tc.expected, actual)
 		}
-	}
-}
-
-func TestTransitionTimeIsRecent(t *testing.T) {
-	testCases := []struct {
-		description string
-		currTime    time.Time
-		prevTime    time.Time
-		toleration  time.Duration
-		isRecent    bool
-	}{
-		{
-			description: "recent: because elapsed time is exactly 0s",
-			currTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 0, time.UTC),
-			prevTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 0, time.UTC),
-			toleration:  0 * time.Second,
-			isRecent:    true,
-		},
-		{
-			description: "not recent: because toleration is negative",
-			currTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 0, time.UTC),
-			prevTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 0, time.UTC),
-			toleration:  -1 * time.Second,
-			isRecent:    false,
-		},
-		{
-			description: "not recent: elapsed time 10s but will only tolerate 9s",
-			currTime:    time.Date(2022, time.Month(5), 19, 1, 10, 20, 0, time.UTC),
-			prevTime:    time.Date(2022, time.Month(5), 19, 1, 10, 10, 0, time.UTC),
-			toleration:  9 * time.Second,
-			isRecent:    false,
-		},
-		{
-			description: "recent: elapsed time 9s and will tolerate 9s",
-			currTime:    time.Date(2022, time.Month(5), 19, 1, 10, 20, 0, time.UTC),
-			prevTime:    time.Date(2022, time.Month(5), 19, 1, 10, 11, 0, time.UTC),
-			toleration:  9 * time.Second,
-			isRecent:    true,
-		},
-		{
-			description: "recent: elapsed time is 0s 2ns and will tolerate 2ns",
-			currTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 2, time.UTC),
-			prevTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 0, time.UTC),
-			toleration:  2 * time.Nanosecond,
-			isRecent:    true,
-		},
-		{
-			description: "not recent: elapsed time is 0s 2ns but will only tolerate 1ns",
-			currTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 2, time.UTC),
-			prevTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 0, time.UTC),
-			toleration:  1 * time.Nanosecond,
-			isRecent:    false,
-		},
-		{
-			description: "recent: elapsed time is 1h and will tolerate 60 mins",
-			currTime:    time.Date(2022, time.Month(5), 19, 2, 10, 00, 0, time.UTC),
-			prevTime:    time.Date(2022, time.Month(5), 19, 1, 10, 00, 0, time.UTC),
-			toleration:  1 * time.Hour,
-			isRecent:    true,
-		},
-		{
-			description: "not recent: currTime is before lastTime",
-			currTime:    time.Date(2022, time.Month(4), 19, 1, 10, 42, 0, time.UTC),
-			prevTime:    time.Date(2022, time.Month(5), 19, 1, 10, 20, 0, time.UTC),
-			toleration:  lameDuckDuration,
-			isRecent:    false,
-		},
-		{
-			description: "not recent: a month ago",
-			currTime:    time.Date(2022, time.Month(5), 19, 1, 10, 42, 0, time.UTC),
-			prevTime:    time.Date(2022, time.Month(4), 19, 1, 10, 20, 0, time.UTC),
-			toleration:  lameDuckDuration,
-			isRecent:    false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.description, func(t *testing.T) {
-			actual := lastTransitionTimeIsRecent(tc.currTime, tc.prevTime, tc.toleration)
-			if actual != tc.isRecent {
-				t.Errorf("expected to be %v, got %v", tc.isRecent, actual)
-			}
-		})
 	}
 }

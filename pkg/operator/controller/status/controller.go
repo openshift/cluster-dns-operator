@@ -43,7 +43,7 @@ const (
 	UnknownVersionValue = "unknown"
 	controllerName      = "status_controller"
 
-	dnsEqualConditionMessage = "Desired and current number of DNSes are equal"
+	dnsEqualConditionMessage = "desired and current number of DNSes are equal"
 )
 
 // clock is to enable unit testing

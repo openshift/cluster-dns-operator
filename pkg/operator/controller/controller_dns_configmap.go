@@ -7,7 +7,6 @@ import (
 	"net"
 	"strings"
 	"text/template"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -23,7 +22,6 @@ import (
 
 const resolvConf = "/etc/resolv.conf"
 const defaultDNSPort = 53
-const lameDuckDuration = 20 * time.Second
 
 var errInvalidNetworkUpstream = fmt.Errorf("The address field is mandatory for upstream of type Network, but was not provided")
 var errTransportTLSConfiguredWithoutServerName = fmt.Errorf("The ServerName field is mandatory when configuring TLS as the DNS Transport")
@@ -63,7 +61,7 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         {{.LogLevel}}
     }
     health {
-        lameduck {{.LameDuckDuration}}
+        lameduck 20s
     }
     ready
     kubernetes {{.ClusterDomain}} in-addr.arpa ip6.arpa {
@@ -179,7 +177,6 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		LogLevel            string
 		CABundleRevisionMap map[string]string
 		CABundleFileName    string
-		LameDuckDuration    time.Duration
 	}{
 		ClusterDomain:       clusterDomain,
 		Servers:             dns.Spec.Servers,
@@ -188,7 +185,6 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		LogLevel:            coreDNSLogLevel(dns),
 		CABundleRevisionMap: caBundleRevisionMap,
 		CABundleFileName:    caBundleFileName,
-		LameDuckDuration:    lameDuckDuration,
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {

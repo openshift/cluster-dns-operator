@@ -156,9 +156,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			if err != nil {
 				errs = append(errs, err)
 			}
-			// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
-			// This is eventually used to prevent frequent updates.
-			if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration); err != nil {
+			if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset); err != nil {
 				errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 			}
 		default:
@@ -446,9 +444,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 		errs = append(errs, err)
 	}
 
-	// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
-	// This is eventually used to prevent frequent updates.
-	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration); err != nil {
+	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset); err != nil {
 		errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 	}
 
