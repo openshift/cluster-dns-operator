@@ -24,19 +24,21 @@ import (
 // oldCondition.LastTransitionTime is <= transitionUnchangedToleration
 // for progressing and degraded then consider oldCondition to be recent
 // and return oldCondition to prevent frequent updates.
-func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration) error {
+// If no error occurred and requeue is true then the reconciler should
+// requeue the request.
+func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration) (requeue bool, err error) {
 	updated := dns.DeepCopy()
 	updated.Status.ClusterIP = clusterIP
 	updated.Status.ClusterDomain = clusterDomain
-	updated.Status.Conditions = computeDNSStatusConditions(dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, transitionUnchangedToleration)
+	requeue, updated.Status.Conditions = computeDNSStatusConditions(dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, transitionUnchangedToleration)
 	if !dnsStatusesEqual(updated.Status, dns.Status) {
 		if err := r.client.Status().Update(context.TODO(), updated); err != nil {
-			return fmt.Errorf("failed to update dns status: %v", err)
+			return false, fmt.Errorf("failed to update dns status: %v", err)
 		}
 		logrus.Infof("updated DNS %s status: old: %#v, new: %#v", dns.ObjectMeta.Name, dns.Status, updated.Status)
 	}
 
-	return nil
+	return requeue, nil
 }
 
 // computeDNSStatusConditions computes dns status conditions based on
@@ -45,7 +47,8 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 // oldCondition.LastTransitionTime is <= transitionUnchangedToleration
 // for progressing and degraded then consider oldCondition to be recent
 // and return oldCondition to prevent frequent updates.
-func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration) []operatorv1.OperatorCondition {
+// When true is returned the reconciler should requeue the request.
+func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration) (bool, []operatorv1.OperatorCondition) {
 	oldConditions := dns.Status.Conditions
 	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition, oldUpgradeableCondition *operatorv1.OperatorCondition
 	for i := range oldConditions {
@@ -62,14 +65,15 @@ func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDa
 	}
 
 	now := time.Now()
+	requeue, progressingConditions := computeDNSProgressingCondition(oldProgressingCondition, dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, transitionUnchangedToleration, now)
 	conditions := []operatorv1.OperatorCondition{
 		computeDNSDegradedCondition(oldDegradedCondition, clusterIP, haveDNSDaemonset, dnsDaemonset, transitionUnchangedToleration, now),
-		computeDNSProgressingCondition(oldProgressingCondition, dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, transitionUnchangedToleration, now),
+		progressingConditions,
 		computeDNSAvailableCondition(oldAvailableCondition, clusterIP, haveDNSDaemonset, dnsDaemonset),
 		computeDNSUpgradeableCondition(oldUpgradeableCondition, dns),
 	}
 
-	return conditions
+	return requeue, conditions
 }
 
 // computeDNSDegradedCondition computes the dns Degraded status
@@ -146,8 +150,9 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 // daemonsets. If the elapsed time between currentTime and
 // oldCondition.LastTransitionTime is <= transitionUnchangedToleration then
 // consider oldCondition to be recent and return oldCondition to
-// prevent frequent updates.
-func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration, currentTime time.Time) operatorv1.OperatorCondition {
+// prevent frequent updates. When error is nil
+// and retry is True the reconciler should requeue the request.
+func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration, currentTime time.Time) (bool, operatorv1.OperatorCondition) {
 	progressingCondition := &operatorv1.OperatorCondition{
 		Type: operatorv1.OperatorStatusTypeProgressing,
 	}
@@ -195,7 +200,7 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 		// if the last status was set to false within the last transitionUnchangedToleration, skip the new update
 		// to prevent frequent status flaps, and try to keep the long-lasting state (i.e. Progressing=False). See https://bugzilla.redhat.com/show_bug.cgi?id=2037190.
 		if oldCondition != nil && oldCondition.Status == operatorv1.ConditionFalse && lastTransitionTimeIsRecent(currentTime, oldCondition.LastTransitionTime.Time, transitionUnchangedToleration) {
-			return *oldCondition
+			return true, *oldCondition
 		}
 		progressingCondition.Status = operatorv1.ConditionTrue
 		progressingCondition.Reason = "Reconciling"
@@ -206,7 +211,7 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 		progressingCondition.Message = "All DNS and node-resolver pods are available, and the DNS service has a cluster IP address."
 	}
 
-	return setDNSLastTransitionTime(progressingCondition, oldCondition)
+	return false, setDNSLastTransitionTime(progressingCondition, oldCondition)
 }
 
 // computeDNSAvailableCondition computes the dns Available status condition

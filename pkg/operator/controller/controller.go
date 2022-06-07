@@ -158,8 +158,11 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			}
 			// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
 			// This is eventually used to prevent frequent updates.
-			if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration); err != nil {
+			requeue, err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration)
+			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
+			} else if requeue {
+				result.RequeueAfter = 2 * lameDuckDuration
 			}
 		default:
 			// Ensure we have all the necessary scaffolding on which to place dns instances.
@@ -190,10 +193,16 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				errs = append(errs, fmt.Errorf("failed to enforce finalizer for dns %s: %v", dns.Name, err))
 			} else {
 				// Handle everything else.
-				if err := r.ensureDNS(dns); err != nil {
+				requeue, err := r.ensureDNS(dns)
+				if err != nil {
 					errs = append(errs, fmt.Errorf("failed to ensure dns %s: %v", dns.Name, err))
-				} else if err := r.ensureExternalNameForOpenshiftService(); err != nil {
-					errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
+				} else {
+					if requeue {
+						result.RequeueAfter = 2 * lameDuckDuration
+					}
+					if err := r.ensureExternalNameForOpenshiftService(); err != nil {
+						errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
+					}
 				}
 			}
 		}
@@ -391,13 +400,15 @@ func (r *reconciler) ensureMetricsIntegration(dns *operatorv1.DNS, svc *corev1.S
 	return nil
 }
 
-// ensureDNS ensures all necessary dns resources exist for a given dns.
-func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
+// ensureDNS ensures all necessary dns resources exist for a given
+// dns. If the function returns (true, nil) then the reconciler should
+// requeue the request.
+func (r *reconciler) ensureDNS(dns *operatorv1.DNS) (bool, error) {
 	// TODO: fetch this from higher level openshift resource when it is exposed
 	clusterDomain := "cluster.local"
 	clusterIP, err := r.getClusterIPFromNetworkConfig()
 	if err != nil {
-		return fmt.Errorf("failed to get cluster IP from network config: %v", err)
+		return false, fmt.Errorf("failed to get cluster IP from network config: %v", err)
 	}
 
 	errs := []error{}
@@ -408,7 +419,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 
 	cmMap, err := r.caBundleRevisionMap(dns)
 	if err != nil {
-		return fmt.Errorf("failed to generate ca bundle revision map: %w", err)
+		return false, fmt.Errorf("failed to generate ca bundle revision map: %w", err)
 	}
 
 	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns, cmMap)
@@ -448,11 +459,12 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 
 	// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
 	// This is eventually used to prevent frequent updates.
-	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration); err != nil {
+	requeue, err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration)
+	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return requeue, utilerrors.NewAggregate(errs)
 }
 
 // caBundleRevisionMap generates a map of ca bundle configmaps with their resource versions
