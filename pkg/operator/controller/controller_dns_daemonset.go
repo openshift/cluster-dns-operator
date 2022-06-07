@@ -18,8 +18,22 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	// enableDaemonSetEvictionAnnotationKey is the annotation key for the
+	// annotation that enables eviction of a daemonset by the cluster
+	// autoscaler.
+	enableDaemonSetEvictionAnnotationKey = "cluster-autoscaler.kubernetes.io/enable-ds-eviction"
+)
+
+var (
+	// managedDNSDaemonSetAnnotations is a set of annotation keys for
+	// annotations that the operator manages for the DNS daemonset.
+	managedDNSDaemonSetAnnotations = sets.NewString(enableDaemonSetEvictionAnnotationKey)
 )
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
@@ -78,10 +92,15 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 		manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
 	}
 
+	// Enable eviction when cluster-autoscaler removes a node.  This ensures
+	// that the cluster DNS service stops forwarding queries to the DNS pod
+	// *before* the hosting node shuts down.
+	daemonset.Spec.Template.Annotations = map[string]string{
+		enableDaemonSetEvictionAnnotationKey: "true",
+	}
 	// Ensure the daemonset adopts only its own pods.
 	daemonset.Spec.Selector = DNSDaemonSetPodSelector(dns)
 	daemonset.Spec.Template.Labels = daemonset.Spec.Selector.MatchLabels
-
 	daemonset.Spec.Template.Spec.NodeSelector = nodeSelectorForDNS(dns)
 	daemonset.Spec.Template.Spec.Tolerations = tolerationsForDNS(dns)
 
@@ -356,6 +375,20 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	}
 	// TODO: Also check Env?
 
+	if updated.Spec.Template.Annotations == nil {
+		updated.Spec.Template.Annotations = map[string]string{}
+	}
+	for k := range managedDNSDaemonSetAnnotations {
+		currentVal, have := current.Spec.Template.Annotations[k]
+		expectedVal, want := expected.Spec.Template.Annotations[k]
+		if want && (!have || currentVal != expectedVal) {
+			updated.Spec.Template.Annotations[k] = expected.Spec.Template.Annotations[k]
+			changed = true
+		} else if have && !want {
+			delete(updated.Spec.Template.Annotations, k)
+			changed = true
+		}
+	}
 	if !cmp.Equal(current.Spec.Template.Spec.NodeSelector, expected.Spec.Template.Spec.NodeSelector, cmpopts.EquateEmpty()) {
 		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
 		changed = true
