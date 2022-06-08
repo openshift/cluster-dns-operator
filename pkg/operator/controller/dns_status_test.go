@@ -6,6 +6,7 @@ import (
 	"time"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -155,7 +156,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: upgradeable,
 			},
 		}
-		actual := computeDNSStatusConditions(&dns, clusterIP, tc.inputs.haveDNS, dnsDaemonset, tc.inputs.haveNR, nodeResolverDaemonset, 0)
+		actual := computeDNSStatusConditions(&dns, clusterIP, tc.inputs.haveDNS, dnsDaemonset, tc.inputs.haveNR, nodeResolverDaemonset, 0, &reconcile.Result{})
 		gotExpected := true
 		if len(actual) != len(expected) {
 			gotExpected = false
@@ -532,7 +533,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 				Conditions: []operatorv1.OperatorCondition{oldCondition},
 			},
 		}
-		actual := computeDNSProgressingCondition(&oldCondition, dns, tc.clusterIP, true, tc.dnsDaemonset, true, tc.nrDaemonset, 0, time.Time{})
+		var reconcileResult reconcile.Result
+		actual := computeDNSProgressingCondition(&oldCondition, dns, tc.clusterIP, true, tc.dnsDaemonset, true, tc.nrDaemonset, 0, time.Time{}, &reconcileResult)
 		if actual.Status != tc.expected {
 			t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
 		}
@@ -563,12 +565,13 @@ func TestSkippingStatusUpdates(t *testing.T) {
 		}
 	}
 	testCases := []struct {
-		name         string
-		clusterIP    string
-		oldCondition operatorv1.OperatorCondition
-		currentTime  time.Time
-		toleration   time.Duration
-		expected     operatorv1.ConditionStatus
+		name            string
+		clusterIP       string
+		oldCondition    operatorv1.OperatorCondition
+		currentTime     time.Time
+		toleration      time.Duration
+		expected        operatorv1.ConditionStatus
+		reconcileResult reconcile.Result
 	}{
 		{
 			name:      "there is a clusterIP, and time toleration doesn't matter, should return Progressing=ConditionFalse",
@@ -604,6 +607,10 @@ func TestSkippingStatusUpdates(t *testing.T) {
 			// last-curr = 10m, tolerate 1h, so should prevent the flap.
 			toleration: 1 * time.Hour,
 			expected:   operatorv1.ConditionFalse,
+			reconcileResult: reconcile.Result{
+				Requeue:      true,
+				RequeueAfter: 1 * time.Hour,
+			},
 		},
 		{
 			name:      "there is a clusterIP, and time toleration doesn't matter, should return Degraded=ConditionFalse",
@@ -657,8 +664,9 @@ func TestSkippingStatusUpdates(t *testing.T) {
 			dnsDaemonset := makeDaemonSet(6, 6, 6, intstr.FromString("10%"))
 			nrDaemonset := makeDaemonSet(6, 6, 6, intstr.FromString("33%"))
 			var actual operatorv1.OperatorCondition
+			var actualReconcileResult reconcile.Result
 			if tc.oldCondition.Type == operatorv1.OperatorStatusTypeProgressing {
-				actual = computeDNSProgressingCondition(&tc.oldCondition, dns, tc.clusterIP, true, dnsDaemonset, true, nrDaemonset, tc.toleration, tc.currentTime)
+				actual = computeDNSProgressingCondition(&tc.oldCondition, dns, tc.clusterIP, true, dnsDaemonset, true, nrDaemonset, tc.toleration, tc.currentTime, &actualReconcileResult)
 			} else if tc.oldCondition.Type == operatorv1.OperatorStatusTypeDegraded {
 				actual = computeDNSDegradedCondition(&tc.oldCondition, tc.clusterIP, true, dnsDaemonset, tc.toleration, tc.currentTime)
 			} else {
@@ -666,6 +674,9 @@ func TestSkippingStatusUpdates(t *testing.T) {
 			}
 			if actual.Status != tc.expected {
 				t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
+			}
+			if actualReconcileResult != tc.reconcileResult {
+				t.Errorf("%q: expected requeue to be %+v, got %+v", tc.name, tc.reconcileResult, actualReconcileResult)
 			}
 		})
 	}

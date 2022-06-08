@@ -158,7 +158,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			}
 			// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
 			// This is eventually used to prevent frequent updates.
-			if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration); err != nil {
+			if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration, &result); err != nil {
 				errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 			}
 		default:
@@ -190,7 +190,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				errs = append(errs, fmt.Errorf("failed to enforce finalizer for dns %s: %v", dns.Name, err))
 			} else {
 				// Handle everything else.
-				if err := r.ensureDNS(dns); err != nil {
+				if err := r.ensureDNS(dns, &result); err != nil {
 					errs = append(errs, fmt.Errorf("failed to ensure dns %s: %v", dns.Name, err))
 				} else if err := r.ensureExternalNameForOpenshiftService(); err != nil {
 					errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
@@ -392,7 +392,7 @@ func (r *reconciler) ensureMetricsIntegration(dns *operatorv1.DNS, svc *corev1.S
 }
 
 // ensureDNS ensures all necessary dns resources exist for a given dns.
-func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
+func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.Result) error {
 	// TODO: fetch this from higher level openshift resource when it is exposed
 	clusterDomain := "cluster.local"
 	clusterIP, err := r.getClusterIPFromNetworkConfig()
@@ -448,7 +448,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 
 	// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
 	// This is eventually used to prevent frequent updates.
-	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration); err != nil {
+	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration, reconcileResult); err != nil {
 		errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 	}
 
