@@ -121,6 +121,10 @@ func (o *Operator) ensureDefaultDNS() error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: operatorcontroller.DefaultDNSController,
 		},
+		Spec: operatorv1.DNSSpec{
+			OperatorLogLevel: operatorv1.DNSLogLevelTrace,
+			LogLevel:         operatorv1.DNSLogLevelTrace,
+		},
 	}
 	if err := o.client.Get(context.TODO(), types.NamespacedName{Name: dns.Name}, dns); err != nil {
 		if !errors.IsNotFound(err) {
