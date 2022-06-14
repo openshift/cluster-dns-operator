@@ -41,7 +41,9 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 		Namespace: "openshift-dns",
 		NewCache: cache.MultiNamespacedCacheBuilder([]string{
 			config.OperatorNamespace,
-			operatorcontroller.DefaultOperandNamespace}),
+			operatorcontroller.DefaultOperandNamespace,
+			operatorcontroller.GlobalUserSpecifiedConfigNamespace,
+		}),
 		// Use a non-caching client everywhere. The default split client does not
 		// promise to invalidate the cache during writes (nor does it promise
 		// sequential create/get coherence), and we have code which (probably

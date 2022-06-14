@@ -19,6 +19,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilclock "k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // clock is to enable requeueing and unit testing
@@ -38,14 +40,13 @@ type expectedCondition struct {
 // oldCondition.LastTransitionTime is <= transitionUnchangedToleration
 // for progressing and degraded then consider oldCondition to be recent
 // and return oldCondition to prevent frequent updates.
-func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration) error {
+func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration, reconcileResult *reconcile.Result) error {
 	var retryableErr error
 
 	updated := dns.DeepCopy()
 	updated.Status.ClusterIP = clusterIP
 	updated.Status.ClusterDomain = clusterDomain
-
-	updated.Status.Conditions, retryableErr = computeDNSStatusConditions(dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, transitionUnchangedToleration)
+	updated.Status.Conditions, retryableErr = computeDNSStatusConditions(dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, transitionUnchangedToleration, reconcileResult)
 	if !dnsStatusesEqual(updated.Status, dns.Status) {
 		if err := r.client.Status().Update(context.TODO(), updated); err != nil {
 			return fmt.Errorf("failed to update dns status: %v", err)
@@ -62,7 +63,7 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 // oldCondition.LastTransitionTime is <= transitionUnchangedToleration
 // for progressing and degraded then consider oldCondition to be recent
 // and return oldCondition to prevent frequent updates.
-func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration) ([]operatorv1.OperatorCondition, error) {
+func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration, reconcileResult *reconcile.Result) ([]operatorv1.OperatorCondition, error) {
 	oldConditions := dns.Status.Conditions
 	var oldDegradedCondition, oldDNSMaxUnavailableDNSPodsExceeded, oldProgressingCondition, oldAvailableCondition, oldUpgradeableCondition *operatorv1.OperatorCondition
 	for i := range oldConditions {
@@ -81,8 +82,9 @@ func computeDNSStatusConditions(dns *operatorv1.DNS, clusterIP string, haveDNSDa
 	}
 
 	now := time.Now()
+
 	degradedConditions, retryErr := computeDNSDegradedCondition(oldDegradedCondition, oldDNSMaxUnavailableDNSPodsExceeded, clusterIP, haveDNSDaemonset, dnsDaemonset, transitionUnchangedToleration, now)
-	degradedConditions = append(degradedConditions, computeDNSProgressingCondition(oldProgressingCondition, dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset))
+	degradedConditions = append(degradedConditions, computeDNSProgressingCondition(oldProgressingCondition, dns, clusterIP, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, transitionUnchangedToleration, now, reconcileResult))
 	degradedConditions = append(degradedConditions, computeDNSAvailableCondition(oldAvailableCondition, clusterIP, haveDNSDaemonset, dnsDaemonset))
 	degradedConditions = append(degradedConditions, computeDNSUpgradeableCondition(oldUpgradeableCondition, dns))
 
@@ -320,9 +322,13 @@ func conditionUnChanged(a, b *operatorv1.OperatorCondition) bool {
 	return a.Status == b.Status && a.Reason == b.Reason && a.Message == b.Message
 }
 
-// computeDNSProgressingCondition computes the dns Progressing status condition
-// based on the status of the DNS and node-resolver daemonsets.
-func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet) operatorv1.OperatorCondition {
+// computeDNSProgressingCondition computes the dns Progressing status
+// condition based on the status of the DNS and node-resolver
+// daemonsets. If the elapsed time between currentTime and
+// oldCondition.LastTransitionTime is <= transitionUnchangedToleration then
+// consider oldCondition to be recent and return oldCondition to
+// prevent frequent updates.
+func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, dns *operatorv1.DNS, clusterIP string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration, currentTime time.Time, reconcileResult *reconcile.Result) operatorv1.OperatorCondition {
 	progressingCondition := &operatorv1.OperatorCondition{
 		Type: operatorv1.OperatorStatusTypeProgressing,
 	}
@@ -337,6 +343,12 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 		want := dnsDaemonset.Status.DesiredNumberScheduled
 		if have != want {
 			messages = append(messages, fmt.Sprintf("Have %d available DNS pods, want %d.", have, want))
+		}
+
+		have = dnsDaemonset.Status.UpdatedNumberScheduled
+		want = dnsDaemonset.Status.DesiredNumberScheduled
+		if have != want {
+			messages = append(messages, fmt.Sprintf("Have %d up-to-date DNS pods, want %d.", have, want))
 		}
 
 		haveSelector := dnsDaemonset.Spec.Template.Spec.NodeSelector
@@ -361,6 +373,13 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 		}
 	}
 	if len(messages) != 0 {
+		// if the last status was set to false within the last transitionUnchangedToleration, skip the new update
+		// to prevent frequent status flaps, and try to keep the long-lasting state (i.e. Progressing=False). See https://bugzilla.redhat.com/show_bug.cgi?id=2037190.
+		if oldCondition != nil && oldCondition.Status == operatorv1.ConditionFalse && lastTransitionTimeIsRecent(currentTime, oldCondition.LastTransitionTime.Time, transitionUnchangedToleration) {
+			reconcileResult.Requeue = true
+			reconcileResult.RequeueAfter = transitionUnchangedToleration
+			return *oldCondition
+		}
 		progressingCondition.Status = operatorv1.ConditionTrue
 		progressingCondition.Reason = "Reconciling"
 		progressingCondition.Message = strings.Join(messages, "\n")
@@ -462,18 +481,15 @@ func dnsStatusesEqual(a, b operatorv1.DNSStatus) bool {
 // before prevTime or if toleration < 0. It returns true if elapsed time
 // is 0.
 func lastTransitionTimeIsRecent(currTime, prevTime time.Time, toleration time.Duration) bool {
-	ret := false
 	if toleration < 0 {
-		ret = false
-	} else {
-		switch elapsed := currTime.Sub(prevTime); {
-		case elapsed == 0:
-			ret = true
-		case elapsed < 0:
-			ret = false
-		default:
-			ret = elapsed <= toleration
-		}
+		return false
 	}
-	return ret
+	switch elapsed := currTime.Sub(prevTime); {
+	case elapsed == 0:
+		return true
+	case elapsed < 0:
+		return false
+	default:
+		return elapsed <= toleration
+	}
 }

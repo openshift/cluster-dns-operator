@@ -18,17 +18,31 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	// enableDaemonSetEvictionAnnotationKey is the annotation key for the
+	// annotation that enables eviction of a daemonset by the cluster
+	// autoscaler.
+	enableDaemonSetEvictionAnnotationKey = "cluster-autoscaler.kubernetes.io/enable-ds-eviction"
+)
+
+var (
+	// managedDNSDaemonSetAnnotations is a set of annotation keys for
+	// annotations that the operator manages for the DNS daemonset.
+	managedDNSDaemonSetAnnotations = sets.NewString(enableDaemonSetEvictionAnnotationKey)
+)
+
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
-func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS) (bool, *appsv1.DaemonSet, error) {
+func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, caBundleRevisionMap map[string]string) (bool, *appsv1.DaemonSet, error) {
 	haveDS, current, err := r.currentDNSDaemonSet(dns)
 	if err != nil {
 		return false, nil, err
 	}
-	desired, err := desiredDNSDaemonSet(dns, r.CoreDNSImage, r.KubeRBACProxyImage)
+	desired, err := desiredDNSDaemonSet(dns, r.CoreDNSImage, r.KubeRBACProxyImage, caBundleRevisionMap)
 	if err != nil {
 		return haveDS, current, fmt.Errorf("failed to build dns daemonset: %v", err)
 	}
@@ -66,7 +80,7 @@ func (r *reconciler) ensureDNSDaemonSetDeleted(dns *operatorv1.DNS) error {
 }
 
 // desiredDNSDaemonSet returns the desired dns daemonset.
-func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage string) (*appsv1.DaemonSet, error) {
+func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage string, caBundleRevisionMap map[string]string) (*appsv1.DaemonSet, error) {
 	daemonset := manifests.DNSDaemonSet()
 	name := DNSDaemonSetName(dns)
 	daemonset.Name = name.Name
@@ -78,10 +92,15 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 		manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
 	}
 
+	// Enable eviction when cluster-autoscaler removes a node.  This ensures
+	// that the cluster DNS service stops forwarding queries to the DNS pod
+	// *before* the hosting node shuts down.
+	daemonset.Spec.Template.Annotations = map[string]string{
+		enableDaemonSetEvictionAnnotationKey: "true",
+	}
 	// Ensure the daemonset adopts only its own pods.
 	daemonset.Spec.Selector = DNSDaemonSetPodSelector(dns)
 	daemonset.Spec.Template.Labels = daemonset.Spec.Selector.MatchLabels
-
 	daemonset.Spec.Template.Spec.NodeSelector = nodeSelectorForDNS(dns)
 	daemonset.Spec.Template.Spec.Tolerations = tolerationsForDNS(dns)
 
@@ -107,11 +126,53 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 		switch c.Name {
 		case "dns":
 			daemonset.Spec.Template.Spec.Containers[i].Image = coreDNSImage
+			if tls := dns.Spec.UpstreamResolvers.TransportConfig.TLS; tls != nil && tls.CABundle.Name != "" {
+				vol, volMount := caBundleCMVolAndVolMount(tls.CABundle.Name, tls.ServerName, caBundleRevisionMap)
+				daemonset.Spec.Template.Spec.Volumes = append(daemonset.Spec.Template.Spec.Volumes, *vol)
+				daemonset.Spec.Template.Spec.Containers[i].VolumeMounts = append(daemonset.Spec.Template.Spec.Containers[i].VolumeMounts, *volMount)
+			}
+			for _, server := range dns.Spec.Servers {
+				if tls := server.ForwardPlugin.TransportConfig.TLS; tls != nil && tls.CABundle.Name != "" {
+					vol, volMount := caBundleCMVolAndVolMount(tls.CABundle.Name, tls.ServerName, caBundleRevisionMap)
+					daemonset.Spec.Template.Spec.Volumes = append(daemonset.Spec.Template.Spec.Volumes, *vol)
+					daemonset.Spec.Template.Spec.Containers[i].VolumeMounts = append(daemonset.Spec.Template.Spec.Containers[i].VolumeMounts, *volMount)
+				}
+			}
 		case "kube-rbac-proxy":
 			daemonset.Spec.Template.Spec.Containers[i].Image = kubeRBACProxyImage
 		}
 	}
 	return daemonset, nil
+}
+
+// caBundleCMVolAndVolMount takes a CA bundle ConfigMap name and a TLS server name, and returns
+// the ConfigMap Volume and VolumeMount to be used for the DaemonSet.
+func caBundleCMVolAndVolMount(caBundleName string, serverName string, caBundleRevisionMap map[string]string) (*corev1.Volume, *corev1.VolumeMount) {
+	caBundleConfigmapName := CABundleConfigMapName(caBundleName)
+	caBundleVolumeName := caBundleConfigmapName.Name
+	caBundleVolume := corev1.Volume{
+		Name: caBundleVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: caBundleVolumeName,
+				},
+				Items: []corev1.KeyToPath{
+					{
+						Key:  caBundleFileName,
+						Path: caBundleFileName,
+					},
+				},
+			},
+		},
+	}
+	caBundleVolumeMountPath := fmt.Sprintf("/etc/pki/%s-%s", serverName, caBundleRevisionMap[caBundleName])
+	caBundleVolumeMount := corev1.VolumeMount{
+		Name:      caBundleVolumeName,
+		MountPath: caBundleVolumeMountPath,
+		ReadOnly:  true,
+	}
+	return &caBundleVolume, &caBundleVolumeMount
 }
 
 // nodeSelectorForDNS takes a dns and returns the node selector that it
@@ -314,6 +375,20 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	}
 	// TODO: Also check Env?
 
+	if updated.Spec.Template.Annotations == nil {
+		updated.Spec.Template.Annotations = map[string]string{}
+	}
+	for k := range managedDNSDaemonSetAnnotations {
+		currentVal, have := current.Spec.Template.Annotations[k]
+		expectedVal, want := expected.Spec.Template.Annotations[k]
+		if want && (!have || currentVal != expectedVal) {
+			updated.Spec.Template.Annotations[k] = expected.Spec.Template.Annotations[k]
+			changed = true
+		} else if have && !want {
+			delete(updated.Spec.Template.Annotations, k)
+			changed = true
+		}
+	}
 	if !cmp.Equal(current.Spec.Template.Spec.NodeSelector, expected.Spec.Template.Spec.NodeSelector, cmpopts.EquateEmpty()) {
 		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
 		changed = true
@@ -331,7 +406,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		changed = true
 	}
 
-	// Detect changes to container commands
+	// Detect changes to container commands and volume mounts
 	if len(current.Spec.Template.Spec.Containers) != len(expected.Spec.Template.Spec.Containers) {
 		updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
 		changed = true
@@ -339,6 +414,11 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		for i, a := range current.Spec.Template.Spec.Containers {
 			b := expected.Spec.Template.Spec.Containers[i]
 			if !cmp.Equal(a.Command, b.Command, cmpopts.EquateEmpty()) {
+				updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
+				changed = true
+				break
+			}
+			if !cmp.Equal(a.VolumeMounts, b.VolumeMounts, cmpopts.EquateEmpty()) {
 				updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
 				changed = true
 				break

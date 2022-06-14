@@ -27,14 +27,6 @@ func TestDNSServiceChanged(t *testing.T) {
 			expect: false,
 		},
 		{
-			description: "if .spec.topologyKey changes",
-			mutate: func(service *corev1.Service) {
-				service.Spec.TopologyKeys = []string{"foo"}
-			},
-			// TODO: Change to true when the service topology feature gate is enabled.
-			expect: false,
-		},
-		{
 			description: "if .spec.selector changes",
 			mutate: func(service *corev1.Service) {
 				service.Spec.Selector = map[string]string{"foo": "bar"}
@@ -66,6 +58,22 @@ func TestDNSServiceChanged(t *testing.T) {
 			description: "if .spec.sessionAffinity is set to a non-default value",
 			mutate: func(service *corev1.Service) {
 				service.Spec.SessionAffinity = corev1.ServiceAffinityClientIP
+			},
+			expect: true,
+		},
+		{
+			description: "if .spec.internalTrafficPolicy is defaulted",
+			mutate: func(service *corev1.Service) {
+				policy := corev1.ServiceInternalTrafficPolicyCluster
+				service.Spec.InternalTrafficPolicy = &policy
+			},
+			expect: false,
+		},
+		{
+			description: "if .spec.internalTrafficPolicy is set to a non-default value",
+			mutate: func(service *corev1.Service) {
+				policy := corev1.ServiceInternalTrafficPolicyLocal
+				service.Spec.InternalTrafficPolicy = &policy
 			},
 			expect: true,
 		},

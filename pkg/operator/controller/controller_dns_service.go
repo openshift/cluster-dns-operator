@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	operatorv1 "github.com/openshift/api/operator/v1"
+
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
 	corev1 "k8s.io/api/core/v1"
@@ -97,16 +98,14 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 	serviceCmpOpts := []cmp.Option{
 		// Ignore fields that the API, other controllers, or user may
 		// have modified.
-		//
-		// TODO: Remove TopologyKeys when the service topology feature gate is enabled.
 		cmpopts.IgnoreFields(
 			corev1.ServiceSpec{},
 			"ClusterIP", "ClusterIPs",
 			"IPFamilies", "IPFamilyPolicy",
-			"TopologyKeys",
 		),
 		cmp.Comparer(cmpServiceAffinity),
 		cmp.Comparer(cmpServiceType),
+		cmp.Comparer(cmpServiceInternalTrafficPolicyType),
 		cmpopts.EquateEmpty(),
 	}
 
@@ -148,4 +147,15 @@ func cmpServiceType(a, b corev1.ServiceType) bool {
 		b = corev1.ServiceTypeClusterIP
 	}
 	return a == b
+}
+
+func cmpServiceInternalTrafficPolicyType(a, b *corev1.ServiceInternalTrafficPolicyType) bool {
+	defaultPolicy := corev1.ServiceInternalTrafficPolicyCluster
+	if a == nil {
+		a = &defaultPolicy
+	}
+	if b == nil {
+		b = &defaultPolicy
+	}
+	return *a == *b
 }

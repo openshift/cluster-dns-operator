@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -70,6 +71,19 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
 		return nil, err
 	}
+
+	caBundleCMToDNS := func(o client.Object) []reconcile.Request {
+		return []reconcile.Request{{DefaultDNSNamespaceName()}}
+	}
+	isInNS := func(namespace string) func(o client.Object) bool {
+		return func(o client.Object) bool {
+			return o.GetNamespace() == namespace
+		}
+	}
+	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, handler.EnqueueRequestsFromMapFunc(caBundleCMToDNS), predicate.NewPredicateFuncs(isInNS(GlobalUserSpecifiedConfigNamespace))); err != nil {
+		return nil, err
+	}
+
 	return c, nil
 }
 
@@ -110,6 +124,16 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if dns != nil {
+		switch dns.Spec.OperatorLogLevel {
+		case operatorv1.DNSLogLevelNormal:
+			logrus.SetLevel(logrus.InfoLevel)
+		case operatorv1.DNSLogLevelDebug:
+			logrus.SetLevel(logrus.DebugLevel)
+		case operatorv1.DNSLogLevelTrace:
+			logrus.SetLevel(logrus.TraceLevel)
+		default:
+			logrus.SetLevel(logrus.InfoLevel)
+		}
 		switch dns.Spec.ManagementState {
 		case operatorv1.Unmanaged:
 			// When the operator is set to unmanaged, it should not make
@@ -133,7 +157,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			}
 			// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
 			// This is eventually used to prevent frequent updates.
-			if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration); err != nil {
+			if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration, &result); err != nil {
 				errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 			}
 		default:
@@ -165,7 +189,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				errs = append(errs, fmt.Errorf("failed to enforce finalizer for dns %s: %v", dns.Name, err))
 			} else {
 				// Handle everything else.
-				if err := r.ensureDNS(dns); err != nil {
+				if err := r.ensureDNS(dns, &result); err != nil {
 					errs = append(errs, fmt.Errorf("failed to ensure dns %s: %v", dns.Name, err))
 				} else if err := r.ensureExternalNameForOpenshiftService(); err != nil {
 					errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))
@@ -376,7 +400,7 @@ func (r *reconciler) ensureMetricsIntegration(dns *operatorv1.DNS, svc *corev1.S
 }
 
 // ensureDNS ensures all necessary dns resources exist for a given dns.
-func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
+func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.Result) error {
 	// TODO: fetch this from higher level openshift resource when it is exposed
 	clusterDomain := "cluster.local"
 	clusterIP, err := r.getClusterIPFromNetworkConfig()
@@ -386,7 +410,16 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 
 	errs := []error{}
 
-	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns)
+	if err := r.ensureCABundleConfigMaps(dns); err != nil {
+		errs = append(errs, fmt.Errorf("failed to create ca bundle configmaps for dns %s: %w", dns.Name, err))
+	}
+
+	cmMap, err := r.caBundleRevisionMap(dns)
+	if err != nil {
+		return fmt.Errorf("failed to generate ca bundle revision map: %w", err)
+	}
+
+	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns, cmMap)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
 	} else if !haveDNSDaemonset {
@@ -401,7 +434,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 			Controller: &trueVar,
 		}
 
-		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain); err != nil {
+		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain, cmMap); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
 		}
 		if haveSvc, svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
@@ -423,11 +456,48 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS) error {
 
 	// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
 	// This is eventually used to prevent frequent updates.
-	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration); err != nil {
+	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration, reconcileResult); err != nil {
 		errs = append(errs, fmt.Errorf("failed to sync status of dns %q: %w", dns.Name, err))
 	}
 
 	return retry.NewMaybeRetryableAggregate(errs)
+}
+
+// caBundleRevisionMap generates a map of ca bundle configmaps with their resource versions
+// to be used in Corefile as the path of ca bundles and in daemonset volume mount path.
+// Resource version is appended to enable automatic reload of Corefile when there is a change
+// in the source ca bundle configmap (e.g. cert rotation). Apart from resource versions,
+// server name is also used in the path of ca bundles in case the same ca bundle configmap
+// is specified for two different servers.
+func (r *reconciler) caBundleRevisionMap(dns *operatorv1.DNS) (map[string]string, error) {
+	caBundleRevisions := map[string]string{}
+	transportConfig := dns.Spec.UpstreamResolvers.TransportConfig
+	if transportConfig.Transport == operatorv1.TLSTransport {
+		if transportConfig.TLS != nil && transportConfig.TLS.CABundle.Name != "" {
+			name := CABundleConfigMapName(transportConfig.TLS.CABundle.Name)
+			cm := &corev1.ConfigMap{}
+			if err := r.client.Get(context.TODO(), name, cm); err != nil {
+				return caBundleRevisions, err
+			}
+			caBundleRevisions[transportConfig.TLS.CABundle.Name] = fmt.Sprintf("%s-%s", cm.Name, cm.ResourceVersion)
+		}
+	}
+
+	for _, server := range dns.Spec.Servers {
+		transportConfig := server.ForwardPlugin.TransportConfig
+		if transportConfig.Transport == operatorv1.TLSTransport {
+			if transportConfig.TLS != nil && transportConfig.TLS.CABundle.Name != "" {
+				name := CABundleConfigMapName(transportConfig.TLS.CABundle.Name)
+				cm := &corev1.ConfigMap{}
+				if err := r.client.Get(context.TODO(), name, cm); err != nil {
+					return caBundleRevisions, err
+				}
+				caBundleRevisions[transportConfig.TLS.CABundle.Name] = fmt.Sprintf("%s-%s", cm.Name, cm.ResourceVersion)
+			}
+		}
+	}
+
+	return caBundleRevisions, nil
 }
 
 // getClusterIPFromNetworkConfig will return 10th IP from the service CIDR range

@@ -1,0 +1,38 @@
+# foo
+foo.com:5353 {
+    prometheus 127.0.0.1:9153
+    forward . 1.1.1.1 2.2.2.2:5353 {
+        policy round_robin
+    }
+    errors
+    log . {
+        class error
+    }
+    bufsize 512
+    cache 900 {
+        denial 9984 30
+    }
+}
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf 100.1.1.1:5500 [1000::100]:53 {
+        policy random
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
