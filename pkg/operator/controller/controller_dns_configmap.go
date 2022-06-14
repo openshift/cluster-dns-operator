@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"text/template"
+	"time"
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
@@ -20,6 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+const resolvConf = "/etc/resolv.conf"
+const defaultDNSPort = 53
+const lameDuckDuration = 20 * time.Second
 
 var corefileTemplate = template.Must(template.New("Corefile").Parse(`{{range .Servers -}}
 # {{.Name}}
