@@ -794,6 +794,9 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 }
 
 func TestDNSOverTLSToleratesMissingSourceCM(t *testing.T) {
+	missingCMName := "missing-cm"
+	missingCMLog := missingCMName + " does not exist"
+
 	cl, err := getClient()
 	if err != nil {
 		t.Fatal(err)
@@ -818,7 +821,7 @@ func TestDNSOverTLSToleratesMissingSourceCM(t *testing.T) {
 				Transport: operatorv1.TLSTransport,
 				TLS: &operatorv1.DNSOverTLSConfig{
 					ServerName: "dns.tls.com",
-					CABundle:   configv1.ConfigMapNameReference{Name: "missing-cm"},
+					CABundle:   configv1.ConfigMapNameReference{Name: missingCMName},
 				},
 			},
 			Upstreams: []string{"1.1.1.1"},
@@ -850,12 +853,12 @@ func TestDNSOverTLSToleratesMissingSourceCM(t *testing.T) {
 
 	dnsOperatorPods, err := getClusterDNSOperatorPods(cl)
 	if err != nil {
-		t.Errorf("unable to get operator pods: #{err}")
+		t.Fatalf("unable to get operator pods: %w", err)
 	}
 
 	for _, dnsOperatorPod := range dnsOperatorPods.Items {
-		if err := lookForStringInPodLog(operatorcontroller.DefaultOperatorNamespace, dnsOperatorPod.Name, operatorcontroller.ContainerNameOfDNSOperator, "level=info", 30*time.Second); err != nil {
-			t.Fatal("source ca bundle config map")
+		if err := lookForStringInPodLog(operatorcontroller.DefaultOperatorNamespace, dnsOperatorPod.Name, operatorcontroller.ContainerNameOfDNSOperator, missingCMLog, 30*time.Second); err != nil {
+			t.Fatalf("could not find pod logs %w", err)
 		}
 	}
 
