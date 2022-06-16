@@ -853,12 +853,12 @@ func TestDNSOverTLSToleratesMissingSourceCM(t *testing.T) {
 
 	dnsOperatorPods, err := getClusterDNSOperatorPods(cl)
 	if err != nil {
-		t.Fatalf("unable to get operator pods: %w", err)
+		t.Fatalf("unable to get operator pods: %v", err)
 	}
 
 	for _, dnsOperatorPod := range dnsOperatorPods.Items {
 		if err := lookForStringInPodLog(operatorcontroller.DefaultOperatorNamespace, dnsOperatorPod.Name, operatorcontroller.ContainerNameOfDNSOperator, missingCMLog, 30*time.Second); err != nil {
-			t.Fatalf("could not find pod logs %w", err)
+			t.Fatalf("could not find pod logs %v", err)
 		}
 	}
 
