@@ -121,6 +121,15 @@ func TestDNSServiceChanged(t *testing.T) {
 			},
 			expect: false,
 		},
+		{
+			description: "if service.kubernetes.io/topology-aware-hints annotation is set",
+			mutate: func(service *corev1.Service) {
+				service.ObjectMeta.Annotations = map[string]string{
+					"service.kubernetes.io/topology-aware-hints": "auto",
+				}
+			},
+			expect: true,
+		},
 	}
 
 	for _, tc := range testCases {
