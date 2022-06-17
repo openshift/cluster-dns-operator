@@ -1,12 +1,13 @@
 package controller
 
 import (
+	"testing"
+	"time"
+
 	"github.com/google/go-cmp/cmp"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"testing"
-	"time"
 )
 
 func TestDesiredCABundleConfigmap(t *testing.T) {
