@@ -127,15 +127,19 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 		case "dns":
 			daemonset.Spec.Template.Spec.Containers[i].Image = coreDNSImage
 			if tls := dns.Spec.UpstreamResolvers.TransportConfig.TLS; tls != nil && tls.CABundle.Name != "" {
-				vol, volMount := caBundleCMVolAndVolMount(tls.CABundle.Name, tls.ServerName, caBundleRevisionMap)
-				daemonset.Spec.Template.Spec.Volumes = append(daemonset.Spec.Template.Spec.Volumes, *vol)
-				daemonset.Spec.Template.Spec.Containers[i].VolumeMounts = append(daemonset.Spec.Template.Spec.Containers[i].VolumeMounts, *volMount)
+				haveCM, vol, volMount := caBundleCMVolAndVolMount(tls.CABundle.Name, tls.ServerName, caBundleRevisionMap)
+				if haveCM {
+					daemonset.Spec.Template.Spec.Volumes = append(daemonset.Spec.Template.Spec.Volumes, *vol)
+					daemonset.Spec.Template.Spec.Containers[i].VolumeMounts = append(daemonset.Spec.Template.Spec.Containers[i].VolumeMounts, *volMount)
+				}
 			}
 			for _, server := range dns.Spec.Servers {
 				if tls := server.ForwardPlugin.TransportConfig.TLS; tls != nil && tls.CABundle.Name != "" {
-					vol, volMount := caBundleCMVolAndVolMount(tls.CABundle.Name, tls.ServerName, caBundleRevisionMap)
-					daemonset.Spec.Template.Spec.Volumes = append(daemonset.Spec.Template.Spec.Volumes, *vol)
-					daemonset.Spec.Template.Spec.Containers[i].VolumeMounts = append(daemonset.Spec.Template.Spec.Containers[i].VolumeMounts, *volMount)
+					haveCM, vol, volMount := caBundleCMVolAndVolMount(tls.CABundle.Name, tls.ServerName, caBundleRevisionMap)
+					if haveCM {
+						daemonset.Spec.Template.Spec.Volumes = append(daemonset.Spec.Template.Spec.Volumes, *vol)
+						daemonset.Spec.Template.Spec.Containers[i].VolumeMounts = append(daemonset.Spec.Template.Spec.Containers[i].VolumeMounts, *volMount)
+					}
 				}
 			}
 		case "kube-rbac-proxy":
@@ -146,8 +150,11 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 }
 
 // caBundleCMVolAndVolMount takes a CA bundle ConfigMap name and a TLS server name, and returns
-// the ConfigMap Volume and VolumeMount to be used for the DaemonSet.
-func caBundleCMVolAndVolMount(caBundleName string, serverName string, caBundleRevisionMap map[string]string) (*corev1.Volume, *corev1.VolumeMount) {
+// a boolean indicating existence of the ConfigMap, the ConfigMap Volume and VolumeMount to be used for the DaemonSet.
+func caBundleCMVolAndVolMount(caBundleName string, serverName string, caBundleRevisionMap map[string]string) (bool, *corev1.Volume, *corev1.VolumeMount) {
+	if _, ok := caBundleRevisionMap[caBundleName]; !ok {
+		return false, nil, nil
+	}
 	caBundleConfigmapName := CABundleConfigMapName(caBundleName)
 	caBundleVolumeName := caBundleConfigmapName.Name
 	caBundleVolume := corev1.Volume{
@@ -172,7 +179,7 @@ func caBundleCMVolAndVolMount(caBundleName string, serverName string, caBundleRe
 		MountPath: caBundleVolumeMountPath,
 		ReadOnly:  true,
 	}
-	return &caBundleVolume, &caBundleVolumeMount
+	return true, &caBundleVolume, &caBundleVolumeMount
 }
 
 // nodeSelectorForDNS takes a dns and returns the node selector that it

@@ -5,13 +5,7 @@ package e2e
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
-	"math/big"
 	"reflect"
 	"strings"
 	"testing"
@@ -20,16 +14,13 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
-	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
 	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -78,19 +69,6 @@ var (
 		{Type: operatorv1.OperatorStatusTypeDegraded, Status: operatorv1.ConditionFalse},
 	}
 )
-
-func getClient() (client.Client, error) {
-	// Get a kube client.
-	kubeConfig, err := config.GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kube config: %v", err)
-	}
-	kubeClient, err := operatorclient.NewClient(kubeConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kube client: %v", err)
-	}
-	return kubeClient, nil
-}
 
 func TestOperatorAvailable(t *testing.T) {
 	cl, err := getClient()
@@ -793,6 +771,76 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	}
 }
 
+func TestDNSOverTLSToleratesMissingSourceCM(t *testing.T) {
+	missingCMName := "missing-cm"
+	missingCMLog := missingCMName + " does not exist"
+
+	cl, err := getClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that DNS is stable before starting the test.
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
+	// Update cluster DNS forwarding with the missing configmap.
+	defaultDNS := &operatorv1.DNS{}
+	if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DefaultDNSController}, defaultDNS); err != nil {
+		t.Fatalf("failed to get default dns: %v", err)
+	}
+
+	upstream := operatorv1.Server{
+		Name:  "test",
+		Zones: []string{"tls.com"},
+		ForwardPlugin: operatorv1.ForwardPlugin{
+			TransportConfig: operatorv1.DNSTransportConfig{
+				Transport: operatorv1.TLSTransport,
+				TLS: &operatorv1.DNSOverTLSConfig{
+					ServerName: "dns.tls.com",
+					CABundle:   configv1.ConfigMapNameReference{Name: missingCMName},
+				},
+			},
+			Upstreams: []string{"1.1.1.1"},
+		},
+	}
+
+	defaultDNS.Spec.Servers = []operatorv1.Server{upstream}
+	if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+		t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+	}
+	t.Cleanup(func() {
+		defaultDNS = &operatorv1.DNS{}
+		if err := cl.Get(context.TODO(), types.NamespacedName{Name: "default"}, defaultDNS); err != nil {
+			t.Fatalf("failed to get default dns: %v", err)
+		}
+		if len(defaultDNS.Spec.Servers) != 0 {
+			// dnses.operator/default has a nil spec by default.
+			defaultDNS.Spec = operatorv1.DNSSpec{}
+			if err := cl.Update(context.TODO(), defaultDNS); err != nil {
+				t.Fatalf("failed to update dns %s: %v", defaultDNS.Name, err)
+			}
+		}
+	})
+
+	// Verify that default DNS pods are all available before inspecting them.
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
+	dnsOperatorPods, err := getClusterDNSOperatorPods(cl)
+	if err != nil {
+		t.Fatalf("unable to get operator pods: %v", err)
+	}
+
+	for _, dnsOperatorPod := range dnsOperatorPods.Items {
+		if err := lookForStringInPodLog(operatorcontroller.DefaultOperatorNamespace, dnsOperatorPod.Name, operatorcontroller.ContainerNameOfDNSOperator, missingCMLog, 30*time.Second); err != nil {
+			t.Fatalf("could not find pod logs: %v", err)
+		}
+	}
+}
+
 func TestDNSLogging(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
@@ -1067,128 +1115,5 @@ func TestDNSNodePlacement(t *testing.T) {
 	})
 	if len(podList.Items) == 0 {
 		t.Errorf("expected label selector matching 0 nodes to be ignored; found 0 dns pods")
-	}
-}
-
-// generateServerCA generates and returns a CA certificate and key.
-func generateServerCA() (*x509.Certificate, *rsa.PrivateKey, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	root := &x509.Certificate{
-		Subject:               pkix.Name{CommonName: "operator-e2e"},
-		SignatureAlgorithm:    x509.SHA256WithRSA,
-		NotBefore:             time.Now().Add(-24 * time.Hour),
-		NotAfter:              time.Now().Add(24 * time.Hour),
-		SerialNumber:          big.NewInt(1),
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-		MaxPathLen:            0,
-		MaxPathLenZero:        true,
-	}
-
-	der, err := x509.CreateCertificate(rand.Reader, root, root, &key.PublicKey, key)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	certs, err := x509.ParseCertificates(der)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(certs) != 1 {
-		return nil, nil, fmt.Errorf("expected a single certificate from x509.ParseCertificates, got %d: %v", len(certs), certs)
-	}
-
-	return certs[0], key, nil
-}
-
-// generateServerCertificate generates and returns a client certificate and key
-// where the certificate is signed by the provided CA certificate.
-func generateServerCertificate(caCert *x509.Certificate, caKey *rsa.PrivateKey, cn string) (*x509.Certificate, *rsa.PrivateKey, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	template := &x509.Certificate{
-		Subject: pkix.Name{
-			CommonName:   cn,
-			Organization: []string{"OpenShift"},
-		},
-		SignatureAlgorithm:    x509.SHA256WithRSA,
-		NotBefore:             time.Now().Add(-24 * time.Hour),
-		NotAfter:              time.Now().Add(24 * time.Hour),
-		SerialNumber:          big.NewInt(1),
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		DNSNames:              []string{cn},
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, &key.PublicKey, caKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	certs, err := x509.ParseCertificates(derBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(certs) != 1 {
-		return nil, nil, fmt.Errorf("expected a single certificate from x509.ParseCertificates, got %d: %v", len(certs), certs)
-	}
-
-	return certs[0], key, nil
-}
-
-// encodeCert returns a PEM block encoding the given certificate.
-func encodeCert(cert *x509.Certificate) string {
-	return string(pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: cert.Raw,
-	}))
-}
-
-// encodeKey returns a PEM block encoding the given key.
-func encodeKey(key *rsa.PrivateKey) string {
-	return string(pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
-	}))
-}
-
-func upstreamTLSPod(name, ns, image string, configMap *corev1.ConfigMap) *corev1.Pod {
-	coreContainer := upstreamContainer(name, image)
-	volumeName := configMap.Name
-
-	items := []corev1.KeyToPath{}
-	for k := range configMap.Data {
-		items = append(items, corev1.KeyToPath{Key: k, Path: k})
-	}
-	volume := corev1.Volume{
-		Name: "config-volume",
-		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: volumeName,
-				},
-				Items: items,
-			},
-		},
-	}
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-			Labels:    map[string]string{"test": "upstream-tls"},
-		},
-		Spec: corev1.PodSpec{
-			Volumes:    []corev1.Volume{volume},
-			Containers: []corev1.Container{coreContainer},
-		},
 	}
 }

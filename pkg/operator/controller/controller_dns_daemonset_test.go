@@ -116,6 +116,22 @@ func TestDesiredDNSDaemonsetWithCABundleConfigMaps(t *testing.T) {
 					Name:  "bar.com",
 					Zones: []string{"bar.com"},
 				},
+				{
+					ForwardPlugin: operatorv1.ForwardPlugin{
+						TransportConfig: operatorv1.DNSTransportConfig{
+							Transport: operatorv1.TLSTransport,
+							TLS: &operatorv1.DNSOverTLSConfig{
+								ServerName: "dns.foo.com",
+								CABundle: v1.ConfigMapNameReference{
+									Name: "non_existing_caBundle",
+								},
+							},
+						},
+						Upstreams: []string{"3.3.3.3"},
+					},
+					Name:  "foobar.com",
+					Zones: []string{"foobar.com"},
+				},
 			},
 			UpstreamResolvers: operatorv1.UpstreamResolvers{
 				TransportConfig: operatorv1.DNSTransportConfig{
