@@ -223,7 +223,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 		{
 			description: "if the readiness probe endpoint changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
-				daemonset.Spec.Template.Spec.Containers[0].ReadinessProbe.Handler.HTTPGet.Path = "/ready"
+				daemonset.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Path = "/ready"
 			},
 			expect: true,
 		},
@@ -285,7 +285,7 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 								},
 								ReadinessProbe: &corev1.Probe{
 									PeriodSeconds: 10,
-									Handler: corev1.Handler{
+									ProbeHandler: corev1.ProbeHandler{
 										HTTPGet: &corev1.HTTPGetAction{
 											Path: "/health",
 											Port: intstr.IntOrString{

@@ -97,13 +97,10 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 	serviceCmpOpts := []cmp.Option{
 		// Ignore fields that the API, other controllers, or user may
 		// have modified.
-		//
-		// TODO: Remove TopologyKeys when the service topology feature gate is enabled.
 		cmpopts.IgnoreFields(
 			corev1.ServiceSpec{},
 			"ClusterIP", "ClusterIPs",
 			"IPFamilies", "IPFamilyPolicy",
-			"TopologyKeys",
 		),
 		cmp.Comparer(cmpServiceAffinity),
 		cmp.Comparer(cmpServiceType),
