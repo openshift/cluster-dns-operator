@@ -134,7 +134,7 @@ func TestClusterOperatorStatusRelatedObjects(t *testing.T) {
 		return true, nil
 	})
 	if err != nil {
-		t.Errorf("did not get expected status related objects: %w", err)
+		t.Errorf("did not get expected status related objects: %v", err)
 	}
 }
 
