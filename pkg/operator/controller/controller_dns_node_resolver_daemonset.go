@@ -76,7 +76,7 @@ func (r *reconciler) ensureNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP,
 
 // desiredNodeResolverDaemonSet returns the desired node resolver daemonset.
 func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain, openshiftCLIImage string) (bool, *appsv1.DaemonSet, error) {
-	hostPathFile := corev1.HostPathFile
+	hostPathDirectory := corev1.HostPathDirectory
 	// TODO: Consider setting maxSurge to a positive value.
 	maxSurge := intstr.FromInt(0)
 	maxUnavailable := intstr.FromString("33%")
@@ -136,8 +136,8 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 						},
 						TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "hosts-file",
-							MountPath: "/etc/hosts",
+							Name:      "host-etc",
+							MountPath: "/host/etc",
 						}},
 					}},
 					// The node-resolver pods need to run on
@@ -157,11 +157,11 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 						Operator: corev1.TolerationOpExists,
 					}},
 					Volumes: []corev1.Volume{{
-						Name: "hosts-file",
+						Name: "host-etc",
 						VolumeSource: corev1.VolumeSource{
 							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/etc/hosts",
-								Type: &hostPathFile,
+								Path: "/etc",
+								Type: &hostPathDirectory,
 							},
 						},
 					}},

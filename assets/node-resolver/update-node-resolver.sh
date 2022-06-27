@@ -4,8 +4,8 @@ set -uo pipefail
 trap 'jobs -p | xargs kill || true; wait; exit 0' TERM
 
 OPENSHIFT_MARKER="openshift-generated-node-resolver"
-HOSTS_FILE="/etc/hosts"
-TEMP_FILE="/etc/hosts.tmp"
+HOSTS_FILE="/host/etc/hosts"
+TEMP_FILE="/host/etc/hosts.tmp"
 
 IFS=', ' read -r -a services <<< "${SERVICES}"
 

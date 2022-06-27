@@ -158,7 +158,7 @@ func TestNodeResolverDaemonsetConfigChanged(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		hostPathFile := corev1.HostPathFile
+		hostPathDirectory := corev1.HostPathDirectory
 		original := appsv1.DaemonSet{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "dns-original",
@@ -180,11 +180,11 @@ func TestNodeResolverDaemonsetConfigChanged(t *testing.T) {
 							"beta.kubernetes.io/os": "linux",
 						},
 						Volumes: []corev1.Volume{{
-							Name: "hosts-file",
+							Name: "host-etc",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/etc/hosts",
-									Type: &hostPathFile,
+									Path: "/etc",
+									Type: &hostPathDirectory,
 								},
 							},
 						}},
