@@ -11,6 +11,7 @@ approvers:
   - rfredette
   - alebedev87
   - gcs278
+  - Ethany-RH
 reviewers:
   - ironcladlou
   - knobunc
@@ -24,4 +25,5 @@ reviewers:
   - rfredette
   - alebedev87
   - gcs278
+  - Ethany-RH
 component: DNS
