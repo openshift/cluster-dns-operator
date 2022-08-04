@@ -1,6 +1,6 @@
 contact_links:
 - name: File a Bugzilla report
-  url: https://bugzilla.redhat.com/enter_bug.cgi?product=OpenShift%20Container%20Platform&component=DNS
+  url: https://bugzilla.redhat.com/enter_bug.cgi?product=OpenShift%20Container%20Platform&component=Networking&sub_component=DNS
   about: Please use Bugzilla to report issues.
 - name: DNS Operator in OpenShift Container Platform
   url: https://docs.openshift.com/container-platform/latest/networking/dns-operator.html
