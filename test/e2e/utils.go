@@ -33,6 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
+
+	"k8s.io/utils/pointer"
 )
 
 // lookForStringInPodExec looks for expectedString in the output of command
@@ -183,6 +185,7 @@ func upstreamContainer(container, image string) corev1.Container {
 		ReadOnly:  true,
 		MountPath: "/etc/coredns",
 	}
+
 	return corev1.Container{
 		Name:           container,
 		Image:          image,
@@ -192,6 +195,16 @@ func upstreamContainer(container, image string) corev1.Container {
 		VolumeMounts:   []corev1.VolumeMount{configVolume},
 		LivenessProbe:  healthProbe,
 		ReadinessProbe: healthProbe,
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: pointer.Bool(false),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+			RunAsNonRoot: pointer.Bool(false),
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
 	}
 }
 
