@@ -36,4 +36,4 @@ See [HACKING.md](HACKING.md) for development topics.
 
 ## Reporting issues
 
-Bugs are tracked in [Bugzilla](https://bugzilla.redhat.com/enter_bug.cgi?product=OpenShift%20Container%20Platform&component=DNS).
+Bugs are tracked in [Bugzilla](https://bugzilla.redhat.com/enter_bug.cgi?product=OpenShift%20Container%20Platform&component=Networking&sub_component=DNS).
