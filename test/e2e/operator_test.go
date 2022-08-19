@@ -506,7 +506,7 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	// Create a separate namespace for the upstream resolver. Deleting this namespace will clean up the resources created.
 	tlsUpstreamNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: tlsUpstreamName,
+			Name: "openshift-testdnsovertls",
 		},
 	}
 	if err := cl.Create(context.TODO(), tlsUpstreamNamespace); err != nil {

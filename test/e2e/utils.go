@@ -400,6 +400,7 @@ func getClusterDNSOperatorPods(cl client.Client) (*corev1.PodList, error) {
 func upstreamTLSPod(name, ns, image string, configMap *corev1.ConfigMap) *corev1.Pod {
 	coreContainer := upstreamContainer(name, image)
 	volumeName := configMap.Name
+	volumeMode := int32(420)
 
 	items := []corev1.KeyToPath{}
 	for k := range configMap.Data {
@@ -412,7 +413,8 @@ func upstreamTLSPod(name, ns, image string, configMap *corev1.ConfigMap) *corev1
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: volumeName,
 				},
-				Items: items,
+				Items:       items,
+				DefaultMode: &volumeMode,
 			},
 		},
 	}
