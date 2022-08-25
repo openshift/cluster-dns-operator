@@ -81,3 +81,6 @@ buzz.com:5353 example.buzz.com:5353 {
     }
     reload
 }
+hostname.bind:5353 {
+    chaos
+}
