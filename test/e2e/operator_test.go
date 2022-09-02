@@ -856,7 +856,7 @@ func TestDNSLogging(t *testing.T) {
 	}
 
 	// Create the client Pod.
-	testClientForDNSLogging := buildPod("test-client-dnslogging", "default", cliImage, []string{"sleep", "3600"})
+	testClientForDNSLogging := buildPod("test-client-dnslogging", upstreamPodNs, cliImage, []string{"sleep", "3600"})
 	if err := cl.Create(context.TODO(), testClientForDNSLogging); err != nil {
 		t.Fatalf("failed to create pod %s/%s: %v", testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, err)
 	}
