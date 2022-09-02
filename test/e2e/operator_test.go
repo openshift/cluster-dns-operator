@@ -434,7 +434,7 @@ func TestDNSForwarding(t *testing.T) {
 	}
 
 	// Create the client Pod.
-	testClient := buildPod("test-client", "default", cliImage, []string{"sleep", "3600"})
+	testClient := buildPod("test-client", upstreamPodNs, cliImage, []string{"sleep", "3600"})
 	if err := cl.Create(context.TODO(), testClient); err != nil {
 		t.Fatalf("failed to create pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
 	}
@@ -506,7 +506,13 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	// Create a separate namespace for the upstream resolver. Deleting this namespace will clean up the resources created.
 	tlsUpstreamNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "openshift-testdnsovertls",
+			Name: tlsUpstreamName,
+			Labels: map[string]string{
+				"pod-security.kubernetes.io/warn":                "privileged",
+				"pod-security.kubernetes.io/audit":               "privileged",
+				"pod-security.kubernetes.io/enforce":             "privileged",
+				"security.openshift.io/scc.podSecurityLabelSync": "false",
+			},
 		},
 	}
 	if err := cl.Create(context.TODO(), tlsUpstreamNamespace); err != nil {
@@ -572,7 +578,7 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 		t.Fatalf("version %s not found for clusteroperator %s", statuscontroller.OpenshiftCLIVersionName, opName)
 	}
 
-	// Create the upstream resolver Pods.
+	// Create the upstream resolver Pods and the client pod
 	upstreamResolver1 := upstreamTLSPod(tlsUpstreamName+"-1", tlsUpstreamNamespace.Name, coreImage, upstreamTLSConfigMap)
 	if err := cl.Create(context.TODO(), upstreamResolver1); err != nil {
 		t.Fatalf("failed to create pod %s/%s: %v", upstreamResolver1.Namespace, upstreamResolver1.Name, err)
@@ -580,6 +586,10 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	upstreamResolver2 := upstreamTLSPod(tlsUpstreamName+"-2", tlsUpstreamNamespace.Name, coreImage, upstreamTLSConfigMap)
 	if err := cl.Create(context.TODO(), upstreamResolver2); err != nil {
 		t.Fatalf("failed to create pod %s/%s: %v", upstreamResolver2.Namespace, upstreamResolver2.Name, err)
+	}
+	testClient := buildPod("test-client-tls", tlsUpstreamName, cliImage, []string{"sleep", "3600"})
+	if err := cl.Create(context.TODO(), testClient); err != nil {
+		t.Fatalf("failed to create pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
 	}
 
 	// Wait for the first upstream resolver Pod to be ready.
@@ -616,6 +626,25 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", upstreamResolver2.Namespace, upstreamResolver2.Name, err)
+	}
+
+	// Wait for the client Pod to be ready.
+	name = types.NamespacedName{Namespace: testClient.Namespace, Name: testClient.Name}
+	err = wait.PollImmediate(1*time.Second, 60*time.Second, func() (bool, error) {
+		if err := cl.Get(context.TODO(), name, testClient); err != nil {
+			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
+			return false, nil
+		}
+		for _, cond := range testClient.Status.Conditions {
+			if cond.Type == corev1.ContainersReady &&
+				cond.Status == corev1.ConditionTrue {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
 	}
 
 	// Create the ConfigMap to hold the cert and key data for the operator configuration
@@ -682,40 +711,10 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 		t.Errorf("expected default DNS pods to be available: %v", err)
 	}
 
-	// Create the client Pod.
-	testClient := buildPod("test-client-tls", "default", cliImage, []string{"sleep", "3600"})
-	if err := cl.Create(context.TODO(), testClient); err != nil {
-		t.Fatalf("failed to create pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
-	}
-	t.Cleanup(func() {
-		if err := cl.Delete(context.TODO(), testClient); err != nil {
-			t.Fatalf("failed to delete pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
-		}
-	})
-
-	// Wait for the client Pod to be ready.
-	name = types.NamespacedName{Namespace: testClient.Namespace, Name: testClient.Name}
-	err = wait.PollImmediate(1*time.Second, 60*time.Second, func() (bool, error) {
-		if err := cl.Get(context.TODO(), name, testClient); err != nil {
-			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
-			return false, nil
-		}
-		for _, cond := range testClient.Status.Conditions {
-			if cond.Type == corev1.ContainersReady &&
-				cond.Status == corev1.ConditionTrue {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
-	if err != nil {
-		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
-	}
-
 	// Dig the Corefile host.
 	digCmd := []string{"dig", "+short", "www.tls.com", "A"}
 	fooHost := "4.3.2.1"
-	if err = lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 30*time.Second); err != nil {
+	if err = lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 60*time.Second); err != nil {
 		t.Fatalf("failed to forward request to %s or %s: %v", upstreamResolver1.Status.PodIP, upstreamResolver2.Status.PodIP, err)
 	}
 
