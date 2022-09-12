@@ -27,13 +27,14 @@ const (
 	// enableDaemonSetEvictionAnnotationKey is the annotation key for the
 	// annotation that enables eviction of a daemonset by the cluster
 	// autoscaler.
-	enableDaemonSetEvictionAnnotationKey = "cluster-autoscaler.kubernetes.io/enable-ds-eviction"
+	enableDaemonSetEvictionAnnotationKey  = "cluster-autoscaler.kubernetes.io/enable-ds-eviction"
+	targetWorkloadManagementAnnotationKey = "target.workload.openshift.io/management"
 )
 
 var (
 	// managedDNSDaemonSetAnnotations is a set of annotation keys for
 	// annotations that the operator manages for the DNS daemonset.
-	managedDNSDaemonSetAnnotations = sets.NewString(enableDaemonSetEvictionAnnotationKey)
+	managedDNSDaemonSetAnnotations = sets.NewString(enableDaemonSetEvictionAnnotationKey, targetWorkloadManagementAnnotationKey)
 )
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
@@ -95,9 +96,11 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 	// Enable eviction when cluster-autoscaler removes a node.  This ensures
 	// that the cluster DNS service stops forwarding queries to the DNS pod
 	// *before* the hosting node shuts down.
-	daemonset.Spec.Template.Annotations = map[string]string{
-		enableDaemonSetEvictionAnnotationKey: "true",
+	if daemonset.Spec.Template.Annotations == nil {
+		daemonset.Spec.Template.Annotations = map[string]string{}
 	}
+	daemonset.Spec.Template.Annotations[enableDaemonSetEvictionAnnotationKey] = "true"
+
 	// Ensure the daemonset adopts only its own pods.
 	daemonset.Spec.Selector = DNSDaemonSetPodSelector(dns)
 	daemonset.Spec.Template.Labels = daemonset.Spec.Selector.MatchLabels
@@ -396,6 +399,7 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 			changed = true
 		}
 	}
+
 	if !cmp.Equal(current.Spec.Template.Spec.NodeSelector, expected.Spec.Template.Spec.NodeSelector, cmpopts.EquateEmpty()) {
 		updated.Spec.Template.Spec.NodeSelector = expected.Spec.Template.Spec.NodeSelector
 		changed = true
