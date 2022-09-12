@@ -29,6 +29,7 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 		// Validate the daemonset
 		expectedPodAnnotations := map[string]string{
 			"cluster-autoscaler.kubernetes.io/enable-ds-eviction": "true",
+			"target.workload.openshift.io/management":             "{\"effect\": \"PreferredDuringScheduling\"}",
 		}
 		actualPodAnnotations := ds.Spec.Template.Annotations
 		expectedPodLabels := map[string]string{
@@ -287,12 +288,36 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: false,
 		},
 		{
-			description: "if the enable-ds-eviction annotation is added",
+			description: "if the enable-ds-eviction annotation is changed",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				if daemonset.Spec.Template.Annotations == nil {
 					daemonset.Spec.Template.Annotations = map[string]string{}
 				}
-				daemonset.Spec.Template.Annotations["cluster-autoscaler.kubernetes.io/enable-ds-eviction"] = "true"
+				daemonset.Spec.Template.Annotations["cluster-autoscaler.kubernetes.io/enable-ds-eviction"] = ""
+			},
+			expect: true,
+		},
+		{
+			description: "if the target workload annotation is changed",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				if daemonset.Spec.Template.Annotations == nil {
+					daemonset.Spec.Template.Annotations = map[string]string{}
+				}
+				daemonset.Spec.Template.Annotations["target.workload.openshift.io/management"] = ""
+			},
+			expect: true,
+		},
+		{
+			description: "if the enable-ds-eviction annotation is deleted",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				delete(daemonset.Spec.Template.Annotations, "cluster-autoscaler.kubernetes.io/enable-ds-eviction")
+			},
+			expect: true,
+		},
+		{
+			description: "if the target workload annotation is deleted",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				delete(daemonset.Spec.Template.Annotations, "target.workload.openshift.io/management")
 			},
 			expect: true,
 		},
@@ -308,6 +333,12 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			},
 			Spec: appsv1.DaemonSetSpec{
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							"cluster-autoscaler.kubernetes.io/enable-ds-eviction": "true",
+							"target.workload.openshift.io/management":             "{\"effect\": \"PreferredDuringScheduling\"}",
+						},
+					},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
