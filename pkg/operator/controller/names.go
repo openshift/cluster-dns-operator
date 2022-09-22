@@ -45,6 +45,13 @@ func DefaultDNSNamespaceName() types.NamespacedName {
 	}
 }
 
+// DefaultDNSOperandNamespaceName returns the namespaced name of the default DNS operand resource.
+func DefaultDNSOperandNamespaceName() types.NamespacedName {
+	return types.NamespacedName{
+		Name: DefaultOperandNamespace,
+	}
+}
+
 // DNSDaemonSetName returns the namespaced name for the dns daemonset.
 func DNSDaemonSetName(dns *operatorv1.DNS) types.NamespacedName {
 	return types.NamespacedName{
