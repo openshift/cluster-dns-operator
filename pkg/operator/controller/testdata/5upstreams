@@ -36,3 +36,6 @@ foo.com:5353 {
     }
     reload
 }
+hostname.bind:5353 {
+    chaos
+}

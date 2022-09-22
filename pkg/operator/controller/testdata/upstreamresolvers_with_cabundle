@@ -23,3 +23,6 @@
     }
     reload
 }
+hostname.bind:5353 {
+    chaos
+}

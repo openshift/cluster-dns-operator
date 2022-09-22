@@ -87,6 +87,9 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
     }
     reload
 }
+hostname.bind:5353 {
+    chaos
+}
 `))
 
 // ensureDNSConfigMap ensures that a configmap exists for a given DNS.
