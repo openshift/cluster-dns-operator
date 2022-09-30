@@ -104,11 +104,11 @@ github.com/modern-go/reflect2
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
-# github.com/openshift/api v0.0.0-20220419014147-5308d3d6f668
-## explicit; go 1.16
+# github.com/openshift/api v0.0.0-20220930102857-d010b4db08e3
+## explicit; go 1.18
 github.com/openshift/api/config/v1
 github.com/openshift/api/operator/v1
-# github.com/openshift/build-machinery-go v0.0.0-20211213093930-7e33a7eb4ce3
+# github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d
 ## explicit; go 1.13
 github.com/openshift/build-machinery-go
 github.com/openshift/build-machinery-go/make
