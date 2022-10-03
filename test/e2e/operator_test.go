@@ -779,6 +779,11 @@ func TestDNSLogging(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Ensure that DNS is stable before starting the test, otherwise we'd need to tweak individual test durations.
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
 	// Get the CoreDNS image used by the test upstream resolver.
 	co := &configv1.ClusterOperator{}
 	if err := cl.Get(context.TODO(), opName, co); err != nil {
@@ -893,14 +898,8 @@ func TestDNSLogging(t *testing.T) {
 			t.Fatalf("failed to dig %v", err)
 		}
 
-		if err := lookForStringInPodExec(corednspod.Namespace, corednspod.Name, "dns", catCmd, "class denial error", 2*time.Minute); err != nil {
+		if err := lookForStringInPodExec(corednspod.Namespace, corednspod.Name, "dns", catCmd, "class denial error", 5*time.Minute); err != nil {
 			t.Fatalf("failed to set Debug logLevel for operator %s: %v", opName, err)
-		}
-
-		// Get the CoreDNS image used by the test upstream resolver.
-		co := &configv1.ClusterOperator{}
-		if err := cl.Get(context.TODO(), opName, co); err != nil {
-			t.Fatalf("failed to get clusteroperator %s: %v", opName, err)
 		}
 
 		if found == 0 {
