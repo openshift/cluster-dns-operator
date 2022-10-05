@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"net"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -43,6 +44,22 @@ const (
 	DNSControllerFinalizer = "dns.operator.openshift.io/dns-controller"
 
 	controllerName = "dns_controller"
+
+	namespaceRunLevelLabel           = "openshift.io/run-level"             // "0"
+	namespaceClusterMonitoringLabel  = "openshift.io/cluster-monitoring"    // "true"
+	namespacePodSecurityEnforceLabel = "pod-security.kubernetes.io/enforce" // privileged
+	namespacePodSecurityAuditLabel   = "pod-security.kubernetes.io/audit"   // privileged
+	namespacePodSecurityWarnLabel    = "pod-security.kubernetes.io/warn"    // privileged
+)
+
+// managedDNSNamespaceLabels is a set of label keys for labels that the operator manages
+// for the operand namespace
+var managedDNSNamespaceLabels = sets.NewString(
+	namespaceClusterMonitoringLabel,
+	namespaceRunLevelLabel,
+	namespacePodSecurityAuditLabel,
+	namespacePodSecurityEnforceLabel,
+	namespacePodSecurityWarnLabel,
 )
 
 // New creates the operator controller from configuration. This is the
@@ -283,15 +300,25 @@ func (r *reconciler) ensureDNSDeleted(dns *operatorv1.DNS) error {
 // ensureDNSNamespace ensures all the necessary scaffolding exists for
 // dns generally, including a namespace and all RBAC setup.
 func (r *reconciler) ensureDNSNamespace() error {
-	ns := manifests.DNSNamespace()
-	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: ns.Name}, ns); err != nil {
+	existingNamespace := corev1.Namespace{}
+	desiredNamespace := manifests.DNSNamespace()
+	if err := r.client.Get(context.TODO(), DefaultDNSOperandNamespaceName(), &existingNamespace); err != nil {
 		if !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to get dns namespace %q: %v", ns.Name, err)
+			return fmt.Errorf("failed to get dns namespace %q: %w", desiredNamespace.Name, err)
 		}
-		if err := r.client.Create(context.TODO(), ns); err != nil {
-			return fmt.Errorf("failed to create dns namespace %s: %v", ns.Name, err)
+		if err := r.client.Create(context.TODO(), desiredNamespace); err != nil {
+			return fmt.Errorf("failed to create dns namespace %s: %w", desiredNamespace.Name, err)
 		}
-		logrus.Infof("created dns namespace: %s", ns.Name)
+		logrus.Infof("created dns namespace: %s", desiredNamespace.Name)
+	} else {
+		// Make sure existing DNS namespace has all the labels from the Namespace manifest
+		changed, updatedNamespace := namespaceLabelsChanged(&existingNamespace, desiredNamespace)
+		if changed {
+			if err := r.client.Update(context.TODO(), updatedNamespace); err != nil {
+				return fmt.Errorf("failed to update dns namespace %s: %w", updatedNamespace.Name, err)
+			}
+			logrus.Infof("updated dns namespace: %s", updatedNamespace.Name)
+		}
 	}
 
 	if _, _, err := r.ensureDNSClusterRole(); err != nil {
@@ -336,6 +363,26 @@ func (r *reconciler) ensureDNSNamespace() error {
 	}
 
 	return nil
+}
+
+// namespaceLabelsChanged generates a new namespace with the desired labels, and reports true if the existing namespace
+// labels need to be updated to match the desired state.
+func namespaceLabelsChanged(existingNamespace, desiredNamespace *corev1.Namespace) (bool, *corev1.Namespace) {
+	changed := false
+	updatedNamespace := existingNamespace.DeepCopy()
+	if updatedNamespace.Labels == nil {
+		updatedNamespace.Labels = map[string]string{}
+	}
+
+	for k := range managedDNSNamespaceLabels {
+		existingVal, have := existingNamespace.Labels[k]
+		desiredVal, want := desiredNamespace.Labels[k]
+		if want && (!have || existingVal != desiredVal) {
+			updatedNamespace.Labels[k] = desiredNamespace.Labels[k]
+			changed = true
+		}
+	}
+	return changed, updatedNamespace
 }
 
 // ensureMetricsIntegration ensures that dns prometheus metrics are integrated with openshift-monitoring for the given DNS.
