@@ -21,9 +21,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const resolvConf = "/etc/resolv.conf"
-const defaultDNSPort = 53
-const lameDuckDuration = 20 * time.Second
+const (
+	resolvConf       = "/etc/resolv.conf"
+	defaultDNSPort   = 53
+	lameDuckDuration = 20 * time.Second
+
+	// cacheDefaultMaxPositiveTTLSeconds is the default maximum TTL that the
+	// operator configures CoreDNS to enforce for positive (NOERROR)
+	// responses.
+	cacheDefaultMaxPositiveTTLSeconds = 900
+	// cacheDefaultMaxNegativeTTLSeconds is the default maximum TTL that the
+	// operator configures CoreDNS to enforce for negative (NXDOMAIN)
+	// responses.
+	cacheDefaultMaxNegativeTTLSeconds = 30
+)
 
 var errInvalidNetworkUpstream = fmt.Errorf("The address field is mandatory for upstream of type Network, but was not provided")
 var errTransportTLSConfiguredWithoutServerName = fmt.Errorf("The ServerName field is mandatory when configuring TLS as the DNS Transport")
@@ -51,8 +62,8 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         {{$.LogLevel}}
     }
     bufsize 512
-    cache 900 {
-        denial 9984 30
+    cache {{ $.PositiveTTL }} {
+        denial 9984 {{ $.NegativeTTL }}
     }
 }
 {{end -}}
@@ -82,8 +93,8 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         policy {{ CoreDNSForwardingPolicy .Policy }}
     }
     {{- end}}
-    cache 900 {
-        denial 9984 30
+    cache {{ .PositiveTTL }} {
+        denial 9984 {{ .NegativeTTL }}
     }
     reload
 }
@@ -174,6 +185,9 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		upstreamResolvers.Policy = dns.Spec.UpstreamResolvers.Policy
 	}
 
+	// Calculate the caching values (in seconds) for use in the Corefile
+	pTTL, nTTL := coreDNSCache(dns)
+
 	corefileParameters := struct {
 		ClusterDomain       string
 		Servers             interface{}
@@ -183,6 +197,8 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		CABundleRevisionMap map[string]string
 		CABundleFileName    string
 		LameDuckDuration    time.Duration
+		PositiveTTL         uint32
+		NegativeTTL         uint32
 	}{
 		ClusterDomain:       clusterDomain,
 		Servers:             dns.Spec.Servers,
@@ -192,6 +208,8 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		CABundleRevisionMap: caBundleRevisionMap,
 		CABundleFileName:    caBundleFileName,
 		LameDuckDuration:    lameDuckDuration,
+		PositiveTTL:         pTTL,
+		NegativeTTL:         nTTL,
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {
@@ -345,6 +363,34 @@ func coreDNSLogLevel(dns *operatorv1.DNS) string {
 		return "class all"
 	}
 	return "class error"
+}
+
+// coreDNSCache reads the TTL values set in spec.cache and returns integer representations of those values in seconds.
+// This returns uint32 values because CoreDNS won't allow setting the maxTTLs to 0 and there's no use case for setting a
+// negative maxTTL value.
+func coreDNSCache(dns *operatorv1.DNS) (positiveTTL, negativeTTL uint32) {
+	// We're using Round() here so if a fractional value is provided it'll abide by
+	// normal rounding rules (e.g. halfway or greater, round up, else round down). Seconds()
+	// returns the number of seconds as a float64, and then we convert that to an integer for
+	// use in the Corefile.
+	configuredPosTTL := uint32(dns.Spec.Cache.PositiveTTL.Round(time.Second).Seconds())
+	configuredNegTTL := uint32(dns.Spec.Cache.NegativeTTL.Round(time.Second).Seconds())
+
+	// For values <=0, Round() will return them as-is so we'll use the default if that happens
+	// because CoreDNS won't allow setting a negative value.
+	if configuredPosTTL <= 0 {
+		positiveTTL = cacheDefaultMaxPositiveTTLSeconds
+	} else {
+		positiveTTL = configuredPosTTL
+	}
+
+	if configuredNegTTL <= 0 {
+		negativeTTL = cacheDefaultMaxNegativeTTLSeconds
+	} else {
+		negativeTTL = configuredNegTTL
+	}
+
+	return positiveTTL, negativeTTL
 }
 
 func contains(upstreams []operatorv1.Upstream, upstream operatorv1.Upstream) bool {

@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	v1 "github.com/openshift/api/config/v1"
@@ -173,6 +174,51 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 				},
 			},
 			expectedCoreFile: mustLoadTestFile(t, "forwardplugin_tls"),
+		},
+		{
+			name: "Check the default cache settings",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{},
+						NegativeTTL: metav1.Duration{},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "default_corefile_no_cache_configured"),
+		},
+		{
+			name: "Default Corefile with valid cache configured",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{Duration: 9999 * time.Second},
+						NegativeTTL: metav1.Duration{Duration: 29 * time.Second},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "default_corefile_cache_configured"),
+		},
+		{
+			name: "Default Corefile with fractional cache values configured",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{Duration: 999 * time.Millisecond},
+						NegativeTTL: metav1.Duration{Duration: 444 * time.Millisecond},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "default_corefile_cache_with_fractional_values_configured"),
 		},
 	}
 
@@ -880,6 +926,136 @@ func TestDesiredDNSConfigmapUpstreamResolvers(t *testing.T) {
 				t.Errorf("unexpected Corefile;\n%s", diff)
 			}
 		})
+	}
+}
+
+func Test_coreDNSCache(t *testing.T) {
+	testcases := []struct {
+		name         string
+		dns          *operatorv1.DNS
+		expectedPTTL uint32
+		expectedNTTL uint32
+	}{
+		{
+			name: "no configured cache values results in default settings",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{},
+				},
+			},
+			expectedPTTL: cacheDefaultMaxPositiveTTLSeconds,
+			expectedNTTL: cacheDefaultMaxNegativeTTLSeconds,
+		},
+		{
+			name: "1s",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{1 * time.Second},
+					},
+				},
+			},
+			expectedPTTL: 1,
+			expectedNTTL: cacheDefaultMaxNegativeTTLSeconds,
+		},
+		{
+			name: "1m",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{1 * time.Minute},
+					},
+				},
+			},
+			expectedPTTL: 60,
+			expectedNTTL: cacheDefaultMaxNegativeTTLSeconds,
+		},
+		{
+			name: "1h",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						NegativeTTL: metav1.Duration{1 * time.Hour},
+					},
+				},
+			},
+			expectedPTTL: cacheDefaultMaxPositiveTTLSeconds,
+			expectedNTTL: 3600,
+		},
+		{
+			name: "1h10m5s",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						NegativeTTL: metav1.Duration{1*time.Hour + 10*time.Minute + 5*time.Second},
+					},
+				},
+			},
+			expectedPTTL: cacheDefaultMaxPositiveTTLSeconds,
+			expectedNTTL: 4205,
+		},
+		{
+			name: "999ms rounds to 1",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{999 * time.Millisecond},
+						NegativeTTL: metav1.Duration{999 * time.Millisecond},
+					},
+				},
+			},
+			expectedPTTL: 1,
+			expectedNTTL: 1,
+		},
+		{
+			name: "1.1s rounds to 1",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{1*time.Second + 100*time.Millisecond},
+						NegativeTTL: metav1.Duration{1*time.Second + 100*time.Millisecond},
+					},
+				},
+			},
+			expectedPTTL: 1,
+			expectedNTTL: 1,
+		},
+		{
+			name: "5.9s rounds to 6",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{5*time.Second + 900*time.Millisecond},
+						NegativeTTL: metav1.Duration{5*time.Second + 900*time.Millisecond},
+					},
+				},
+			},
+			expectedPTTL: 6,
+			expectedNTTL: 6,
+		},
+		{
+			name: "2.009s rounds to 2",
+			dns: &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					Cache: operatorv1.DNSCache{
+						PositiveTTL: metav1.Duration{2*time.Second + 9*time.Millisecond},
+						NegativeTTL: metav1.Duration{2*time.Second + 9*time.Millisecond},
+					},
+				},
+			},
+			expectedPTTL: 2,
+			expectedNTTL: 2,
+		},
+	}
+
+	for _, tc := range testcases {
+		pTTL, nTTL := coreDNSCache(tc.dns)
+		if tc.expectedPTTL != pTTL {
+			t.Errorf("test case %s failed: expected %d PositiveTTL, got %d", tc.name, tc.expectedPTTL, pTTL)
+		}
+		if tc.expectedNTTL != nTTL {
+			t.Errorf("test case %s failed: expected %d NegativeTTL, got %d", tc.name, tc.expectedNTTL, nTTL)
+		}
 	}
 }
 
