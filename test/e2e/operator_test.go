@@ -434,7 +434,7 @@ func TestDNSForwarding(t *testing.T) {
 	}
 
 	// Create the client Pod.
-	testClient := buildPod("test-client", "default", cliImage, []string{"sleep", "3600"})
+	testClient := buildPod("test-client", upstreamPodNs, cliImage, []string{"sleep", "3600"})
 	if err := cl.Create(context.TODO(), testClient); err != nil {
 		t.Fatalf("failed to create pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
 	}
@@ -507,6 +507,12 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	tlsUpstreamNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: tlsUpstreamName,
+			Labels: map[string]string{
+				"pod-security.kubernetes.io/warn":                "privileged",
+				"pod-security.kubernetes.io/audit":               "privileged",
+				"pod-security.kubernetes.io/enforce":             "privileged",
+				"security.openshift.io/scc.podSecurityLabelSync": "false",
+			},
 		},
 	}
 	if err := cl.Create(context.TODO(), tlsUpstreamNamespace); err != nil {
@@ -572,24 +578,24 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 		t.Fatalf("version %s not found for clusteroperator %s", statuscontroller.OpenshiftCLIVersionName, opName)
 	}
 
-	// Create the upstream resolver Pods.
-	upstreamResolver1 := upstreamTLSPod(tlsUpstreamName+"-1", tlsUpstreamNamespace.Name, coreImage, upstreamTLSConfigMap)
-	if err := cl.Create(context.TODO(), upstreamResolver1); err != nil {
-		t.Fatalf("failed to create pod %s/%s: %v", upstreamResolver1.Namespace, upstreamResolver1.Name, err)
+	// Create the upstream resolver Pods and the client pod
+	upstreamResolver := upstreamTLSPod(tlsUpstreamName, tlsUpstreamNamespace.Name, coreImage, upstreamTLSConfigMap)
+	if err := cl.Create(context.TODO(), upstreamResolver); err != nil {
+		t.Fatalf("failed to create pod %s/%s: %v", upstreamResolver.Namespace, upstreamResolver.Name, err)
 	}
-	upstreamResolver2 := upstreamTLSPod(tlsUpstreamName+"-2", tlsUpstreamNamespace.Name, coreImage, upstreamTLSConfigMap)
-	if err := cl.Create(context.TODO(), upstreamResolver2); err != nil {
-		t.Fatalf("failed to create pod %s/%s: %v", upstreamResolver2.Namespace, upstreamResolver2.Name, err)
+	testClient := buildPod("test-client-tls", tlsUpstreamName, cliImage, []string{"sleep", "3600"})
+	if err := cl.Create(context.TODO(), testClient); err != nil {
+		t.Fatalf("failed to create pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
 	}
 
-	// Wait for the first upstream resolver Pod to be ready.
-	name := types.NamespacedName{Namespace: upstreamResolver1.Namespace, Name: upstreamResolver1.Name}
+	// Wait for the upstream resolver Pod to be ready.
+	name := types.NamespacedName{Namespace: upstreamResolver.Namespace, Name: upstreamResolver.Name}
 	err = wait.PollImmediate(1*time.Second, 2*time.Minute, func() (bool, error) {
-		if err := cl.Get(context.TODO(), name, upstreamResolver1); err != nil {
+		if err := cl.Get(context.TODO(), name, upstreamResolver); err != nil {
 			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
 			return false, nil
 		}
-		for _, cond := range upstreamResolver1.Status.Conditions {
+		for _, cond := range upstreamResolver.Status.Conditions {
 			if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
 				return true, nil
 			}
@@ -597,25 +603,26 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 		return false, nil
 	})
 	if err != nil {
-		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", upstreamResolver1.Namespace, upstreamResolver1.Name, err)
+		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", upstreamResolver.Namespace, upstreamResolver.Name, err)
 	}
 
-	// Wait for the second upstream resolver Pod to be ready.
-	name = types.NamespacedName{Namespace: upstreamResolver2.Namespace, Name: upstreamResolver2.Name}
-	err = wait.PollImmediate(1*time.Second, 2*time.Minute, func() (bool, error) {
-		if err := cl.Get(context.TODO(), name, upstreamResolver2); err != nil {
+	// Wait for the client Pod to be ready.
+	name = types.NamespacedName{Namespace: testClient.Namespace, Name: testClient.Name}
+	err = wait.PollImmediate(1*time.Second, 60*time.Second, func() (bool, error) {
+		if err := cl.Get(context.TODO(), name, testClient); err != nil {
 			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
 			return false, nil
 		}
-		for _, cond := range upstreamResolver2.Status.Conditions {
-			if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
+		for _, cond := range testClient.Status.Conditions {
+			if cond.Type == corev1.ContainersReady &&
+				cond.Status == corev1.ConditionTrue {
 				return true, nil
 			}
 		}
 		return false, nil
 	})
 	if err != nil {
-		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", upstreamResolver2.Namespace, upstreamResolver2.Name, err)
+		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
 	}
 
 	// Create the ConfigMap to hold the cert and key data for the operator configuration
@@ -656,7 +663,7 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 					CABundle:   configv1.ConfigMapNameReference{Name: "dns-over-tls-ca"},
 				},
 			},
-			Upstreams: []string{upstreamResolver1.Status.PodIP + ":5353", upstreamResolver2.Status.PodIP + ":5353"},
+			Upstreams: []string{upstreamResolver.Status.PodIP + ":5353"},
 		},
 	}
 	defaultDNS.Spec.Servers = []operatorv1.Server{upstream}
@@ -682,92 +689,17 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 		t.Errorf("expected default DNS pods to be available: %v", err)
 	}
 
-	// Create the client Pod.
-	testClient := buildPod("test-client-tls", "default", cliImage, []string{"sleep", "3600"})
-	if err := cl.Create(context.TODO(), testClient); err != nil {
-		t.Fatalf("failed to create pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
-	}
-	t.Cleanup(func() {
-		if err := cl.Delete(context.TODO(), testClient); err != nil {
-			t.Fatalf("failed to delete pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
-		}
-	})
-
-	// Wait for the client Pod to be ready.
-	name = types.NamespacedName{Namespace: testClient.Namespace, Name: testClient.Name}
-	err = wait.PollImmediate(1*time.Second, 60*time.Second, func() (bool, error) {
-		if err := cl.Get(context.TODO(), name, testClient); err != nil {
-			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
-			return false, nil
-		}
-		for _, cond := range testClient.Status.Conditions {
-			if cond.Type == corev1.ContainersReady &&
-				cond.Status == corev1.ConditionTrue {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
-	if err != nil {
-		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
-	}
-
 	// Dig the Corefile host.
 	digCmd := []string{"dig", "+short", "www.tls.com", "A"}
 	fooHost := "4.3.2.1"
-	if err = lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 30*time.Second); err != nil {
-		t.Fatalf("failed to forward request to %s or %s: %v", upstreamResolver1.Status.PodIP, upstreamResolver2.Status.PodIP, err)
+	if err = lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 60*time.Second); err != nil {
+		t.Fatalf("failed to forward request to %s: %v", upstreamResolver.Status.PodIP, err)
 	}
 
 	// Scrape the upstream resolver logs for the "NOERROR" message.
-	// This looks in both upstream resolvers because the forwarding policy could be random. This also serves the purpose
-	// of testing that one server certificate will work for multiple upstreams using the same ServerName.
 	upstreamResolverLogMsg := "NOERROR"
-	var firstResolver *corev1.Pod
-	var secondResolver *corev1.Pod
-	if err = lookForStringInPodLog(upstreamResolver1.Namespace, upstreamResolver1.Name, upstreamResolver1.Name, upstreamResolverLogMsg, 30*time.Second); err != nil {
-		t.Logf("%s/%s: %v", upstreamResolver1.Namespace, upstreamResolver1.Name, err)
-	} else {
-		firstResolver = upstreamResolver1
-	}
-
-	if err = lookForStringInPodLog(upstreamResolver2.Namespace, upstreamResolver2.Name, upstreamResolver2.Name, upstreamResolverLogMsg, 30*time.Second); err != nil {
-		t.Logf("%s/%s: %v", upstreamResolver2.Namespace, upstreamResolver2.Name, err)
-	} else {
-		firstResolver = upstreamResolver2
-	}
-
-	// Neither of the upstreams resolved the request. Fail now.
-	if firstResolver == nil {
-		t.Fatalf("failed to parse %q from upstream resolver pods: %v", upstreamResolverLogMsg, err)
-	}
-
-	// Take down this resolver and retry to ensure the next resolver gets the request
-	if err = cl.Delete(context.TODO(), firstResolver); err != nil {
-		t.Fatalf("failed to delete pod %s/%s: %v", firstResolver.Namespace, firstResolver.Name, err)
-	}
-
-	// Dig the Corefile host. This will trigger another NOERROR log in the remaining upstream.
-	if err = lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 30*time.Second); err != nil {
-		t.Fatalf("failed to forward request to %s or %s: %v", upstreamResolver1.Status.PodIP, upstreamResolver2.Status.PodIP, err)
-	}
-
-	// Look for the NOERROR message again. Check both resolvers because we don't know which one is still up.
-	if err = lookForStringInPodLog(upstreamResolver1.Namespace, upstreamResolver1.Name, upstreamResolver1.Name, upstreamResolverLogMsg, 30*time.Second); err != nil {
-		t.Logf("%s/%s: %v", upstreamResolver1.Namespace, upstreamResolver1.Name, err)
-	} else {
-		secondResolver = upstreamResolver1
-	}
-
-	if err = lookForStringInPodLog(upstreamResolver2.Namespace, upstreamResolver2.Name, upstreamResolver2.Name, upstreamResolverLogMsg, 30*time.Second); err != nil {
-		t.Logf("%s/%s: %v", upstreamResolver2.Namespace, upstreamResolver2.Name, err)
-	} else {
-		secondResolver = upstreamResolver2
-	}
-
-	// Neither of the upstreams resolved the request. Fail now.
-	if secondResolver == nil {
-		t.Fatalf("failed to parse %q from upstream resolver pods: %v", upstreamResolverLogMsg, err)
+	if err = lookForStringInPodLog(upstreamResolver.Namespace, upstreamResolver.Name, upstreamResolver.Name, upstreamResolverLogMsg, 30*time.Second); err != nil {
+		t.Fatalf("%s/%s: %v", upstreamResolver.Namespace, upstreamResolver.Name, err)
 	}
 }
 
@@ -924,7 +856,7 @@ func TestDNSLogging(t *testing.T) {
 	}
 
 	// Create the client Pod.
-	testClientForDNSLogging := buildPod("test-client-dnslogging", "default", cliImage, []string{"sleep", "3600"})
+	testClientForDNSLogging := buildPod("test-client-dnslogging", upstreamPodNs, cliImage, []string{"sleep", "3600"})
 	if err := cl.Create(context.TODO(), testClientForDNSLogging); err != nil {
 		t.Fatalf("failed to create pod %s/%s: %v", testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, err)
 	}
