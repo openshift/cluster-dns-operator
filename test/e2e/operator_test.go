@@ -188,7 +188,7 @@ func TestDNSLogging(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Ensure that DNS is stable before starting the test, otherwise we'd need to tweak individual test durations.
+	// Ensure that DNS is stable before starting the test
 	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
 		t.Errorf("expected default DNS pods to be available: %v", err)
 	}
@@ -360,6 +360,11 @@ func TestCoreDNSDaemonSetReconciliation(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Ensure that DNS is stable before starting the test
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
+	}
+
 	defaultDNS := &operatorv1.DNS{}
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
 		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DefaultDNSController}, defaultDNS); err != nil {
@@ -442,6 +447,11 @@ func TestDNSForwarding(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Ensure that DNS is stable before starting the test
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
 	}
 
 	// Create the upstream resolver ConfigMap.
@@ -953,6 +963,11 @@ func TestDNSNodePlacement(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Ensure that DNS is stable before starting the test
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+		t.Errorf("expected default DNS pods to be available: %v", err)
 	}
 
 	// Configure DNS pods to run only on master nodes.
