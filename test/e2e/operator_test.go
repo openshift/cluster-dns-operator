@@ -248,7 +248,6 @@ func TestDNSLogging(t *testing.T) {
 	if err := cl.List(context.TODO(), coreDNSPods, client.MatchingLabelsSelector{Selector: selector}, client.InNamespace(dnsDaemonSet.Namespace)); err != nil {
 		t.Fatalf("failed to list pods for dns daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
 	}
-	catCmd := []string{"cat", "/etc/coredns/Corefile"}
 
 	// Get the openshift-cli image.
 	var (
@@ -299,26 +298,24 @@ func TestDNSLogging(t *testing.T) {
 	}
 
 	found := 0
+	catCmd := []string{"cat", "/etc/coredns/Corefile"}
 	for _, corednspod := range coreDNSPods.Items {
+		// Check that the correct log level is set
+		if err := lookForStringInPodExec(corednspod.Namespace, corednspod.Name, "dns", catCmd, "class denial error", 5*time.Minute); err != nil {
+			t.Fatalf("failed to set Debug logLevel for operator %s: %v", opName, err)
+		}
 
-		// Dig the example dns forwarding host.
+		// Dig the example dns forwarding host and check that the response is NXDOMAIN
 		digCmd := []string{"dig", "test.svc.cluster.local"}
 		if err := lookForStringInPodExec(testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, testClientForDNSLogging.Name, digCmd, "NXDOMAIN", 2*time.Minute); err != nil {
 			t.Fatalf("failed to dig %v", err)
 		}
 
-		if err := lookForStringInPodExec(corednspod.Namespace, corednspod.Name, "dns", catCmd, "class denial error", 5*time.Minute); err != nil {
-			t.Fatalf("failed to set Debug logLevel for operator %s: %v", opName, err)
+		// Check for the corresponding NXDOMAIN log in the CoreDNS pod.
+		if err := lookForSubStringsInPodLog(corednspod.Namespace, corednspod.Name, "dns", 5*time.Minute, "A IN test.svc.cluster.local.", "NXDOMAIN"); err == nil {
+			found = 1
+			break
 		}
-
-		if found == 0 {
-			if err := lookForSubStringsInPodLog(corednspod.Namespace, corednspod.Name, "dns", 2*time.Minute, "A IN test.svc.cluster.local.", "NXDOMAIN"); err != nil {
-				found = 0
-			} else {
-				found = 1
-			}
-		}
-
 	}
 
 	if found == 0 {
