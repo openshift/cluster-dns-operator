@@ -38,7 +38,12 @@ while true; do
   # Stale entries could exist in /etc/hosts if the service is deleted
   if [[ -n "${svc_ips[*]-}" ]]; then
     # Build a new hosts file from /etc/hosts with our custom entries filtered out
-    grep -v "# ${OPENSHIFT_MARKER}" "${HOSTS_FILE}" > "${TEMP_FILE}"
+    sed --unbuffered --silent "/# ${OPENSHIFT_MARKER}/d; w ${TEMP_FILE}" "${HOSTS_FILE}"
+    if [[ "$?" -ne 0 ]]; then
+      # Only continue rebuilding the hosts entries if its original content is preserved
+      sleep 60 & wait
+      continue
+    fi
 
     # Append resolver entries for services
     for svc in "${!svc_ips[@]}"; do
