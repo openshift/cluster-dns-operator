@@ -269,6 +269,80 @@ func TestOperatorRecreatesItsClusterOperator(t *testing.T) {
 	}
 }
 
+// TestOperatorRecreatesItsManagedAnnotations verifies that the DNS operator
+// recreates its managed annotations if they are deleted.
+func TestOperatorRecreatesItsManagedAnnotations(t *testing.T) {
+	cl, err := getClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	enableDaemonSetEvictionAnnotationKey := "cluster-autoscaler.kubernetes.io/enable-ds-eviction"
+	targetWorkloadManagementAnnotationKey := "target.workload.openshift.io/management"
+	var evict, target string
+	var ok bool
+
+	defaultDNS := &operatorv1.DNS{}
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DefaultDNSController}, defaultDNS); err != nil {
+			t.Logf("failed to get dns %q: %v", operatorcontroller.DefaultDNSController, err)
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Fatalf("failed to get dns %q: %v", operatorcontroller.DefaultDNSController, err)
+	}
+
+	namespacedName := operatorcontroller.DNSDaemonSetName(defaultDNS)
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		dnsDaemonSet := &appsv1.DaemonSet{}
+		if err := cl.Get(context.TODO(), namespacedName, dnsDaemonSet); err != nil {
+			t.Logf("failed to get daemonset %s: %v", namespacedName, err)
+			return false, nil
+		}
+		// Verify that the annotations are there to begin with
+		if evict, ok = dnsDaemonSet.Spec.Template.Annotations[enableDaemonSetEvictionAnnotationKey]; !ok {
+			t.Errorf("inconsistent daemonset %s: missing annotation: %s", namespacedName, enableDaemonSetEvictionAnnotationKey)
+		}
+		if target, ok = dnsDaemonSet.Spec.Template.Annotations[targetWorkloadManagementAnnotationKey]; !ok {
+			t.Errorf("inconsistent daemonset %s: missing annotation: %s", namespacedName, targetWorkloadManagementAnnotationKey)
+		}
+		// Change the annotations
+		dnsDaemonSet.Spec.Template.Annotations[enableDaemonSetEvictionAnnotationKey] = ""
+		dnsDaemonSet.Spec.Template.Annotations[targetWorkloadManagementAnnotationKey] = ""
+
+		if err := cl.Update(context.TODO(), dnsDaemonSet); err != nil {
+			t.Logf("failed to update daemonset %s: %v", namespacedName, err)
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Errorf("failed to update daemonset %s: %v", namespacedName, err)
+	}
+
+	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
+		dnsDaemonSet := &appsv1.DaemonSet{}
+		if err := cl.Get(context.TODO(), namespacedName, dnsDaemonSet); err != nil {
+			t.Logf("failed to get daemonset %s: %v", namespacedName, err)
+			return false, nil
+		}
+		for k, v := range dnsDaemonSet.Spec.Template.Annotations {
+			if k == enableDaemonSetEvictionAnnotationKey && v != evict {
+				return false, nil
+			} else if k == targetWorkloadManagementAnnotationKey && v != target {
+				return false, nil
+			}
+		}
+		t.Logf("observed correct managed annotation values on daemonset %s", namespacedName)
+		return true, nil
+	})
+	if err != nil {
+		t.Errorf("failed to observe correct managed annotation values on daemonset %s", namespacedName)
+	}
+
+}
+
 func TestDNSForwarding(t *testing.T) {
 	cl, err := getClient()
 	if err != nil {
