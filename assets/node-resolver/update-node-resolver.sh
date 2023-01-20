@@ -10,7 +10,10 @@ TEMP_FILE="/etc/hosts.tmp"
 IFS=', ' read -r -a services <<< "${SERVICES}"
 
 # Make a temporary file with the old hosts file's attributes.
-cp -f --attributes-only "${HOSTS_FILE}" "${TEMP_FILE}"
+if ! cp -f --attributes-only "${HOSTS_FILE}" "${TEMP_FILE}"; then
+  echo "Failed to preserve hosts file. Exiting."
+  exit 1
+fi
 
 while true; do
   declare -A svc_ips
