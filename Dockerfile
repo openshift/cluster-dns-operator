@@ -1,9 +1,9 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.19-openshift-4.13 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.19-openshift-4.14 AS builder
 WORKDIR /dns-operator
 COPY . .
 RUN make build
 
-FROM registry.ci.openshift.org/ocp/4.13:base
+FROM registry.ci.openshift.org/ocp/4.14:base
 COPY --from=builder /dns-operator/dns-operator /usr/bin/
 COPY manifests /manifests
 RUN useradd dns-operator
