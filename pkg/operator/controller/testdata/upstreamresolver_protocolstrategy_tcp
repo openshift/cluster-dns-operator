@@ -1,0 +1,27 @@
+.:5353 {
+    bufsize 512
+    errors
+    log . {
+        class error
+    }
+    health {
+        lameduck 20s
+    }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+        pods insecure
+        fallthrough in-addr.arpa ip6.arpa
+    }
+    prometheus 127.0.0.1:9153
+    forward . /etc/resolv.conf {
+        policy sequential
+        force_tcp
+    }
+    cache 900 {
+        denial 9984 30
+    }
+    reload
+}
+hostname.bind:5353 {
+    chaos
+}
