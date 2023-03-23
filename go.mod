@@ -6,7 +6,7 @@ require (
 	github.com/apparentlymart/go-cidr v1.0.0
 	github.com/google/go-cmp v0.5.9
 	github.com/kevinburke/go-bindata v3.11.0+incompatible
-	github.com/openshift/api v0.0.0-20230120195050-6ba31fa438f2
+	github.com/openshift/api v0.0.0-20230620212129-894c5465a5ac
 	github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d
 	github.com/sirupsen/logrus v1.8.1
 	k8s.io/api v0.26.1

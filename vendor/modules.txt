@@ -99,7 +99,7 @@ github.com/modern-go/reflect2
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
-# github.com/openshift/api v0.0.0-20230120195050-6ba31fa438f2
+# github.com/openshift/api v0.0.0-20230620212129-894c5465a5ac
 ## explicit; go 1.19
 github.com/openshift/api/config/v1
 github.com/openshift/api/operator/v1
