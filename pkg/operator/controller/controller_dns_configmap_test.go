@@ -908,6 +908,88 @@ func TestDesiredDNSConfigmapUpstreamResolvers(t *testing.T) {
 			},
 			expectedCoreFile: mustLoadTestFile(t, "tls_with_non_existing_cabundle"),
 		},
+		{
+			name: "CR of protocolStrategy of TCP on ForwardPlugin",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams:        []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:           operatorv1.RoundRobinForwardingPolicy,
+								ProtocolStrategy: operatorv1.ProtocolStrategyTCP,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "forwardplugin_protocolstrategy_tcp"),
+		},
+		{
+			name: "CR of protocolStrategy of None or Default on ForwardPlugin",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams:        []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:           operatorv1.RoundRobinForwardingPolicy,
+								ProtocolStrategy: operatorv1.ProtocolStrategyDefault,
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "forwardplugin_protocolstrategy_none"),
+		},
+		{
+			name: "CR with upstreamResolver with protocolStrategy of TCP",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type: operatorv1.SystemResolveConfType,
+							},
+						},
+						ProtocolStrategy: operatorv1.ProtocolStrategyTCP,
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "upstreamresolver_protocolstrategy_tcp"),
+		},
+		{
+			name: "CR with upstreamResolver with protocolStrategy of Default or None",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					UpstreamResolvers: operatorv1.UpstreamResolvers{
+						Upstreams: []operatorv1.Upstream{
+							{
+								Type: operatorv1.SystemResolveConfType,
+							},
+						},
+						ProtocolStrategy: operatorv1.ProtocolStrategyDefault,
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "upstreamresolver_protocolstrategy_none"),
+		},
 	}
 
 	clusterDomain := "cluster.local"

@@ -55,6 +55,9 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         {{- end}}
         {{- end}}
         policy {{ CoreDNSForwardingPolicy .Policy }}
+        {{- if eq "TCP" $fp.ProtocolStrategy }}
+        force_tcp
+        {{- end}}
     }
     {{- end}}
     errors
@@ -91,6 +94,9 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         {{- end}}
         {{- end}}
         policy {{ CoreDNSForwardingPolicy .Policy }}
+        {{- if eq "TCP" $.UpstreamResolvers.ProtocolStrategy }}
+        force_tcp
+        {{- end}}
     }
     {{- end}}
     cache {{ .PositiveTTL }} {
@@ -159,8 +165,9 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 				Type: operatorv1.SystemResolveConfType,
 			},
 		},
-		Policy:          operatorv1.SequentialForwardingPolicy,
-		TransportConfig: dns.Spec.UpstreamResolvers.TransportConfig,
+		Policy:           operatorv1.SequentialForwardingPolicy,
+		TransportConfig:  dns.Spec.UpstreamResolvers.TransportConfig,
+		ProtocolStrategy: dns.Spec.UpstreamResolvers.ProtocolStrategy,
 	}
 
 	if len(dns.Spec.UpstreamResolvers.Upstreams) > 0 {
