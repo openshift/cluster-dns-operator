@@ -99,8 +99,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/onsi/ginkgo/v2 v2.9.5 h1:+6Hr4uxzP4XIUyAkg61dWBw8lb/gc4/X5luuxN/EC+Q=
 github.com/onsi/gomega v1.27.7 h1:fVih9JD6ogIiHUN6ePK7HJidyEDpWGVB5mzM7cWNXoU=
-github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183 h1:t/CahSnpqY46sQR01SoS+Jt0jtjgmhgE6lFmRnO4q70=
-github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183/go.mod h1:4VWG+W22wrB4HfBL88P40DxLEpSOaiBVxUnfalfJo9k=
+github.com/openshift/api v0.0.0-20230516201849-333bc194ef7a h1:tz6xYik+q1q6o/AXoRZeGkk2idio130xeh2R1ZBNqGM=
+github.com/openshift/api v0.0.0-20230516201849-333bc194ef7a/go.mod h1:4VWG+W22wrB4HfBL88P40DxLEpSOaiBVxUnfalfJo9k=
 github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d h1:RR4ah7FfaPR1WePizm0jlrsbmPu91xQZnAsVVreQV1k=
 github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
