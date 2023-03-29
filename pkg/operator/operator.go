@@ -22,6 +22,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -54,6 +55,7 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 		NewClient: func(_ cache.Cache, config *rest.Config, options client.Options, uncachedObjects ...client.Object) (client.Client, error) {
 			return client.New(config, options)
 		},
+		HealthProbeBindAddress: "0.0.0.0:6060",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create operator manager: %v", err)
@@ -74,6 +76,13 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 	// Set up the status controller.
 	if _, err := statuscontroller.New(operatorManager, cfg); err != nil {
 		return nil, fmt.Errorf("failed to create status controller: %v", err)
+	}
+
+	if err := operatorManager.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		return nil, fmt.Errorf("unable to set up health check: %v", err)
+	}
+	if err := operatorManager.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		return nil, fmt.Errorf("unable to set up ready check: %v", err)
 	}
 
 	return &Operator{
