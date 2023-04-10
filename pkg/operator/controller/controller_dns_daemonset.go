@@ -337,6 +337,11 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 	changed := false
 	updated := current.DeepCopy()
 
+	if current.Spec.MinReadySeconds != expected.Spec.MinReadySeconds {
+		updated.Spec.MinReadySeconds = expected.Spec.MinReadySeconds
+		changed = true
+	}
+
 	if !cmp.Equal(current.Spec.UpdateStrategy, expected.Spec.UpdateStrategy, cmpopts.EquateEmpty()) {
 		updated.Spec.UpdateStrategy = expected.Spec.UpdateStrategy
 		changed = true
