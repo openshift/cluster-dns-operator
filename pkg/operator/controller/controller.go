@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -90,7 +91,7 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 		return nil, err
 	}
 
-	caBundleCMToDNS := func(o client.Object) []reconcile.Request {
+	objectToDNS := func(o client.Object) []reconcile.Request {
 		return []reconcile.Request{{DefaultDNSNamespaceName()}}
 	}
 	isInNS := func(namespace string) func(o client.Object) bool {
@@ -98,7 +99,35 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 			return o.GetNamespace() == namespace
 		}
 	}
-	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, handler.EnqueueRequestsFromMapFunc(caBundleCMToDNS), predicate.NewPredicateFuncs(isInNS(GlobalUserSpecifiedConfigNamespace))); err != nil {
+	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, handler.EnqueueRequestsFromMapFunc(objectToDNS), predicate.NewPredicateFuncs(isInNS(GlobalUserSpecifiedConfigNamespace))); err != nil {
+		return nil, err
+	}
+	// If a node is created or deleted, then the controller may need to
+	// reconcile the DNS service in order to add or remove the
+	// service.kubernetes.io/topology-aware-hints annotation, but only if
+	// the node isn't ignored for the purpose of determining whether to
+	// enable topology-aware hints.
+	nodePredicate := func(o client.Object) bool {
+		node := o.(*corev1.Node)
+		return !ignoreNodeForTopologyAwareHints(node)
+	}
+	if err := c.Watch(&source.Kind{Type: &corev1.Node{}}, handler.EnqueueRequestsFromMapFunc(objectToDNS), predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool { return nodePredicate(e.Object) },
+		DeleteFunc: func(e event.DeleteEvent) bool { return nodePredicate(e.Object) },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			old := e.ObjectOld.(*corev1.Node)
+			new := e.ObjectNew.(*corev1.Node)
+			if ignoreNodeForTopologyAwareHints(old) != ignoreNodeForTopologyAwareHints(new) {
+				return true
+			}
+			if !ignoreNodeForTopologyAwareHints(new) && nodeIsValidForTopologyAwareHints(old) != nodeIsValidForTopologyAwareHints(new) {
+				return true
+			}
+			return false
+
+		},
+		GenericFunc: func(e event.GenericEvent) bool { return nodePredicate(e.Object) },
+	}); err != nil {
 		return nil, err
 	}
 
