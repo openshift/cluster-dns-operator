@@ -190,7 +190,7 @@ func TestDNSLogging(t *testing.T) {
 
 	// Ensure that DNS is stable before starting the test, otherwise we'd need to tweak individual test durations.
 	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
-		t.Errorf("expected default DNS pods to be available: %v", err)
+		t.Fatalf("expected default DNS pods to be available: %v", err)
 	}
 
 	// Get the CoreDNS image used by the test upstream resolver.
@@ -232,13 +232,13 @@ func TestDNSLogging(t *testing.T) {
 
 	// Verify that default DNS pods are all available before inspecting them.
 	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
-		t.Errorf("expected default DNS pods to be available: %v", err)
+		t.Fatalf("expected default DNS pods to be available: %v", err)
 	}
 
 	// Verify that the Corefile of DNS DaemonSet pods have been updated.
 	dnsDaemonSet := &appsv1.DaemonSet{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DNSDaemonSetName(defaultDNS), dnsDaemonSet); err != nil {
-		_ = fmt.Errorf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
+		t.Fatalf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(dnsDaemonSet.Spec.Selector)
 	if err != nil {
@@ -332,7 +332,7 @@ func TestDNSLogging(t *testing.T) {
 
 	dnsOperatorDeployment := &appsv1.Deployment{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DefaultDNSOperatorDeploymentName(), dnsOperatorDeployment); err != nil {
-		_ = fmt.Errorf("failed to get deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
+		t.Fatalf("failed to get deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
 	}
 	operatorSelector, err := metav1.LabelSelectorAsSelector(dnsOperatorDeployment.Spec.Selector)
 	if err != nil {
@@ -637,7 +637,7 @@ func TestDNSForwarding(t *testing.T) {
 	// Verify that the Corefile of DNS DaemonSet pods have been updated.
 	dnsDaemonSet := &appsv1.DaemonSet{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DNSDaemonSetName(defaultDNS), dnsDaemonSet); err != nil {
-		_ = fmt.Errorf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
+		t.Fatalf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(dnsDaemonSet.Spec.Selector)
 	if err != nil {
