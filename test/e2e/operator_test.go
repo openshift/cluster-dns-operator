@@ -190,7 +190,7 @@ func TestDNSLogging(t *testing.T) {
 
 	// Ensure that DNS is stable before starting the test, otherwise we'd need to tweak individual test durations.
 	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
-		t.Errorf("expected default DNS pods to be available: %v", err)
+		t.Fatalf("expected default DNS pods to be available: %v", err)
 	}
 
 	// Get the CoreDNS image used by the test upstream resolver.
@@ -232,13 +232,13 @@ func TestDNSLogging(t *testing.T) {
 
 	// Verify that default DNS pods are all available before inspecting them.
 	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
-		t.Errorf("expected default DNS pods to be available: %v", err)
+		t.Fatalf("expected default DNS pods to be available: %v", err)
 	}
 
 	// Verify that the Corefile of DNS DaemonSet pods have been updated.
 	dnsDaemonSet := &appsv1.DaemonSet{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DNSDaemonSetName(defaultDNS), dnsDaemonSet); err != nil {
-		_ = fmt.Errorf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
+		t.Fatalf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(dnsDaemonSet.Spec.Selector)
 	if err != nil {
@@ -250,79 +250,51 @@ func TestDNSLogging(t *testing.T) {
 	}
 	catCmd := []string{"cat", "/etc/coredns/Corefile"}
 
-	// Get the openshift-cli image.
-	var (
-		cliImage      string
-		cliImageFound bool
-	)
-	for _, ver := range co.Status.Versions {
-		if ver.Name == statuscontroller.OpenshiftCLIVersionName {
-			if len(ver.Version) == 0 {
-				break
-			}
-			cliImage = ver.Version
-			cliImageFound = true
-			break
-		}
+	if len(coreDNSPods.Items) == 0 {
+		t.Fatalf("found zero coredns pods!")
 	}
-	if !cliImageFound {
-		t.Fatalf("failed to find the %s version for clusteroperator %s", statuscontroller.OpenshiftCLIVersionName, co.Name)
-	}
-
-	// Create the client Pod.
-	testClientForDNSLogging := buildPod("test-client-dnslogging", upstreamPodNs, cliImage, []string{"sleep", "3600"})
-	if err := cl.Create(context.TODO(), testClientForDNSLogging); err != nil {
-		t.Fatalf("failed to create pod %s/%s: %v", testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, err)
-	}
-	defer func() {
-		if err := cl.Delete(context.TODO(), testClientForDNSLogging); err != nil {
-			t.Fatalf("failed to delete pod %s/%s: %v", testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, err)
-		}
-	}()
-	// Wait for the client Pod to be ready.
-	name := types.NamespacedName{Namespace: testClientForDNSLogging.Namespace, Name: testClientForDNSLogging.Name}
-	err = wait.PollImmediate(1*time.Second, 60*time.Second, func() (bool, error) {
-		if err := cl.Get(context.TODO(), name, testClientForDNSLogging); err != nil {
-			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
-			return false, nil
-		}
-		for _, cond := range testClientForDNSLogging.Status.Conditions {
-			if cond.Type == corev1.ContainersReady &&
-				cond.Status == corev1.ConditionTrue {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
-	if err != nil {
-		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, err)
-	}
-
-	found := 0
 	for _, corednspod := range coreDNSPods.Items {
+		host := fmt.Sprintf("test-%s-%v.svc.cluster.local", corednspod.Name, time.Now().UnixMicro())
+		digCmd := []string{"dig", "@127.0.0.1", "-p", "5353", host}
 
-		// Dig the example dns forwarding host.
-		digCmd := []string{"dig", "test.svc.cluster.local"}
-		if err := lookForStringInPodExec(testClientForDNSLogging.Namespace, testClientForDNSLogging.Name, testClientForDNSLogging.Name, digCmd, "NXDOMAIN", 2*time.Minute); err != nil {
-			t.Fatalf("failed to dig %v", err)
-		}
-
-		if err := lookForStringInPodExec(corednspod.Namespace, corednspod.Name, "dns", catCmd, "class denial error", 5*time.Minute); err != nil {
-			t.Fatalf("failed to set Debug logLevel for operator %s: %v", opName, err)
-		}
-
-		if found == 0 {
-			if err := lookForSubStringsInPodLog(corednspod.Namespace, corednspod.Name, "dns", 2*time.Minute, "A IN test.svc.cluster.local.", "NXDOMAIN"); err != nil {
-				found = 0
-			} else {
-				found = 1
+		if err := wait.PollImmediate(5*time.Second, 5*time.Minute, func() (bool, error) {
+			// Wait until the log level configuration has
+			// propagated into the coredns corefile in the
+			// pod.
+			found, err := lookForStringInPodExecOneShot(corednspod.Namespace, corednspod.Name, "dns", catCmd, "class denial error")
+			if err != nil {
+				t.Logf("%s/%s: cat error: %v", corednspod.Namespace, corednspod.Name, err)
+				return false, err
 			}
+			if !found {
+				t.Logf("%s/%s: failed to match 'class denial error' in %q, retrying...", corednspod.Namespace, corednspod.Name, catCmd[1])
+				return false, nil
+			}
+
+			// Run a dig query that locally queries this
+			// DNS pod (localhost) to trigger a log entry
+			// in the CoreDNS pod.
+			found, err = lookForStringInPodExecOneShot(corednspod.Namespace, corednspod.Name, "dns", digCmd, "NXDOMAIN")
+			if err != nil {
+				t.Logf("%s/%s: dig error: %v, retrying...", corednspod.Namespace, corednspod.Name, err)
+				return false, err
+			}
+			if !found {
+				t.Logf("%s/%s: failed to match 'NXDOMAIN', retrying...", corednspod.Namespace, corednspod.Name)
+				return false, nil
+			}
+
+			// Look for the dig query we just executed in
+			// the logs to confirm logging is turned on.
+			found, err = lookForSubStringsInPodLogOneShot(corednspod.Namespace, corednspod.Name, "dns", fmt.Sprintf("A IN %s.", host), "NXDOMAIN")
+			if err != nil {
+				t.Logf("%s/%s: error looking for substrings: %v, retrying...", corednspod.Namespace, corednspod.Name, err)
+				return false, nil
+			}
+			return found, nil
+		}); err != nil {
+			t.Fatalf("%s/%s: DNS logging validation failed: %v", corednspod.Namespace, corednspod.Name, err)
 		}
-
-	}
-
-	if found == 0 {
-		t.Fatalf("failed to get NXDOMAIN entry for test.svc.cluster.local. which does not exist")
 	}
 
 	dns := &operatorv1.DNS{}
@@ -332,7 +304,7 @@ func TestDNSLogging(t *testing.T) {
 
 	dnsOperatorDeployment := &appsv1.Deployment{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DefaultDNSOperatorDeploymentName(), dnsOperatorDeployment); err != nil {
-		_ = fmt.Errorf("failed to get deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
+		t.Fatalf("failed to get deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
 	}
 	operatorSelector, err := metav1.LabelSelectorAsSelector(dnsOperatorDeployment.Spec.Selector)
 	if err != nil {
@@ -637,7 +609,7 @@ func TestDNSForwarding(t *testing.T) {
 	// Verify that the Corefile of DNS DaemonSet pods have been updated.
 	dnsDaemonSet := &appsv1.DaemonSet{}
 	if err := cl.Get(context.TODO(), operatorcontroller.DNSDaemonSetName(defaultDNS), dnsDaemonSet); err != nil {
-		_ = fmt.Errorf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
+		t.Fatalf("failed to get daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
 	}
 	selector, err := metav1.LabelSelectorAsSelector(dnsDaemonSet.Spec.Selector)
 	if err != nil {

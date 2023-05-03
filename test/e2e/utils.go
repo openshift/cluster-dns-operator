@@ -14,10 +14,11 @@ import (
 	"math/big"
 	"os/exec"
 	"reflect"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"strings"
 	"testing"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -543,4 +544,44 @@ func generateServerCertificate(caCert *x509.Certificate, caKey *rsa.PrivateKey, 
 	}
 
 	return certs[0], key, nil
+}
+
+// lookForStringInPodExecOneShot executes a specified command in the
+// given container within a pod, and checks if the expectedString is
+// present in the output of the command in a single attempt. Returns
+// true if the expectedString is found, and an error if any issues are
+// encountered while executing the command or accessing the pod.
+func lookForStringInPodExecOneShot(namespace, pod, container string, command []string, expectedString string) (bool, error) {
+	cmdPath, err := exec.LookPath("oc")
+	if err != nil {
+		return false, err
+	}
+	args := []string{"exec", pod, "-c", container, fmt.Sprintf("--namespace=%v", namespace), "--"}
+	args = append(args, command...)
+	result, err := runCmd(cmdPath, args)
+	if err != nil {
+		return false, err
+	}
+	return strings.Contains(result, expectedString), nil
+}
+
+// lookForSubStringsInPodLogOneShot checks if the given
+// expectedStrings are present in the container logs of a specified
+// pod within a namespace in a single attempt. Returns true if all
+// expectedStrings are found, and an error if any issues are
+// encountered while searching for the substrings or accessing the
+// logs.
+func lookForSubStringsInPodLogOneShot(ns, pod, container string, expectedStrings ...string) (bool, error) {
+	cmdPath, err := exec.LookPath("oc")
+	if err != nil {
+		return false, err
+	}
+	args := []string{"logs", pod, "-c", container, fmt.Sprintf("--namespace=%v", ns)}
+	result, err := runCmd(cmdPath, args)
+	if err != nil {
+		return false, err
+	}
+	slicedResult := strings.Split(result, "\"")
+	slicedResultToString := strings.Join(slicedResult, " ")
+	return checkSubStrings(slicedResultToString, expectedStrings)
 }
