@@ -69,29 +69,32 @@ var managedDNSNamespaceLabels = sets.NewString(
 //
 // The controller will be pre-configured to watch for DNS resources.
 func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controller, error) {
+	operatorCache := mgr.GetCache()
 	reconciler := &reconciler{
 		Config: config,
 		client: mgr.GetClient(),
-		cache:  mgr.GetCache(),
+		cache:  operatorCache,
 	}
 	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return nil, err
 	}
-	if err := c.Watch(&source.Kind{Type: &operatorv1.DNS{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	scheme := mgr.GetClient().Scheme()
+	mapper := mgr.GetClient().RESTMapper()
+	if err := c.Watch(source.Kind(operatorCache, &operatorv1.DNS{}), &handler.EnqueueRequestForObject{}); err != nil {
 		return nil, err
 	}
-	if err := c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
+	if err := c.Watch(source.Kind(operatorCache, &appsv1.DaemonSet{}), handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{})); err != nil {
 		return nil, err
 	}
-	if err := c.Watch(&source.Kind{Type: &corev1.Service{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
+	if err := c.Watch(source.Kind(operatorCache, &corev1.Service{}), handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{})); err != nil {
 		return nil, err
 	}
-	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
+	if err := c.Watch(source.Kind(operatorCache, &corev1.ConfigMap{}), handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{})); err != nil {
 		return nil, err
 	}
 
-	objectToDNS := func(o client.Object) []reconcile.Request {
+	objectToDNS := func(context.Context, client.Object) []reconcile.Request {
 		return []reconcile.Request{{DefaultDNSNamespaceName()}}
 	}
 	isInNS := func(namespace string) func(o client.Object) bool {
@@ -99,7 +102,7 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 			return o.GetNamespace() == namespace
 		}
 	}
-	if err := c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, handler.EnqueueRequestsFromMapFunc(objectToDNS), predicate.NewPredicateFuncs(isInNS(GlobalUserSpecifiedConfigNamespace))); err != nil {
+	if err := c.Watch(source.Kind(operatorCache, &corev1.ConfigMap{}), handler.EnqueueRequestsFromMapFunc(objectToDNS), predicate.NewPredicateFuncs(isInNS(GlobalUserSpecifiedConfigNamespace))); err != nil {
 		return nil, err
 	}
 	// If a node is created or deleted, then the controller may need to
@@ -111,7 +114,7 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 		node := o.(*corev1.Node)
 		return !ignoreNodeForTopologyAwareHints(node)
 	}
-	if err := c.Watch(&source.Kind{Type: &corev1.Node{}}, handler.EnqueueRequestsFromMapFunc(objectToDNS), predicate.Funcs{
+	if err := c.Watch(source.Kind(operatorCache, &corev1.Node{}), handler.EnqueueRequestsFromMapFunc(objectToDNS), predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool { return nodePredicate(e.Object) },
 		DeleteFunc: func(e event.DeleteEvent) bool { return nodePredicate(e.Object) },
 		UpdateFunc: func(e event.UpdateEvent) bool {

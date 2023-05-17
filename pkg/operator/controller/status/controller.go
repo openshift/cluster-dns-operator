@@ -66,28 +66,31 @@ type reconciler struct {
 // resource so that it reconciles the dns clusteroperator in case something else
 // updates or deletes it.
 func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controller, error) {
+	operatorCache := mgr.GetCache()
 	reconciler := &reconciler{
 		Config: config,
 		client: mgr.GetClient(),
-		cache:  mgr.GetCache(),
+		cache:  operatorCache,
 	}
 	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return nil, err
 	}
+	scheme := mgr.GetClient().Scheme()
+	mapper := mgr.GetClient().RESTMapper()
 
-	if err := c.Watch(&source.Kind{Type: &operatorv1.DNS{}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err := c.Watch(source.Kind(operatorCache, &operatorv1.DNS{}), &handler.EnqueueRequestForObject{}); err != nil {
 		return nil, err
 	}
 
-	if err := c.Watch(&source.Kind{Type: &appsv1.DaemonSet{}}, &handler.EnqueueRequestForOwner{OwnerType: &operatorv1.DNS{}}); err != nil {
+	if err := c.Watch(source.Kind(operatorCache, &appsv1.DaemonSet{}), handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{})); err != nil {
 		return nil, err
 	}
 
 	isDNSClusterOperator := func(o client.Object) bool {
 		return o.GetName() == operatorcontroller.DefaultOperatorName
 	}
-	clusteroperatorToDNS := func(_ client.Object) []reconcile.Request {
+	clusteroperatorToDNS := func(context.Context, client.Object) []reconcile.Request {
 		return []reconcile.Request{{
 			NamespacedName: types.NamespacedName{
 				Name: operatorcontroller.DefaultDNSName,
@@ -95,7 +98,7 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 		}}
 	}
 	if err := c.Watch(
-		&source.Kind{Type: &configv1.ClusterOperator{}},
+		source.Kind(operatorCache, &configv1.ClusterOperator{}),
 		handler.EnqueueRequestsFromMapFunc(clusteroperatorToDNS),
 		predicate.NewPredicateFuncs(isDNSClusterOperator),
 	); err != nil {
