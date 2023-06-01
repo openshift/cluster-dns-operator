@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/apparentlymart/go-cidr v1.0.0
+	github.com/go-logr/logr v1.2.4
 	github.com/google/go-cmp v0.5.9
 	github.com/kevinburke/go-bindata v3.11.0+incompatible
 	github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183
@@ -26,7 +27,6 @@ require (
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
-	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.1 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
