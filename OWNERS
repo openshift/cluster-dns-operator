@@ -1,27 +1,22 @@
 approvers:
-  - ironcladlou
   - knobunc
-  - pravisankar
-  - ramr
   - Miciah
   - frobware
-  - danehans
-  - sgreene570
   - candita
   - rfredette
   - alebedev87
   - gcs278
 reviewers:
-  - ironcladlou
   - knobunc
-  - pravisankar
-  - ramr
   - Miciah
   - frobware
-  - danehans
-  - sgreene570
   - candita
   - rfredette
   - alebedev87
   - gcs278
-component: DNS
+emeritus_approvers:
+  - ironcladlou
+  - pravisankar
+  - ramr
+  - danehans
+  - sgreene570
