@@ -100,8 +100,8 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		want := dnsDaemonset.Status.DesiredNumberScheduled
 		have := dnsDaemonset.Status.NumberAvailable
 		numberUnavailable := want - have
-		maxUnavailableIntStr := intstr.FromInt(1)
-		if dnsDaemonset.Spec.UpdateStrategy.RollingUpdate != nil && dnsDaemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable != nil {
+		maxUnavailableIntStr := intstr.FromString("10%")
+		if dnsDaemonset.Spec.UpdateStrategy.RollingUpdate != nil && dnsDaemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable != nil && dnsDaemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable.String() != "0" {
 			maxUnavailableIntStr = *dnsDaemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable
 		}
 		maxUnavailable, intstrErr := intstr.GetScaledValueFromIntOrPercent(&maxUnavailableIntStr, int(want), true)
@@ -120,7 +120,7 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		case int(numberUnavailable) > maxUnavailable:
 			status = operatorv1.ConditionTrue
 			degradedReasons = append(degradedReasons, "MaxUnavailableDNSPodsExceeded")
-			messages = append(messages, fmt.Sprintf("Too many DNS pods are unavailable (%d > %d max unavailable).", numberUnavailable, maxUnavailable))
+			messages = append(messages, fmt.Sprintf("Too many DNS pods are unavailable (%d > %d max unavailable %q).", numberUnavailable, maxUnavailable, maxUnavailableIntStr.String()))
 		}
 	}
 
