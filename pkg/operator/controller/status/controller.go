@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -417,7 +418,7 @@ func computeOperatorDegradedCondition(haveDNS bool, dns *operatorv1.DNS) configv
 
 	var degraded bool
 	for _, cond := range dns.Status.Conditions {
-		if cond.Type == operatorv1.OperatorStatusTypeDegraded && cond.Status == operatorv1.ConditionTrue {
+		if cond.Type == operatorv1.OperatorStatusTypeDegraded && cond.Status == operatorv1.ConditionTrue && time.Now().Sub(cond.LastTransitionTime.Time) > 5*time.Minute {
 			degraded = true
 		}
 	}
