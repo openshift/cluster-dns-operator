@@ -265,8 +265,7 @@ func computeDNSUpgradeableCondition(oldCondition *operatorv1.OperatorCondition, 
 // setDNSLastTransitionTime sets LastTransitionTime for the given condition.
 // If the condition has changed, it will assign a new timestamp otherwise keeps the old timestamp.
 func setDNSLastTransitionTime(condition, oldCondition *operatorv1.OperatorCondition) operatorv1.OperatorCondition {
-	if oldCondition != nil && condition.Status == oldCondition.Status &&
-		condition.Reason == oldCondition.Reason && condition.Message == oldCondition.Message {
+	if oldCondition != nil && condition.Status == oldCondition.Status {
 		condition.LastTransitionTime = oldCondition.LastTransitionTime
 	} else {
 		condition.LastTransitionTime = metav1.Now()
