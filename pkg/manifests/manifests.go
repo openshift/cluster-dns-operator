@@ -2,6 +2,7 @@ package manifests
 
 import (
 	"bytes"
+	"embed"
 	"io"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -32,6 +33,23 @@ const (
 	// can't be established due to namespace boundaries).
 	OwningDNSLabel = "dns.operator.openshift.io/owning-dns"
 )
+
+//go:embed assets
+var content embed.FS
+
+// MustAsset returns the bytes for the named assert.
+func MustAsset(asset string) []byte {
+	b, err := content.ReadFile(asset)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// MustAssetString returns a string with the named asset.
+func MustAssetString(asset string) string {
+	return string(MustAsset(asset))
+}
 
 func MustAssetReader(asset string) io.Reader {
 	return bytes.NewReader(MustAsset(asset))

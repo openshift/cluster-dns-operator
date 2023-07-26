@@ -38,11 +38,7 @@ cluster-build:
 	hack/start-build.sh
 
 .PHONY: generate
-generate: bindata crd update
-
-.PHONY: bindata
-bindata:
-	hack/update-generated-bindata.sh
+generate: crd update
 
 .PHONY: crd
 crd:
@@ -64,7 +60,6 @@ test-e2e:
 verify:
 	hack/verify-gofmt.sh
 	hack/verify-generated-crd.sh
-	hack/verify-generated-bindata.sh
 	hack/verify-deps.sh
 
 .PHONY: local-image
