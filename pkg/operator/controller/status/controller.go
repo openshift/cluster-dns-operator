@@ -625,13 +625,13 @@ func mergeConditions(conditions []configv1.ClusterOperatorStatusCondition, updat
 		for j, cond := range conditions {
 			if cond.Type == update.Type {
 				add = false
-				if conditionChanged(cond, update) {
-					conditions[j].Status = update.Status
-					conditions[j].Reason = update.Reason
-					conditions[j].Message = update.Message
+				if conditions[j].Status != update.Status {
 					conditions[j].LastTransitionTime = now
-					break
 				}
+				conditions[j].Status = update.Status
+				conditions[j].Reason = update.Reason
+				conditions[j].Message = update.Message
+				break
 			}
 		}
 		if add {
@@ -641,10 +641,6 @@ func mergeConditions(conditions []configv1.ClusterOperatorStatusCondition, updat
 	}
 	conditions = append(conditions, additions...)
 	return conditions
-}
-
-func conditionChanged(a, b configv1.ClusterOperatorStatusCondition) bool {
-	return a.Status != b.Status || a.Reason != b.Reason || a.Message != b.Message
 }
 
 // operatorStatusesEqual compares two ClusterOperatorStatus values.  Returns true
