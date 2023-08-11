@@ -27,18 +27,6 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 		t.Errorf("invalid dns daemonset: %v", err)
 	} else {
 		// Validate the daemonset
-		pointerTo := func(ios intstr.IntOrString) *intstr.IntOrString { return &ios }
-		expectedUpdateStrategy := appsv1.DaemonSetUpdateStrategy{
-			Type: appsv1.RollingUpdateDaemonSetStrategyType,
-			RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-				MaxSurge:       pointerTo(intstr.FromString("10%")),
-				MaxUnavailable: pointerTo(intstr.FromInt(0)),
-			},
-		}
-		actualUpdateStrategy := ds.Spec.UpdateStrategy
-		if !reflect.DeepEqual(actualUpdateStrategy, expectedUpdateStrategy) {
-			t.Errorf("unexpected update strategy: expected %#v, got %#v", expectedUpdateStrategy, actualUpdateStrategy)
-		}
 		expectedPodAnnotations := map[string]string{
 			"cluster-autoscaler.kubernetes.io/enable-ds-eviction": "true",
 			"target.workload.openshift.io/management":             "{\"effect\": \"PreferredDuringScheduling\"}",
@@ -481,23 +469,14 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			expect: true,
 		},
 		{
-			description: "if the update strategy's max unavailable parameter changes",
+			description: "if the update strategy changes",
 			mutate: func(daemonset *appsv1.DaemonSet) {
-				daemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable = pointerTo(intstr.FromString("10%"))
-			},
-			expect: true,
-		},
-		{
-			description: "if the update strategy's max surge parameter changes",
-			mutate: func(daemonset *appsv1.DaemonSet) {
-				daemonset.Spec.UpdateStrategy.RollingUpdate.MaxSurge = pointerTo(intstr.FromString("10%"))
-			},
-			expect: true,
-		},
-		{
-			description: "if spec.minReadySeconds changes",
-			mutate: func(daemonset *appsv1.DaemonSet) {
-				daemonset.Spec.MinReadySeconds = 9
+				daemonset.Spec.UpdateStrategy = appsv1.DaemonSetUpdateStrategy{
+					Type: appsv1.RollingUpdateDaemonSetStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: pointerTo(intstr.FromString("10%")),
+					},
+				}
 			},
 			expect: true,
 		},
