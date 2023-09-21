@@ -11,11 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
 	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
+	ctrlruntimelog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -69,6 +72,13 @@ var (
 		{Type: operatorv1.OperatorStatusTypeDegraded, Status: operatorv1.ConditionFalse},
 	}
 )
+
+func init() {
+	// This is required because controller-runtime expects its
+	// consumers to set a logger through log.SetLogger within 30
+	// seconds of the program's initalization.
+	ctrlruntimelog.SetLogger(logr.New(ctrlruntimelog.NullLogSink{}))
+}
 
 func TestOperatorAvailable(t *testing.T) {
 	cl, err := getClient()
