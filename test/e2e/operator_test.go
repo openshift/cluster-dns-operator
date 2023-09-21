@@ -380,11 +380,11 @@ func TestCoreDNSDaemonSetReconciliation(t *testing.T) {
 		}
 		for k := range dnsDaemonSet.Spec.Template.Spec.NodeSelector {
 			if k == newNodeSelector {
-				t.Logf("found %q node selector on daemonset %s: %v", newNodeSelector, namespacedName, err)
+				t.Logf("found %q node selector on daemonset %s", newNodeSelector, namespacedName)
 				return false, nil
 			}
 		}
-		t.Logf("observed absence of %q node selector on daemonset %s: %v", newNodeSelector, namespacedName, err)
+		t.Logf("observed absence of %q node selector on daemonset %s", newNodeSelector, namespacedName)
 		return true, nil
 	})
 	if err != nil {
