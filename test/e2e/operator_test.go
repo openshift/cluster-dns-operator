@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
@@ -21,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlruntimelog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -69,6 +72,12 @@ var (
 		{Type: operatorv1.OperatorStatusTypeDegraded, Status: operatorv1.ConditionFalse},
 	}
 )
+
+func init() {
+	// Controller-runtime prints an error message and a stack trace unless a
+	// logger is set.
+	ctrlruntimelog.SetLogger(logr.New(ctrlruntimelog.NullLogSink{}))
+}
 
 func TestOperatorAvailable(t *testing.T) {
 	cl, err := getClient()
@@ -371,11 +380,11 @@ func TestCoreDNSDaemonSetReconciliation(t *testing.T) {
 		}
 		for k := range dnsDaemonSet.Spec.Template.Spec.NodeSelector {
 			if k == newNodeSelector {
-				t.Logf("found %q node selector on daemonset %s: %v", newNodeSelector, namespacedName, err)
+				t.Logf("found %q node selector on daemonset %s", newNodeSelector, namespacedName)
 				return false, nil
 			}
 		}
-		t.Logf("observed absence of %q node selector on daemonset %s: %v", newNodeSelector, namespacedName, err)
+		t.Logf("observed absence of %q node selector on daemonset %s", newNodeSelector, namespacedName)
 		return true, nil
 	})
 	if err != nil {
