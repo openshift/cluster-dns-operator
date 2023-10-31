@@ -14,6 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+var (
+	maxUnavailable = intstr.FromInt(1)
+)
+
 func TestDNSStatusConditions(t *testing.T) {
 	type testIn struct {
 		haveClusterIP                   bool
@@ -75,7 +79,6 @@ func TestDNSStatusConditions(t *testing.T) {
 		if tc.inputs.haveClusterIP {
 			clusterIP = "1.2.3.4"
 		}
-		maxUnavailable := intstr.FromInt(1)
 		var dnsDaemonset, nodeResolverDaemonset *appsv1.DaemonSet
 		if tc.inputs.haveDNS {
 			dnsDaemonset = &appsv1.DaemonSet{
@@ -201,7 +204,7 @@ func TestDNSStatusConditions(t *testing.T) {
 // TestComputeDNSDegradedCondition verifies the computeDNSDegradedCondition has
 // the expected behavior.
 func TestComputeDNSDegradedCondition(t *testing.T) {
-	makeDaemonSet := func(desired, available int, maxUnavailable intstr.IntOrString) *appsv1.DaemonSet {
+	makeDaemonSet := func(desired, available int) *appsv1.DaemonSet {
 		return &appsv1.DaemonSet{
 			Spec: appsv1.DaemonSetSpec{
 				UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
@@ -220,126 +223,66 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 		name         string
 		clusterIP    string
 		dnsDaemonset *appsv1.DaemonSet
-		nrDaemonset  *appsv1.DaemonSet
 		expected     operatorv1.ConditionStatus
 	}{
 		{
-			name:         "0 available, DNS invalid MaxUnavailable",
+			name:         "0 available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("TEST")),
-			nrDaemonset:  makeDaemonSet(6, 0, intstr.FromString("33%")),
+			dnsDaemonset: makeDaemonSet(6, 0),
 			expected:     operatorv1.ConditionTrue,
-		},
-		{
-			name:         "node-resolver invalid MaxUnavailable is ok",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(10, 9, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 0, intstr.FromString("TEST")),
-			expected:     operatorv1.ConditionFalse,
-		},
-		{
-			name:         "DNS invalid MaxUnavailable (string with digits without a percent sign)",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%")),
-			expected:     operatorv1.ConditionUnknown,
-		},
-		{
-			name:         "node-resolver invalid MaxUnavailable (string with digits without a percent sign) is ok",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "33"}),
-			expected:     operatorv1.ConditionFalse,
-		},
-		{
-			name:         "DNS invalid MaxUnavailable (string with letters)",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "TEST"}),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%")),
-			expected:     operatorv1.ConditionUnknown,
-		},
-		{
-			name:         "node-resolver invalid MaxUnavailable (string with letters) is ok",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "TEST"}),
-			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "no clusterIP, 0 available",
 			clusterIP:    "",
-			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 0, intstr.FromString("33%")),
+			dnsDaemonset: makeDaemonSet(6, 0),
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "no clusterIP",
 			clusterIP:    "",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%")),
+			dnsDaemonset: makeDaemonSet(6, 6),
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "0 desired",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(0, 0, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(0, 0, intstr.FromString("33%")),
+			dnsDaemonset: makeDaemonSet(0, 0),
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "0 available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 0, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 0, intstr.FromString("33%")),
+			dnsDaemonset: makeDaemonSet(6, 0),
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "too few pods DNS pods available (percentage)",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(100, 89, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(100, 100, intstr.FromString("33%")),
+			dnsDaemonset: makeDaemonSet(100, 89),
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
 			name:         "node-resolver pods unavailable is ok (percentage)",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(100, 100, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(100, 65, intstr.FromString("33%")),
+			dnsDaemonset: makeDaemonSet(100, 100),
 			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "too few DNS pods available (integer)",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 4, intstr.FromInt(1)),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromInt(1)),
+			dnsDaemonset: makeDaemonSet(6, 4),
 			expected:     operatorv1.ConditionTrue,
-		},
-		{
-			name:         "node-resolver pods unavailable is ok (integer)",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromInt(1)),
-			nrDaemonset:  makeDaemonSet(6, 4, intstr.FromInt(1)),
-			expected:     operatorv1.ConditionFalse,
-		},
-		{
-			name:         "enough available (percentage)",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(100, 90, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(100, 67, intstr.FromString("33%")),
-			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "enough available (integer)",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 5, intstr.FromInt(1)),
-			nrDaemonset:  makeDaemonSet(6, 5, intstr.FromInt(1)),
+			dnsDaemonset: makeDaemonSet(6, 5),
 			expected:     operatorv1.ConditionFalse,
 		},
 		{
 			name:         "all available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, intstr.FromString("10%")),
-			nrDaemonset:  makeDaemonSet(6, 6, intstr.FromString("33%")),
+			dnsDaemonset: makeDaemonSet(6, 6),
 			expected:     operatorv1.ConditionFalse,
 		},
 	}
@@ -359,7 +302,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 // TestComputeDNSProgressingCondition verifies the
 // computeDNSProgressingCondition has the expected behavior.
 func TestComputeDNSProgressingCondition(t *testing.T) {
-	makeDaemonSet := func(desired, available, updated int, maxUnavailable intstr.IntOrString, nodeSelector map[string]string, tolerations []corev1.Toleration) *appsv1.DaemonSet {
+	makeDaemonSet := func(desired, available, updated int, nodeSelector map[string]string, tolerations []corev1.Toleration) *appsv1.DaemonSet {
 		return &appsv1.DaemonSet{
 			Spec: appsv1.DaemonSetSpec{
 				Template: corev1.PodTemplateSpec{
@@ -401,8 +344,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "no clusterIP",
 			clusterIP:    "",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -410,8 +353,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "0 desired",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(0, 0, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(0, 0, 0, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(0, 0, 0, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(0, 0, 0, defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionFalse,
@@ -419,8 +362,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "0/6 available DNS pods with MaxUnavailable 10%",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 0, 0, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 0, 0, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -428,8 +371,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods and 5/6 node-resolver pods available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 5, 5, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 5, 5, defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -437,8 +380,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods and 6/6 node-resolver pods available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionFalse,
@@ -446,35 +389,26 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods with custom node selector and tolerations",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), customSelector, customTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 6, customSelector, customTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: customSelector,
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionFalse,
 		},
 		{
-			name:         "5/6 available with invalid MaxUnavailable",
+			name:         "5/6 available",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 5, 5, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 5, 5, defaultSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
 		{
-			name:         "6/6 available with invalid MaxUnavailable",
-			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.IntOrString{Type: intstr.String, StrVal: "10"}, defaultSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
-			nodeSelector: defaultSelector,
-			tolerations:  defaultTolerations,
-			expected:     operatorv1.ConditionFalse,
-		},
-		{
 			name:         "6/6 DNS pods missing default node selector",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), emptySelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 6, emptySelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -482,8 +416,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods missing default tolerations",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, emptyTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 6, defaultSelector, emptyTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: defaultSelector,
 			tolerations:  defaultTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -491,8 +425,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods missing custom node selector",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), defaultSelector, customTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 6, defaultSelector, customTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: customSelector,
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -500,8 +434,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods missing custom tolerations",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 6, intstr.FromString("10%"), customSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 6, customSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: customSelector,
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -509,8 +443,8 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 		{
 			name:         "6/6 DNS pods with 5 up-to-date",
 			clusterIP:    "172.30.0.10",
-			dnsDaemonset: makeDaemonSet(6, 6, 5, intstr.FromString("10%"), customSelector, defaultTolerations),
-			nrDaemonset:  makeDaemonSet(6, 6, 6, intstr.FromString("33%"), defaultSelector, defaultTolerations),
+			dnsDaemonset: makeDaemonSet(6, 6, 5, customSelector, defaultTolerations),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
 			nodeSelector: customSelector,
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionTrue,
@@ -542,7 +476,7 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 }
 
 func TestSkippingStatusUpdates(t *testing.T) {
-	makeDaemonSet := func(desired, available, updated int, maxUnavailable intstr.IntOrString) *appsv1.DaemonSet {
+	makeDaemonSet := func(desired, available, updated int) *appsv1.DaemonSet {
 		return &appsv1.DaemonSet{
 			Spec: appsv1.DaemonSetSpec{
 				Template: corev1.PodTemplateSpec{
@@ -661,8 +595,8 @@ func TestSkippingStatusUpdates(t *testing.T) {
 					Conditions: []operatorv1.OperatorCondition{tc.oldCondition},
 				},
 			}
-			dnsDaemonset := makeDaemonSet(6, 6, 6, intstr.FromString("10%"))
-			nrDaemonset := makeDaemonSet(6, 6, 6, intstr.FromString("33%"))
+			dnsDaemonset := makeDaemonSet(6, 6, 6)
+			nrDaemonset := makeDaemonSet(6, 6, 6)
 			var actual operatorv1.OperatorCondition
 			var actualReconcileResult reconcile.Result
 			if tc.oldCondition.Type == operatorv1.OperatorStatusTypeProgressing {
