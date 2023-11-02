@@ -6,12 +6,16 @@ import (
 	"time"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	retryable "github.com/openshift/cluster-dns-operator/pkg/util/retryableerror"
+
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	utilclock "k8s.io/utils/clock"
+	utilclocktesting "k8s.io/utils/clock/testing"
 )
 
 var (
@@ -207,6 +211,14 @@ func TestDNSStatusConditions(t *testing.T) {
 // TestComputeDNSDegradedCondition verifies the computeDNSDegradedCondition has
 // the expected behavior.
 func TestComputeDNSDegradedCondition(t *testing.T) {
+	// Inject a fake clock.
+	fakeClock := utilclocktesting.NewFakeClock(time.Time{})
+	clock = fakeClock
+	defer func() {
+		// Don't forget to reset it.
+		clock = utilclock.RealClock{}
+	}()
+
 	makeDaemonSet := func(desired, available int) *appsv1.DaemonSet {
 		return &appsv1.DaemonSet{
 			Spec: appsv1.DaemonSetSpec{
@@ -224,21 +236,25 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 	}
 
 	degradedFalse := &operatorv1.OperatorCondition{
-		Type:   operatorv1.OperatorStatusTypeDegraded,
-		Status: operatorv1.ConditionFalse,
+		Type:               operatorv1.OperatorStatusTypeDegraded,
+		Status:             operatorv1.ConditionFalse,
+		LastTransitionTime: metav1.NewTime(clock.Now()),
 	}
 	degradedTrue := &operatorv1.OperatorCondition{
-		Type:   operatorv1.OperatorStatusTypeDegraded,
-		Status: operatorv1.ConditionTrue,
+		Type:               operatorv1.OperatorStatusTypeDegraded,
+		Status:             operatorv1.ConditionTrue,
+		LastTransitionTime: metav1.NewTime(clock.Now()),
 	}
 
 	progressingTrue := &operatorv1.OperatorCondition{
-		Type:   operatorv1.OperatorStatusTypeProgressing,
-		Status: operatorv1.ConditionTrue,
+		Type:               operatorv1.OperatorStatusTypeProgressing,
+		Status:             operatorv1.ConditionTrue,
+		LastTransitionTime: metav1.NewTime(clock.Now()),
 	}
 	progressingFalse := &operatorv1.OperatorCondition{
-		Type:   operatorv1.OperatorStatusTypeProgressing,
-		Status: operatorv1.ConditionFalse,
+		Type:               operatorv1.OperatorStatusTypeProgressing,
+		Status:             operatorv1.ConditionFalse,
+		LastTransitionTime: metav1.NewTime(clock.Now()),
 	}
 
 	testCases := []struct {
@@ -249,6 +265,12 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 		dnsDaemonset            *appsv1.DaemonSet
 		nrDaemonset             *appsv1.DaemonSet
 		expected                operatorv1.ConditionStatus
+		// Expect a requeue when it's Progressing=false, Degraded=true,
+		// and has been degraded past the grace period or may become degraded soon; OR
+		// it's previously and still Degraded after the grace period.
+		expectRequeue bool
+		// A degraded condition will give a retry duration based on its grace period.
+		expectAfter time.Duration
 	}{
 		{
 			name:                    "0 available, previously Degraded=false and Progressing=false condition",
@@ -293,6 +315,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			clusterIP:               "",
 			dnsDaemonset:            makeDaemonSet(6, 6),
 			nrDaemonset:             makeDaemonSet(6, 6),
+			expectRequeue:           true,
 			expected:                operatorv1.ConditionTrue,
 		},
 		{
@@ -311,6 +334,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			clusterIP:               "172.30.0.10",
 			dnsDaemonset:            makeDaemonSet(6, 0),
 			nrDaemonset:             makeDaemonSet(6, 6),
+			expectRequeue:           true,
 			expected:                operatorv1.ConditionTrue,
 		},
 		{
@@ -338,6 +362,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			clusterIP:               "",
 			dnsDaemonset:            makeDaemonSet(6, 0),
 			nrDaemonset:             makeDaemonSet(6, 0),
+			expectRequeue:           false, // Don't requeue if lastTransitionTime is recent.
 			expected:                operatorv1.ConditionFalse,
 		},
 		{
@@ -347,6 +372,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			clusterIP:               "",
 			dnsDaemonset:            makeDaemonSet(6, 0),
 			nrDaemonset:             makeDaemonSet(6, 0),
+			expectRequeue:           true, // Requeue while it's still degraded.
 			expected:                operatorv1.ConditionTrue,
 		},
 		{
@@ -356,6 +382,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			clusterIP:               "",
 			dnsDaemonset:            makeDaemonSet(6, 6),
 			nrDaemonset:             makeDaemonSet(6, 6),
+			expectRequeue:           false, // Don't requeue if lastTransitionTime is recent.
 			expected:                operatorv1.ConditionFalse,
 		},
 		{
@@ -365,6 +392,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			clusterIP:               "",
 			dnsDaemonset:            makeDaemonSet(6, 6),
 			nrDaemonset:             makeDaemonSet(6, 6),
+			expectRequeue:           true, // Requeue while it's still degraded.
 			expected:                operatorv1.ConditionTrue,
 		},
 		{
@@ -374,6 +402,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			clusterIP:               "172.30.0.10",
 			dnsDaemonset:            makeDaemonSet(0, 0),
 			nrDaemonset:             makeDaemonSet(0, 0),
+			expectRequeue:           false, // Don't requeue if lastTransitionTime is recent.
 			expected:                operatorv1.ConditionFalse,
 		},
 		{
@@ -383,12 +412,29 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			clusterIP:               "172.30.0.10",
 			dnsDaemonset:            makeDaemonSet(0, 0),
 			nrDaemonset:             makeDaemonSet(0, 0),
+			expectRequeue:           true, // Requeue while it's still degraded.
 			expected:                operatorv1.ConditionTrue,
 		},
 	}
 
 	for _, tc := range testCases {
-		actual, _ := computeDNSDegradedCondition(tc.oldDegradedCondition, tc.newProgressingCondition, tc.clusterIP, true, tc.dnsDaemonset, 0, time.Time{})
+		actual, retryErr := computeDNSDegradedCondition(tc.oldDegradedCondition, tc.newProgressingCondition, tc.clusterIP, true, tc.dnsDaemonset, 0, time.Time{})
+		switch e := retryErr.(type) {
+		case retryable.Error:
+			if !tc.expectRequeue {
+				t.Errorf("%q: expected not to be told to requeue", tc.name)
+			}
+			if tc.expectAfter.Seconds() != e.After().Seconds() {
+				t.Errorf("%q: expected requeue after %s, got %s", tc.name, tc.expectAfter.String(), e.After().String())
+			}
+		case nil:
+			if tc.expectRequeue {
+				t.Errorf("%q: expected to be told to requeue", tc.name)
+			}
+		default:
+			t.Errorf("%q: unexpected error: %v", tc.name, retryErr)
+			continue
+		}
 		if actual.Status != tc.expected {
 			t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
 		}
@@ -563,6 +609,13 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 }
 
 func TestSkippingStatusUpdates(t *testing.T) {
+	// Inject a fake clock and don't forget to reset it
+	fakeClock := utilclocktesting.NewFakeClock(time.Time{})
+	clock = fakeClock
+	defer func() {
+		clock = utilclock.RealClock{}
+	}()
+
 	makeDaemonSet := func(desired, available, updated int) *appsv1.DaemonSet {
 		return &appsv1.DaemonSet{
 			Spec: appsv1.DaemonSetSpec{
@@ -632,7 +685,7 @@ func TestSkippingStatusUpdates(t *testing.T) {
 			expected: operatorv1.ConditionFalse,
 		},
 		{
-			name:         "should return Degraded=ConditionTrue",
+			name:         "should return Degraded=ConditionTrue because enough time has elapsed for an update",
 			clusterIP:    "1.2.3.4",
 			dnsDaemonset: makeDaemonSet(6, 0, 6),
 			nrDaemonset:  makeDaemonSet(6, 6, 6),
@@ -646,9 +699,28 @@ func TestSkippingStatusUpdates(t *testing.T) {
 				Status: operatorv1.ConditionFalse,
 			},
 			currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 50, 0, time.UTC),
-			// last-curr = 1w, tolerate 5s, so shouldn't prevent the flap.
+			// last - current = 1w, and we tolerate 5s, so this should change from False to True.
 			toleration: 5 * time.Second,
 			expected:   operatorv1.ConditionTrue,
+			reconcileResult: reconcile.Result{
+				Requeue:      true,
+				RequeueAfter: 5 * time.Second,
+			},
+		},
+		{
+			name:         "should return Degraded=ConditionFalse because not enough time has elapsed for an update",
+			clusterIP:    "1.2.3.4",
+			dnsDaemonset: makeDaemonSet(6, 0, 6),
+			nrDaemonset:  makeDaemonSet(6, 6, 6),
+			oldCondition: operatorv1.OperatorCondition{
+				Type:               operatorv1.OperatorStatusTypeDegraded,
+				Status:             operatorv1.ConditionFalse,
+				LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 12, 1, 10, 50, 0, time.UTC)),
+			},
+			currentTime: time.Date(2022, time.Month(5), 12, 1, 10, 52, 0, time.UTC),
+			// last - current = 2s, and we tolerate 5s, so this should not change from False.
+			toleration: 5 * time.Second,
+			expected:   operatorv1.ConditionFalse,
 		},
 		{
 			name:         "should return Degraded=ConditionFalse because it is Progressing",
@@ -674,14 +746,21 @@ func TestSkippingStatusUpdates(t *testing.T) {
 			dnsDaemonset: makeDaemonSet(6, 1, 6),
 			nrDaemonset:  makeDaemonSet(6, 6, 6),
 			oldCondition: operatorv1.OperatorCondition{
-				Type:               operatorv1.OperatorStatusTypeDegraded,
-				Status:             operatorv1.ConditionFalse,
-				LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 19, 1, 9, 50, 0, time.UTC)),
+				Type:   DNSMaxUnavailableDNSPodsExceeded,
+				Status: operatorv1.ConditionFalse,
+				//LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 19, 1, 9, 50, 0, time.UTC)),
+				// 1 minute ago
+				LastTransitionTime: metav1.NewTime(clock.Now().Add(time.Minute * -1)),
 			},
-			currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 50, 0, time.UTC),
-			// last-curr = 1m, tolerate 1m, so should prevent the flap.
-			toleration: 1 * time.Minute,
+			//currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 50, 0, time.UTC),
+			currentTime: metav1.NewTime(clock.Now()).Time,
+			// last-curr = 1m, tolerate 2m, so should prevent the flap.
+			toleration: 2 * time.Minute,
 			expected:   operatorv1.ConditionFalse,
+			reconcileResult: reconcile.Result{
+				Requeue:      true,
+				RequeueAfter: 2 * time.Minute,
+			},
 		},
 	}
 	for _, tc := range testCases {
@@ -700,18 +779,32 @@ func TestSkippingStatusUpdates(t *testing.T) {
 
 			var actual operatorv1.OperatorCondition
 			var actualReconcileResult reconcile.Result
+			var retryErr error
 			if tc.oldCondition.Type == operatorv1.OperatorStatusTypeProgressing {
 				actual = computeDNSProgressingCondition(&tc.oldCondition, dns, tc.clusterIP, true, tc.dnsDaemonset, true, tc.nrDaemonset, tc.toleration, tc.currentTime, &actualReconcileResult)
-			} else if tc.oldCondition.Type == operatorv1.OperatorStatusTypeDegraded {
-				actual, _ = computeDNSDegradedCondition(&tc.oldCondition, &tc.progressingCondition, tc.clusterIP, true, tc.dnsDaemonset, tc.toleration, tc.currentTime)
+				if actualReconcileResult != tc.reconcileResult {
+					t.Errorf("%q: expected requeue to be %+v, got %+v", tc.name, tc.reconcileResult, actualReconcileResult)
+				}
 			} else {
-				t.Fatalf("Unknown condition type: %s", tc.oldCondition.Type)
+				actual, retryErr = computeDNSDegradedCondition(&tc.oldCondition, &tc.progressingCondition, tc.clusterIP, true, tc.dnsDaemonset, tc.toleration, tc.currentTime)
+				switch e := retryErr.(type) {
+				case retryable.Error:
+					if !tc.reconcileResult.Requeue {
+						t.Errorf("%q: expected not to be told to requeue", tc.name)
+					}
+					if tc.reconcileResult.RequeueAfter.Seconds() != e.After().Seconds() {
+						t.Errorf("%q: expected requeue after %s, got %s", tc.name, tc.reconcileResult.RequeueAfter.String(), e.After().String())
+					}
+				case nil:
+					if tc.reconcileResult.Requeue {
+						t.Errorf("%q: expected to be told to requeue", tc.name)
+					}
+				default:
+					t.Errorf("%q: unexpected error: %v", tc.name, retryErr)
+				}
 			}
 			if actual.Status != tc.expected {
 				t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
-			}
-			if actualReconcileResult != tc.reconcileResult {
-				t.Errorf("%q: expected requeue to be %+v, got %+v", tc.name, tc.reconcileResult, actualReconcileResult)
 			}
 		})
 	}
