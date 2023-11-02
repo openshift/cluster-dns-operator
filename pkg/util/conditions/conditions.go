@@ -14,9 +14,6 @@ import (
 	utilclock "k8s.io/utils/clock"
 )
 
-// clock is to enable unit testing
-var clock utilclock.Clock = utilclock.RealClock{}
-
 // ExpectedCondition contains a condition that is expected to be checked when
 // determining Available or Degraded status of the ingress controller
 type ExpectedCondition struct {
@@ -31,7 +28,7 @@ type ExpectedCondition struct {
 // mergeConditions adds or updates matching conditions, and updates
 // the transition time if details of a condition have changed. Returns
 // the updated condition array.
-func mergeConditions(conditions []operatorv1.OperatorCondition, updates ...operatorv1.OperatorCondition) []operatorv1.OperatorCondition {
+func mergeConditions(conditions []operatorv1.OperatorCondition, clock utilclock.Clock, updates ...operatorv1.OperatorCondition) []operatorv1.OperatorCondition {
 	now := metav1.NewTime(clock.Now())
 	var additions []operatorv1.OperatorCondition
 	for i, update := range updates {
@@ -73,7 +70,7 @@ func pruneConditions(conditions []operatorv1.OperatorCondition) []operatorv1.Ope
 // CheckConditions compares expected operator conditions to existing operator
 // conditions and returns a list of graceConditions, degradedconditions, and a
 // requeueing wait time.
-func CheckConditions(expectedConds []ExpectedCondition, conditions []operatorv1.OperatorCondition) ([]*operatorv1.OperatorCondition, []*operatorv1.OperatorCondition, time.Duration) {
+func CheckConditions(expectedConds []ExpectedCondition, conditions []operatorv1.OperatorCondition, clock utilclock.Clock) ([]*operatorv1.OperatorCondition, []*operatorv1.OperatorCondition, time.Duration) {
 	var graceConditions, degradedConditions []*operatorv1.OperatorCondition
 	var requeueAfter time.Duration
 	conditionsMap := make(map[string]*operatorv1.OperatorCondition)
