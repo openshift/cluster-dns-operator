@@ -12,6 +12,7 @@ import (
 
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
+	retryable "github.com/openshift/cluster-dns-operator/pkg/util/retryableerror"
 	"github.com/openshift/cluster-dns-operator/pkg/util/slice"
 
 	"github.com/sirupsen/logrus"
@@ -122,11 +123,11 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 		DeleteFunc: func(e event.DeleteEvent) bool { return nodePredicate(e.Object) },
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			old := e.ObjectOld.(*corev1.Node)
-			new := e.ObjectNew.(*corev1.Node)
-			if ignoreNodeForTopologyAwareHints(old) != ignoreNodeForTopologyAwareHints(new) {
+			nu := e.ObjectNew.(*corev1.Node)
+			if ignoreNodeForTopologyAwareHints(old) != ignoreNodeForTopologyAwareHints(nu) {
 				return true
 			}
-			if !ignoreNodeForTopologyAwareHints(new) && nodeIsValidForTopologyAwareHints(old) != nodeIsValidForTopologyAwareHints(new) {
+			if !ignoreNodeForTopologyAwareHints(nu) && nodeIsValidForTopologyAwareHints(old) != nodeIsValidForTopologyAwareHints(nu) {
 				return true
 			}
 			return false
@@ -263,6 +264,11 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			} else {
 				// Handle everything else.
 				if err := r.ensureDNS(dns, &result); err != nil {
+					switch e := err.(type) {
+					case retryable.Error:
+						logrus.Error(e, "got retryable error; requeueing", "after", e.After())
+						return reconcile.Result{RequeueAfter: e.After()}, nil
+					}
 					errs = append(errs, fmt.Errorf("failed to ensure dns %s: %v", dns.Name, err))
 				} else if err := r.ensureExternalNameForOpenshiftService(); err != nil {
 					errs = append(errs, fmt.Errorf("failed to ensure external name for openshift service: %v", err))

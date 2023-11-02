@@ -181,7 +181,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	co.Status.Conditions = mergeConditions(co.Status.Conditions,
 		computeOperatorAvailableCondition(state.haveDNS, &state.dns),
 		operatorProgressingCondition,
-		computeOperatorDegradedCondition(state.haveDNS, &state.dns),
+		computeOperatorDegradedCondition(state.haveDNS, &state.dns, oldVersions, newVersions, curVersions),
 	)
 	co.Status.Versions = computeOperatorStatusVersions(curVersions)
 	co.Status.Conditions = mergeConditions(co.Status.Conditions, computeOperatorUpgradeableCondition(&state.dns))
@@ -401,7 +401,9 @@ func computeOperatorUpgradeableCondition(dns *operatorv1.DNS) configv1.ClusterOp
 }
 
 // computeOperatorDegradedCondition computes the operator's current Degraded status state.
-func computeOperatorDegradedCondition(haveDNS bool, dns *operatorv1.DNS) configv1.ClusterOperatorStatusCondition {
+func computeOperatorDegradedCondition(haveDNS bool, dns *operatorv1.DNS, oldVersions, newVersions, curVersions map[string]string) configv1.ClusterOperatorStatusCondition {
+	var messages []string
+
 	if !haveDNS {
 		return configv1.ClusterOperatorStatusCondition{
 			Type:    configv1.OperatorDegraded,
@@ -411,18 +413,23 @@ func computeOperatorDegradedCondition(haveDNS bool, dns *operatorv1.DNS) configv
 		}
 	}
 
-	var degraded bool
-	for _, cond := range dns.Status.Conditions {
-		if cond.Type == operatorv1.OperatorStatusTypeDegraded && cond.Status == operatorv1.ConditionTrue {
-			degraded = true
+	// See OCPBUGS-14346.  If the operator is upgrading, we can't consider it as degraded.
+	upgrading, _ := isUpgrading(curVersions, oldVersions, newVersions)
+	if !upgrading {
+		var degraded bool
+		for _, cond := range dns.Status.Conditions {
+			if cond.Type == operatorv1.OperatorStatusTypeDegraded && cond.Status == operatorv1.ConditionTrue {
+				degraded = true
+				messages = append(messages, cond.Message)
+			}
 		}
-	}
-	if degraded {
-		return configv1.ClusterOperatorStatusCondition{
-			Type:    configv1.OperatorDegraded,
-			Status:  configv1.ConditionTrue,
-			Reason:  "DNSDegraded",
-			Message: fmt.Sprintf("DNS %s is degraded", dns.Name),
+		if degraded {
+			return configv1.ClusterOperatorStatusCondition{
+				Type:    configv1.OperatorDegraded,
+				Status:  configv1.ConditionTrue,
+				Reason:  "DNSDegraded",
+				Message: fmt.Sprintf("DNS %s is degraded: %s", dns.Name, strings.Join(messages, "\n")),
+			}
 		}
 	}
 	return configv1.ClusterOperatorStatusCondition{
@@ -468,7 +475,31 @@ func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldV
 		}
 	}
 
+	// If the operator is upgrading, note it as a Progressing reason and add the upgrading messages
+	upgrading, upgradingMessages := isUpgrading(curVersions, oldVersions, newVersions)
+	if upgrading {
+		status = configv1.ConditionTrue
+		messages = append(messages, strings.Join(upgradingMessages, "And "))
+		progressingReasons = append(progressingReasons, "Upgrading")
+	}
+
+	if len(progressingReasons) != 0 {
+		progressingCondition.Status = status
+		progressingCondition.Reason = strings.Join(progressingReasons, "And ")
+		progressingCondition.Message = strings.Join(messages, "\n")
+	} else {
+		progressingCondition.Status = configv1.ConditionFalse
+		progressingCondition.Reason = "AsExpected"
+		progressingCondition.Message = dnsEqualConditionMessage
+	}
+
+	return progressingCondition
+}
+
+func isUpgrading(curVersions, oldVersions, newVersions map[string]string) (bool, []string) {
+	var messages []string
 	upgrading := false
+
 	for name, curVersion := range curVersions {
 		if oldVersion, ok := oldVersions[name]; ok && oldVersion != curVersion {
 			messages = append(messages, fmt.Sprintf("Upgraded %s to %q.", name, curVersion))
@@ -478,22 +509,7 @@ func computeOperatorProgressingCondition(haveDNS bool, dns *operatorv1.DNS, oldV
 			messages = append(messages, fmt.Sprintf("Upgrading %s to %q.", name, newVersion))
 		}
 	}
-	if upgrading {
-		status = configv1.ConditionTrue
-		progressingReasons = append(progressingReasons, "Upgrading")
-	}
-
-	if len(progressingReasons) != 0 {
-		progressingCondition.Status = status
-		progressingCondition.Reason = strings.Join(progressingReasons, "And")
-		progressingCondition.Message = strings.Join(messages, "\n")
-	} else {
-		progressingCondition.Status = configv1.ConditionFalse
-		progressingCondition.Reason = "AsExpected"
-		progressingCondition.Message = dnsEqualConditionMessage
-	}
-
-	return progressingCondition
+	return upgrading, messages
 }
 
 // computeOldVersions returns a map of operand name to version computed from the
