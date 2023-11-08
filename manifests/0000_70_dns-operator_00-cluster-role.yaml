@@ -111,3 +111,18 @@ rules:
   - clusteroperators/status
   verbs:
   - update
+
+- apiGroups:
+  - network.openshift.io
+  resources:
+  - dnsnameresolvers
+  verbs:
+  - list
+  - watch
+
+- apiGroups:
+  - network.openshift.io
+  resources:
+  - dnsnameresolvers/status
+  verbs:
+  - update

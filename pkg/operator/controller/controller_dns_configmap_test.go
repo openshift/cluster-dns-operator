@@ -228,7 +228,7 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain, cmMap); err != nil {
+			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain, cmMap, false); err != nil {
 				if !errors.Is(err, tc.expectedError) {
 					t.Errorf("Unexpected error : %v", err)
 				}
@@ -998,7 +998,7 @@ func TestDesiredDNSConfigmapUpstreamResolvers(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain, cmMap); err != nil {
+			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain, cmMap, false); err != nil {
 				if !errors.Is(err, tc.expectedError) {
 					t.Errorf("Unexpected error : %v", err)
 				}
@@ -1138,6 +1138,78 @@ func Test_coreDNSCache(t *testing.T) {
 		if tc.expectedNTTL != nTTL {
 			t.Errorf("test case %s failed: expected %d NegativeTTL, got %d", tc.name, tc.expectedNTTL, nTTL)
 		}
+	}
+}
+
+func TestDesiredDNSConfigmapDNSNameResolverEnabled(t *testing.T) {
+	testCases := []struct {
+		name             string
+		dns              *operatorv1.DNS
+		expectedCoreFile string
+		expectedError    error
+	}{
+		{
+			name: "Check if Corefile is rendered correctly with ocp_dnsnameresolver plugin",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					Servers: []operatorv1.Server{
+						{
+							Name:  "foo",
+							Zones: []string{"foo.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"1.1.1.1", "2.2.2.2:5353"},
+								Policy:    operatorv1.RoundRobinForwardingPolicy,
+							},
+						},
+						{
+							Name:  "bar",
+							Zones: []string{"bar.com", "example.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"3.3.3.3"},
+								Policy:    operatorv1.RandomForwardingPolicy,
+							},
+						},
+						{
+							Name:  "fizz",
+							Zones: []string{"fizz.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"5.5.5.5", "6.6.6.6"},
+								Policy:    operatorv1.SequentialForwardingPolicy,
+							},
+						},
+						{
+							Name:  "buzz",
+							Zones: []string{"buzz.com", "example.buzz.com"},
+							ForwardPlugin: operatorv1.ForwardPlugin{
+								Upstreams: []string{"4.4.4.4"},
+							},
+						},
+					},
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "default_corefile_ocp_dnsnameresolver"),
+		},
+	}
+
+	clusterDomain := "cluster.local"
+	cmMap := make(map[string]string)
+	cmMap["cacerts"] = "ca-cacerts-2"
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if cm, err := desiredDNSConfigMap(tc.dns, clusterDomain, cmMap, true); err != nil {
+				if !errors.Is(err, tc.expectedError) {
+					t.Errorf("Unexpected error : %v", err)
+				}
+			} else if tc.expectedError != nil {
+				t.Errorf("Error %v was expected", tc.expectedError)
+			} else if diff := cmp.Diff(cm.Data["Corefile"], tc.expectedCoreFile); diff != "" {
+				t.Errorf("unexpected Corefile;\n%s", diff)
+			}
+		})
 	}
 }
 
