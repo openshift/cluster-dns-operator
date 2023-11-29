@@ -39,10 +39,10 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
 		Scheme: operatorclient.GetScheme(),
 		Cache: cache.Options{
-			Namespaces: []string{
-				config.OperatorNamespace,
-				operatorcontroller.DefaultOperandNamespace,
-				operatorcontroller.GlobalUserSpecifiedConfigNamespace,
+			DefaultNamespaces: map[string]cache.Config{
+				config.OperatorNamespace:                              {},
+				operatorcontroller.DefaultOperandNamespace:            {},
+				operatorcontroller.GlobalUserSpecifiedConfigNamespace: {},
 			},
 		},
 		// Use a non-caching client everywhere. The default split client does not

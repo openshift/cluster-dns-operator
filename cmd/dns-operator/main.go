@@ -13,13 +13,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	ctrlruntimelog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const operatorNamespace = "openshift-dns-operator"
 
 func main() {
-	metrics.DefaultBindAddress = "127.0.0.1:60000"
+	metricsserver.DefaultBindAddress = "127.0.0.1:60000"
 
 	// This is required because controller-runtime expects its consumers to
 	// set a logger through log.SetLogger within 30 seconds of the program's
