@@ -39,6 +39,12 @@ const (
 
 	// caBundleFileName is the file name used for CA bundle.
 	caBundleFileName = "ca-bundle.crt"
+
+	// DefaultDNSNameResolverNamespace is the namespace which contains all the DNSNameResolver resources.
+	DefaultDNSNameResolverNamespace = "openshift-ovn-kubernetes"
+
+	// DefaultFeatureGate gives the name of the default feature gate object.
+	DefaultFeatureGate = "cluster"
 )
 
 // DNSClusterOperatorName returns the namespaced name of the ClusterOperator
@@ -138,5 +144,13 @@ func NodeResolverDaemonSetPodSelector() *metav1.LabelSelector {
 		MatchLabels: map[string]string{
 			nodeResolverDaemonSetLabelName: "",
 		},
+	}
+}
+
+// FeatureGateClusterConfigName returns the namespaced name of the
+// featuregates.config.openshift.io resource of the cluster.
+func FeatureGateClusterConfigName() types.NamespacedName {
+	return types.NamespacedName{
+		Name: DefaultFeatureGate,
 	}
 }
