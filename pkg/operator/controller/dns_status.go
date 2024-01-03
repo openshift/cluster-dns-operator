@@ -100,11 +100,9 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 		want := dnsDaemonset.Status.DesiredNumberScheduled
 		have := dnsDaemonset.Status.NumberAvailable
 		numberUnavailable := want - have
-		maxUnavailableIntStr := intstr.FromInt(1)
-		if dnsDaemonset.Spec.UpdateStrategy.RollingUpdate != nil && dnsDaemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable != nil {
-			maxUnavailableIntStr = *dnsDaemonset.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable
-		}
+		maxUnavailableIntStr := intstr.FromString("10%")
 		maxUnavailable, intstrErr := intstr.GetScaledValueFromIntOrPercent(&maxUnavailableIntStr, int(want), true)
+
 		switch {
 		case want == 0:
 			status = operatorv1.ConditionTrue
@@ -115,6 +113,7 @@ func computeDNSDegradedCondition(oldCondition *operatorv1.OperatorCondition, clu
 			degradedReasons = append(degradedReasons, "NoDNSPodsAvailable")
 			messages = append(messages, "No DNS pods are available.")
 		case intstrErr != nil:
+			// This should not happen, but is included just to safeguard against future changes.
 			degradedReasons = append(degradedReasons, "InvalidDNSMaxUnavailable")
 			messages = append(messages, fmt.Sprintf("The DNS daemonset has an invalid MaxUnavailable value: %v", intstrErr))
 		case int(numberUnavailable) > maxUnavailable:
