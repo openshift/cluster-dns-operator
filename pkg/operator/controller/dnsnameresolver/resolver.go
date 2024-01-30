@@ -121,6 +121,29 @@ func (res *Resolver) Add(dnsName string, resolvedAddresses []networkv1alpha1.DNS
 	// Get the details of the resolved name corresponding to the DNS name, if it exists.
 	resolvedName, exists := res.dnsNames[dnsName]
 
+	// If the resolved name corresponding to the DNS name exists, ensure that the DNSNameResolver
+	// object matches the existing information. Otherwise, don't proceed.
+	if exists {
+		if resolvedName.regularObjExists && matchesRegular {
+			// If the DNSNameResolver object for the regular DNS name object exists and the
+			// current Add call is also for an object corresponding to a regular DNS name,
+			// then check if the existing DNS name matches the current one.
+			matchingDNSName, found := res.regularObjInfo[objName]
+			if !found || dnsName != matchingDNSName {
+				return
+			}
+		} else if resolvedName.wildcardObjExists && !matchesRegular {
+			// If the DNSNameResolver object for the wildcard DNS name object exists and the
+			// current Add call is also for an object corresponding to a wildcard DNS name,
+			// then check if the current DNS name exists in the set of DNS names matching the
+			// wildcard DNS name.
+			dnsNamesMatchingWildcard, found := res.wildcardObjInfo[objName]
+			if !found || !dnsNamesMatchingWildcard.Has(dnsName) {
+				return
+			}
+		}
+	}
+
 	if len(resolvedAddresses) == 0 {
 		// If no IP address is currently associated with the DNS name and the corresponding
 		// resolved name details also do not exist, then set the next lookup time for the
@@ -135,8 +158,8 @@ func (res *Resolver) Add(dnsName string, resolvedAddresses []networkv1alpha1.DNS
 		// next lookup time among the associated IP addresses.
 		first := false
 		for _, resolvedAddress := range resolvedAddresses {
-			if !first ||
-				resolvedAddress.LastLookupTime.Time.Add(time.Second*time.Duration(resolvedAddress.TTLSeconds)).Before(resolvedName.minNextLookupTime) {
+			isBeforeMinNextLookupTime := resolvedAddress.LastLookupTime.Time.Add(time.Second * time.Duration(resolvedAddress.TTLSeconds)).Before(resolvedName.minNextLookupTime)
+			if !first || isBeforeMinNextLookupTime {
 				resolvedName.minNextLookupTime = resolvedAddress.LastLookupTime.Time.Add(time.Second * time.Duration(resolvedAddress.TTLSeconds))
 				first = true
 			}
@@ -332,7 +355,15 @@ func (res *Resolver) getRandomCoreDNSPodIP(maxIPs int) ([]string, error) {
 		// If the number of CoreDNS pod IPs is greater than maxIPs, then
 		// return randomly chosen maxIPs number of CoreDNS pod IPs
 		for i := 0; i < maxIPs; i++ {
-			randomIPs = append(randomIPs, ips[r1.Intn(len(ips))])
+			// Randomly select an IP address from the list of IPs and add
+			// it to the randomIPs slice. Then replace the element present
+			// at the randomly selected index with the last element of the
+			// ips slice and reduce the length of the ips slice by 1.
+			len := len(ips)
+			index := r1.Intn(len)
+			randomIPs = append(randomIPs, ips[index])
+			ips[index] = ips[len-1]
+			ips = ips[:len-1]
 		}
 	}
 

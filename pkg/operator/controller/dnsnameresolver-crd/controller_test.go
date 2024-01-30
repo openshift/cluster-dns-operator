@@ -1,4 +1,4 @@
-package dnsnameresolverfeature
+package dnsnameresolvercrd
 
 import (
 	"context"
@@ -128,7 +128,6 @@ func Test_Reconcile(t *testing.T) {
 				client: cl,
 				config: Config{
 					DNSNameResolverEnabled: tc.dnsNameResolverEnabled,
-					FeatureGateName:        "cluster",
 					DependentCaches:        []cache.Cache{fCacheWithStartAndSync},
 					DependentControllers:   []controller.Controller{ctrl},
 				},
@@ -227,7 +226,6 @@ func TestReconcileOnlyStartsControllerOnce(t *testing.T) {
 		client: cl,
 		config: Config{
 			DNSNameResolverEnabled: true,
-			FeatureGateName:        "cluster",
 			DependentCaches:        []cache.Cache{fCacheWithStartAndSync},
 			DependentControllers:   []controller.Controller{ctrl},
 		},

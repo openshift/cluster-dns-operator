@@ -28,10 +28,26 @@ const (
 	controllerName = "dnsnameresolver_controller"
 )
 
+type Config struct {
+	OperandNamespace         string
+	ServiceName              string
+	DNSNameResolverNamespace string
+}
+
+// reconciler handles the actual DNSNameResolver reconciliation logic in response to events.
+type reconciler struct {
+	config Config
+
+	dnsNameResolverCache cache.Cache
+	client               client.Client
+	res                  *Resolver
+	startResolver        sync.Once
+}
+
 // NewUnmanaged creates and returns a controller that watches DNSNameResolver
 // objects. The controller re-resolves the DNS names which get added to the
 // status of the DNSNameResolver objects. It also removes IP addresses of DNS
-// names, whose TTLs have expired, from the staus. This is an unmanaged
+// names, whose TTLs have expired, from the status. This is an unmanaged
 // controller, which means that the manager does not start it.
 func NewUnmanaged(mgr manager.Manager, config Config) (controller.Controller, []cache.Cache, error) {
 	// Create a new cache for tracking the DNSNameResolver resources in
@@ -80,34 +96,13 @@ func NewUnmanaged(mgr manager.Manager, config Config) (controller.Controller, []
 		return nil, nil, err
 	}
 
-	// Watch for the CoreDNS pod EndpointSlices using corednsEndpointsSliceCache.
-	if err := c.Watch(source.Kind(corednsEndpointsSliceCache, &discoveryv1.EndpointSlice{}), handler.EnqueueRequestsFromMapFunc(skipReconcileForEndpointSlice)); err != nil {
+	// Watch for the CoreDNS pod EndpointSlices to keep corednsEndpointsSliceCache synced. No reconcile requests should be generated.
+	if err := c.Watch(source.Kind(corednsEndpointsSliceCache, &discoveryv1.EndpointSlice{}), handler.EnqueueRequestsFromMapFunc(
+		func(context.Context, client.Object) []reconcile.Request { return nil })); err != nil {
 		return nil, nil, err
 	}
 
 	return c, []cache.Cache{dnsNameResolverCache, corednsEndpointsSliceCache}, nil
-}
-
-// skipReconcileForEndpointSlice just skips the reconcile if any event related to the CoreDNS pod
-// endpointslices is received.
-func skipReconcileForEndpointSlice(context.Context, client.Object) []reconcile.Request {
-	return nil
-}
-
-type Config struct {
-	OperandNamespace         string
-	ServiceName              string
-	DNSNameResolverNamespace string
-}
-
-// reconciler handles the actual DNSNameResolver reconciliation logic in response to events.
-type reconciler struct {
-	config Config
-
-	dnsNameResolverCache cache.Cache
-	client               client.Client
-	res                  *Resolver
-	startResolver        sync.Once
 }
 
 // Reconcile expects request to refer to an DNSNameResolver resource, and will do all the work to
@@ -121,8 +116,8 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	logrus.Infof("reconciling request: %v", request)
 
 	// Get the DNSNameResolver resource.
-	dnsNameResolver := &networkv1alpha1.DNSNameResolver{}
-	if err := r.dnsNameResolverCache.Get(ctx, request.NamespacedName, dnsNameResolver); err != nil {
+	dnsNameResolverObj := &networkv1alpha1.DNSNameResolver{}
+	if err := r.dnsNameResolverCache.Get(ctx, request.NamespacedName, dnsNameResolverObj); err != nil {
 
 		// Check if the DNSNameResolver resource is deleted. If so, delete DNS names matching the DNSNameResolver resource
 		// from the resolver.
@@ -135,7 +130,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	// Get a copy of the DNSNameResolver resource.
-	dnsNameResolver = dnsNameResolver.DeepCopy()
+	dnsNameResolver := dnsNameResolverObj.DeepCopy()
 
 	// Check if the grace period is over for some of the IP addresses after the expiration of their respective TTLs. If so,
 	// remove those IP addresses and update the status of the resource.
@@ -155,8 +150,9 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	dnsName := string(dnsNameResolver.Spec.Name)
 	matchesRegular := !isWildcard(dnsName)
 
-	// Add the DNS name in the spec of the DNSNameResolver resource to the resolver with empty resolved addresses. This is done
-	// to ensure that the resolver sends the resolution request for the DNS name if it is getting added for the first time.
+	// Call the Add function of the resolver for the DNS name in the spec of the DNSNameResolver resource with empty resolved addresses.
+	// If it is a create event then this will ensure that the resolver sends the resolution request for the DNS name, so that the status
+	// of the object gets updated with the corresponding IP addresses.
 	r.res.Add(dnsName, []networkv1alpha1.DNSNameResolverResolvedAddress{}, matchesRegular, request.Name)
 
 	// Iterate through each of the resolved names matching the DNS name and add them to the resolver along with the current IP addresses.
@@ -169,14 +165,13 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 // isWildcard checks if the domain name is wildcard.
 func isWildcard(dnsName string) bool {
-	trimmedString := strings.TrimPrefix(dnsName, "*")
-	return trimmedString != dnsName
+	return strings.HasPrefix(dnsName, "*.")
 }
 
 // removalOfIPsRequired checks whether the TTL of any IP address, associated to a DNS name
 // matching the DNSNameResolver object, has expired and the grace period after the TTL
-// expiration is also over. If so, then those resolved addresses are removed from the
-// resolved name details of the DNS name.
+// expiration is also over. If so, then the DNSNameResolverStatus status object is modified
+// to remove those resolved addresses from the resolved name details of the DNS name.
 func removalOfIPsRequired(status *networkv1alpha1.DNSNameResolverStatus) bool {
 	updated := false
 	for index, resolvedName := range status.ResolvedNames {

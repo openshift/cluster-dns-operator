@@ -10,7 +10,7 @@ import (
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
 	dnsnameresolver "github.com/openshift/cluster-dns-operator/pkg/operator/controller/dnsnameresolver"
-	dnsnameresolverfeature "github.com/openshift/cluster-dns-operator/pkg/operator/controller/dnsnameresolver-feature"
+	dnsnameresolvercrd "github.com/openshift/cluster-dns-operator/pkg/operator/controller/dnsnameresolver-crd"
 	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -156,9 +156,8 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 	}
 
 	// Set up the dnsnameresolverfeature controller.
-	if _, err := dnsnameresolverfeature.New(operatorManager, dnsnameresolverfeature.Config{
+	if _, err := dnsnameresolvercrd.New(operatorManager, dnsnameresolvercrd.Config{
 		DNSNameResolverEnabled: dnsNameResolverEnabled,
-		FeatureGateName:        operatorcontroller.DefaultFeatureGate,
 		DependentCaches:        dnsNameResolverControllerCaches,
 		DependentControllers: []controller.Controller{
 			dnsNameResolverController,

@@ -1,4 +1,4 @@
-package dnsnameresolverfeature
+package dnsnameresolvercrd
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	controllerName = "dnsnameresolverfeature_controller"
+	controllerName = "dnsnameresolver_crd_controller"
 )
 
 // New creates and returns a controller that creates DNSNameResolver CRD when the
@@ -56,15 +56,12 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 type Config struct {
 	// DNSNameResolverEnabled indicates that the "DNSNameResolver" featuregate is enabled.
 	DNSNameResolverEnabled bool
-
-	FeatureGateName string
-
 	// DependentCaches is a list of caches that are used by Controllers watching DNSNameResolver
-	// resources. The dnsnameresolverfeature controller starts these caches once
+	// resources. The dnsnameresolver_crd controller starts these caches once
 	// the DNSNameResolver CRD has been created.
 	DependentCaches []cache.Cache
 	// DependentControllers is a list of controllers that watch DNSNameResolver
-	// resources. The dnsnameresolverfeature controller starts these controllers once
+	// resources. The dnsnameresolver_crd controller starts these controllers once
 	// the DNSNameResolver CRD has been created and the DependentCaches are started.
 	DependentControllers []controller.Controller
 }
@@ -87,13 +84,6 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	// Check if the DNSNameResolved feature gate is enabled or not.
 	if !r.config.DNSNameResolverEnabled {
-		return reconcile.Result{}, nil
-	}
-
-	// Check if the name of feature gate matches with the default feature gate.
-	if request.Name != r.config.FeatureGateName {
-		// Return a nil error value to avoid re-triggering the event.
-		logrus.Errorf("skipping unexpected feature gate object %s", request.Name)
 		return reconcile.Result{}, nil
 	}
 

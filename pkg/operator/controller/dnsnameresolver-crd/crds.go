@@ -1,4 +1,4 @@
-package dnsnameresolverfeature
+package dnsnameresolvercrd
 
 import (
 	"context"
@@ -91,7 +91,7 @@ func (r *reconciler) createCRD(ctx context.Context, desired *apiextensionsv1.Cus
 	return nil
 }
 
-// updateCRD updates an CRD.  Returns a Boolean indicating
+// updateCRD updates a CRD.  Returns a Boolean indicating
 // whether the CRD was updated, and an error value.
 func (r *reconciler) updateCRD(ctx context.Context, current, desired *apiextensionsv1.CustomResourceDefinition) (bool, error) {
 	changed, updated := crdChanged(current, desired)
