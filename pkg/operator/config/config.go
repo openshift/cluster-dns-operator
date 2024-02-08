@@ -18,4 +18,6 @@ type Config struct {
 	// KubeRBACProxyImage is the kube-rbac-proxy image to to use
 	// to secure the metrics endpoint.
 	KubeRBACProxyImage string
+
+	Stop chan struct{}
 }
