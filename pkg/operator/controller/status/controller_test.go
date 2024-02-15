@@ -631,3 +631,157 @@ func TestComputeCurrentVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestComputeOperatorDegradedCondition(t *testing.T) {
+	type versions struct {
+		operator, operand string
+	}
+
+	testCases := []struct {
+		description    string
+		dnsMissing     bool
+		oldVersions    versions
+		newVersions    versions
+		curVersions    versions
+		expectDegraded configv1.ConditionStatus
+	}{
+		{
+			description:    "dns does not exist",
+			dnsMissing:     true,
+			expectDegraded: configv1.ConditionTrue,
+		},
+		{
+			description:    "versions match",
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v1", "dns-v1"},
+			curVersions:    versions{"v1", "dns-v1"},
+			expectDegraded: configv1.ConditionFalse,
+		},
+		{
+			description:    "operator upgrade in progress",
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v2", "dns-v1"},
+			curVersions:    versions{"v1", "dns-v1"},
+			expectDegraded: configv1.ConditionFalse,
+		},
+		{
+			description:    "operand upgrade in progress",
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v1", "dns-v2"},
+			curVersions:    versions{"v1", "dns-v1"},
+			expectDegraded: configv1.ConditionFalse,
+		},
+		{
+			description:    "operator and operand upgrade in progress",
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v2", "dns-v2"},
+			curVersions:    versions{"v1", "dns-v1"},
+			expectDegraded: configv1.ConditionFalse,
+		},
+		{
+			description:    "operator upgrade done",
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v2", "dns-v1"},
+			curVersions:    versions{"v2", "dns-v1"},
+			expectDegraded: configv1.ConditionFalse,
+		},
+		{
+			description:    "operand upgrade done",
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v1", "dns-v2"},
+			curVersions:    versions{"v1", "dns-v2"},
+			expectDegraded: configv1.ConditionFalse,
+		},
+		{
+			description:    "operator and operand upgrade done",
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v2", "dns-v2"},
+			curVersions:    versions{"v2", "dns-v2"},
+			expectDegraded: configv1.ConditionFalse,
+		},
+		{
+			description:    "operator upgrade in progress, operand upgrade done",
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v2", "dns-v2"},
+			curVersions:    versions{"v1", "dns-v2"},
+			expectDegraded: configv1.ConditionFalse,
+		},
+		{
+			description:    "operator upgrade in progress but no dns",
+			dnsMissing:     true,
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v2", "dns-v1"},
+			curVersions:    versions{"v1", "dns-v1"},
+			expectDegraded: configv1.ConditionTrue,
+		},
+		{
+			description:    "operand upgrade in progress, but no dns",
+			dnsMissing:     true,
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v1", "dns-v2"},
+			curVersions:    versions{"v1", "dns-v1"},
+			expectDegraded: configv1.ConditionTrue,
+		},
+		{
+			description:    "operator and operand upgrade in progress, but no dns",
+			dnsMissing:     true,
+			oldVersions:    versions{"v1", "dns-v1"},
+			newVersions:    versions{"v2", "dns-v2"},
+			curVersions:    versions{"v1", "dns-v1"},
+			expectDegraded: configv1.ConditionTrue,
+		},
+	}
+
+	for _, tc := range testCases {
+		var (
+			haveDNS bool
+			dns     *operatorv1.DNS
+		)
+		if !tc.dnsMissing {
+			haveDNS = true
+			degradedStatus := operatorv1.ConditionFalse
+			if tc.dnsMissing {
+				degradedStatus = operatorv1.ConditionTrue
+			}
+			dns = &operatorv1.DNS{
+				Status: operatorv1.DNSStatus{
+					Conditions: []operatorv1.OperatorCondition{{
+						Type:   operatorv1.OperatorStatusTypeDegraded,
+						Status: degradedStatus,
+					}},
+				},
+			}
+		}
+		oldVersions := map[string]string{
+			OperatorVersionName:     tc.oldVersions.operator,
+			CoreDNSVersionName:      tc.oldVersions.operand,
+			OpenshiftCLIVersionName: tc.oldVersions.operand,
+			KubeRBACProxyName:       tc.oldVersions.operand,
+		}
+		newVersions := map[string]string{
+			OperatorVersionName:     tc.newVersions.operator,
+			CoreDNSVersionName:      tc.newVersions.operand,
+			OpenshiftCLIVersionName: tc.newVersions.operand,
+			KubeRBACProxyName:       tc.newVersions.operand,
+		}
+		curVersions := map[string]string{
+			OperatorVersionName:     tc.curVersions.operator,
+			CoreDNSVersionName:      tc.curVersions.operand,
+			OpenshiftCLIVersionName: tc.curVersions.operand,
+			KubeRBACProxyName:       tc.curVersions.operand,
+		}
+
+		expected := configv1.ClusterOperatorStatusCondition{
+			Type:   configv1.OperatorDegraded,
+			Status: tc.expectDegraded,
+		}
+
+		actual := computeOperatorDegradedCondition(haveDNS, dns, oldVersions, newVersions, curVersions)
+		conditionsCmpOpts := []cmp.Option{
+			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
+		}
+		if !cmp.Equal(actual, expected, conditionsCmpOpts...) {
+			t.Errorf("%q: expected %#v, got %#v", tc.description, expected, actual)
+		}
+	}
+}
