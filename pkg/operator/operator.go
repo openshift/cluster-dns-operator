@@ -9,9 +9,9 @@ import (
 	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
-	dnsnameresolver "github.com/openshift/cluster-dns-operator/pkg/operator/controller/dnsnameresolver"
-	dnsnameresolvercrd "github.com/openshift/cluster-dns-operator/pkg/operator/controller/dnsnameresolver-crd"
+	"github.com/openshift/cluster-dns-operator/pkg/operator/controller/enablednsnameresolver"
 	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
+	dnsnameresolver "github.com/openshift/coredns-ocp-dnsnameresolver/operator/controller/dnsnameresolver"
 
 	configv1 "github.com/openshift/api/config/v1"
 	configclient "github.com/openshift/client-go/config/clientset/versioned"
@@ -139,9 +139,9 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 		return nil, fmt.Errorf("failed to create status controller: %v", err)
 	}
 
-	// Set up the DNSNameResolver controller.  This controller is unmanaged by
-	// the manager; the dnsnameresolverfeature controller starts it and the
-	// caches after it creates the DNSNameResolver CRD.
+	// Set up the DNSNameResolver controller. This controller is unmanaged by
+	// the manager; the enable_dnsnameresolver controller starts it and the
+	// caches.
 	dnsNameResolverController, dnsNameResolverControllerCaches, err := dnsnameresolver.NewUnmanaged(operatorManager, dnsnameresolver.Config{
 		OperandNamespace: operatorcontroller.DefaultOperandNamespace,
 		ServiceName: operatorcontroller.DNSServiceName(&operatorv1.DNS{
@@ -155,15 +155,15 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 		return nil, fmt.Errorf("failed to create dnsnameresolver controller: %v", err)
 	}
 
-	// Set up the dnsnameresolverfeature controller.
-	if _, err := dnsnameresolvercrd.New(operatorManager, dnsnameresolvercrd.Config{
+	// Set up the enable_dnsnameresolver controller.
+	if _, err := enablednsnameresolver.New(operatorManager, enablednsnameresolver.Config{
 		DNSNameResolverEnabled: dnsNameResolverEnabled,
 		DependentCaches:        dnsNameResolverControllerCaches,
 		DependentControllers: []controller.Controller{
 			dnsNameResolverController,
 		},
 	}); err != nil {
-		return nil, fmt.Errorf("failed to create dnsnameresolverfeature controller: %w", err)
+		return nil, fmt.Errorf("failed to create enable_dnsnameresolver controller: %w", err)
 	}
 
 	return &Operator{

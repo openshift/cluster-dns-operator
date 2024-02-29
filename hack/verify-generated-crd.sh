@@ -16,8 +16,8 @@ verify_crd \
 
 verify_crd \
   "vendor/github.com/openshift/api/network/v1alpha1/0000_70_dnsnameresolver_00-techpreview.crd.yaml" \
-  "pkg/manifests/assets/dnsnameresolver/0000_70_dnsnameresolver_00-techpreview.crd.yaml"
+  "manifests/0000_70_dnsnameresolver_00-techpreview.crd.yaml"
 
 verify_crd \
   "vendor/github.com/openshift/api/network/v1alpha1/0000_70_dnsnameresolver_00-customnoupgrade.crd.yaml" \
-  "pkg/manifests/assets/dnsnameresolver/0000_70_dnsnameresolver_00-customnoupgrade.crd.yaml"
+  "manifests/0000_70_dnsnameresolver_00-customnoupgrade.crd.yaml"

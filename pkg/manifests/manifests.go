@@ -8,7 +8,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -28,9 +27,6 @@ const (
 
 	nodeResolverScriptAsset         = "assets/node-resolver/update-node-resolver.sh"
 	nodeResolverServiceAccountAsset = "assets/node-resolver/service-account.yaml"
-
-	DNSNameResolverTechPreviewNoUpgradeCRDAsset = "assets/dnsnameresolver/0000_70_dnsnameresolver_00-techpreview.crd.yaml"
-	DNSNameResolverCustomNoUpgradeCRDAsset      = "assets/dnsnameresolver/0000_70_dnsnameresolver_00-customnoupgrade.crd.yaml"
 
 	// OwningDNSLabel should be applied to any objects "owned by" a
 	// dns to aid in selection (especially in cases where an ownerref
@@ -139,22 +135,6 @@ func MetricsRoleBinding() *rbacv1.RoleBinding {
 	return rb
 }
 
-func DNSNameResolverTechPreviewNoUpgradeCRD() *apiextensionsv1.CustomResourceDefinition {
-	crd, err := NewCustomResourceDefinition(MustAssetReader(DNSNameResolverTechPreviewNoUpgradeCRDAsset))
-	if err != nil {
-		panic(err)
-	}
-	return crd
-}
-
-func DNSNameResolverCustomNoUpgradeCRD() *apiextensionsv1.CustomResourceDefinition {
-	crd, err := NewCustomResourceDefinition(MustAssetReader(DNSNameResolverCustomNoUpgradeCRDAsset))
-	if err != nil {
-		panic(err)
-	}
-	return crd
-}
-
 func NodeResolverScript() string {
 	return MustAssetString(nodeResolverScriptAsset)
 }
@@ -239,13 +219,4 @@ func NewNamespace(manifest io.Reader) (*corev1.Namespace, error) {
 		return nil, err
 	}
 	return &ns, nil
-}
-
-func NewCustomResourceDefinition(manifest io.Reader) (*apiextensionsv1.CustomResourceDefinition, error) {
-	o := apiextensionsv1.CustomResourceDefinition{}
-	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&o); err != nil {
-		return nil, err
-	}
-
-	return &o, nil
 }
