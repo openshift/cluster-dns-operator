@@ -68,6 +68,11 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
     cache {{ $.PositiveTTL }} {
         denial 9984 {{ $.NegativeTTL }}
     }
+    {{- if eq true $.OCPDNSNameResolver}}
+    ocp_dnsnameresolver {
+        namespaces {{range $.DNSNameResolverNamespaces}}{{.}} {{end}}
+    }
+    {{- end}}
 }
 {{end -}}
 .:5353 {
@@ -103,6 +108,11 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         denial 9984 {{ .NegativeTTL }}
     }
     reload
+    {{- if eq true $.OCPDNSNameResolver}}
+    ocp_dnsnameresolver {
+        namespaces {{range $.DNSNameResolverNamespaces}}{{.}} {{end}}
+    }
+    {{- end}}
 }
 hostname.bind:5353 {
     chaos
@@ -115,7 +125,7 @@ func (r *reconciler) ensureDNSConfigMap(dns *operatorv1.DNS, clusterDomain strin
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to get configmap: %v", err)
 	}
-	desired, err := desiredDNSConfigMap(dns, clusterDomain, caBundleRevisionMap)
+	desired, err := desiredDNSConfigMap(dns, clusterDomain, caBundleRevisionMap, r.dnsNameResolverEnabled, r.dnsNameResolverNamespaces)
 	if err != nil {
 		return haveCM, current, fmt.Errorf("failed to build configmap: %v", err)
 	}
@@ -149,7 +159,7 @@ func (r *reconciler) currentDNSConfigMap(dns *operatorv1.DNS) (bool, *corev1.Con
 	return true, current, nil
 }
 
-func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevisionMap map[string]string) (*corev1.ConfigMap, error) {
+func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevisionMap map[string]string, dnsNameResolverEnabled bool, dnsNameResolverNamespaces []string) (*corev1.ConfigMap, error) {
 	if len(clusterDomain) == 0 {
 		clusterDomain = "cluster.local"
 	}
@@ -196,27 +206,31 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 	pTTL, nTTL := coreDNSCache(dns)
 
 	corefileParameters := struct {
-		ClusterDomain       string
-		Servers             interface{}
-		UpstreamResolvers   operatorv1.UpstreamResolvers
-		PolicyStr           func(policy operatorv1.ForwardingPolicy) string
-		LogLevel            string
-		CABundleRevisionMap map[string]string
-		CABundleFileName    string
-		LameDuckDuration    time.Duration
-		PositiveTTL         uint32
-		NegativeTTL         uint32
+		ClusterDomain             string
+		Servers                   interface{}
+		UpstreamResolvers         operatorv1.UpstreamResolvers
+		PolicyStr                 func(policy operatorv1.ForwardingPolicy) string
+		LogLevel                  string
+		CABundleRevisionMap       map[string]string
+		CABundleFileName          string
+		LameDuckDuration          time.Duration
+		PositiveTTL               uint32
+		NegativeTTL               uint32
+		OCPDNSNameResolver        bool
+		DNSNameResolverNamespaces []string
 	}{
-		ClusterDomain:       clusterDomain,
-		Servers:             dns.Spec.Servers,
-		UpstreamResolvers:   upstreamResolvers,
-		PolicyStr:           coreDNSPolicy,
-		LogLevel:            coreDNSLogLevel(dns),
-		CABundleRevisionMap: caBundleRevisionMap,
-		CABundleFileName:    caBundleFileName,
-		LameDuckDuration:    lameDuckDuration,
-		PositiveTTL:         pTTL,
-		NegativeTTL:         nTTL,
+		ClusterDomain:             clusterDomain,
+		Servers:                   dns.Spec.Servers,
+		UpstreamResolvers:         upstreamResolvers,
+		PolicyStr:                 coreDNSPolicy,
+		LogLevel:                  coreDNSLogLevel(dns),
+		CABundleRevisionMap:       caBundleRevisionMap,
+		CABundleFileName:          caBundleFileName,
+		LameDuckDuration:          lameDuckDuration,
+		PositiveTTL:               pTTL,
+		NegativeTTL:               nTTL,
+		OCPDNSNameResolver:        dnsNameResolverEnabled,
+		DNSNameResolverNamespaces: dnsNameResolverNamespaces,
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {

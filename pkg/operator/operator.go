@@ -11,13 +11,19 @@ import (
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
 	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
 
+	configv1 "github.com/openshift/api/config/v1"
+	configclient "github.com/openshift/client-go/config/clientset/versioned"
+	configinformers "github.com/openshift/client-go/config/informers/externalversions"
+	"github.com/openshift/library-go/pkg/operator/configobserver/featuregates"
+	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/sirupsen/logrus"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -35,7 +41,51 @@ type Operator struct {
 }
 
 // New creates (but does not start) a new operator from configuration.
-func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, error) {
+func New(ctx context.Context, config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, error) {
+	kubeClient, err := kubernetes.NewForConfig(kubeConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kube client: %w", err)
+	}
+	eventRecorder := events.NewKubeRecorder(kubeClient.CoreV1().Events(config.OperatorNamespace), "cluster-dns-operator", &corev1.ObjectReference{
+		APIVersion: "apps/v1",
+		Kind:       "Deployment",
+		Namespace:  config.OperatorNamespace,
+		Name:       "dns-operator",
+	})
+
+	configClient, err := configclient.NewForConfig(kubeConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create openshift client: %w", err)
+	}
+	configInformers := configinformers.NewSharedInformerFactory(configClient, 10*time.Minute)
+	desiredVersion := config.OperatorReleaseVersion
+	missingVersion := "0.0.1-snapshot"
+
+	// By default, this will exit(0) the process if the featuregates ever change to a different set of values.
+	featureGateAccessor := featuregates.NewFeatureGateAccess(
+		desiredVersion, missingVersion,
+		configInformers.Config().V1().ClusterVersions(), configInformers.Config().V1().FeatureGates(),
+		eventRecorder,
+	)
+	go featureGateAccessor.Run(ctx)
+	go configInformers.Start(ctx.Done())
+
+	select {
+	case <-featureGateAccessor.InitialFeatureGatesObserved():
+		featureGates, _ := featureGateAccessor.CurrentFeatureGates()
+		logrus.Info("FeatureGates initialized", "knownFeatures", featureGates.KnownFeatures())
+	case <-time.After(1 * time.Minute):
+		logrus.Error(nil, "timed out waiting for FeatureGate detection")
+		return nil, fmt.Errorf("timed out waiting for FeatureGate detection")
+	}
+
+	featureGates, err := featureGateAccessor.CurrentFeatureGates()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current feature gates: %w", err)
+	}
+
+	dnsNameResolverEnabled := featureGates.Enabled(configv1.FeatureGateDNSNameResolver)
+
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
 		Scheme: operatorclient.GetScheme(),
 		Cache: cache.Options{
@@ -70,7 +120,11 @@ func New(config operatorconfig.Config, kubeConfig *rest.Config) (*Operator, erro
 		KubeRBACProxyImage:     config.KubeRBACProxyImage,
 		OperatorReleaseVersion: config.OperatorReleaseVersion,
 	}
-	if _, err := operatorcontroller.New(operatorManager, cfg); err != nil {
+	if _, err := operatorcontroller.New(operatorManager, operatorcontroller.Config{
+		Config:                    cfg,
+		DNSNameResolverEnabled:    dnsNameResolverEnabled,
+		DNSNameResolverNamespaces: []string{operatorcontroller.DefaultDNSNameResolverNamespace},
+	}); err != nil {
 		return nil, fmt.Errorf("failed to create operator controller: %v", err)
 	}
 

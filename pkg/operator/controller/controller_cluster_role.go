@@ -20,7 +20,7 @@ func (r *reconciler) ensureDNSClusterRole() (bool, *rbacv1.ClusterRole, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	desired := desiredDNSClusterRole()
+	desired := desiredDNSClusterRole(r.dnsNameResolverEnabled)
 
 	switch {
 	case !haveCR:
@@ -51,9 +51,25 @@ func (r *reconciler) currentDNSClusterRole() (bool, *rbacv1.ClusterRole, error) 
 	return true, current, nil
 }
 
-func desiredDNSClusterRole() *rbacv1.ClusterRole {
+func desiredDNSClusterRole(dnsNameResolverEnabled bool) *rbacv1.ClusterRole {
 	cr := manifests.DNSClusterRole()
+	if dnsNameResolverEnabled {
+		addDNSNameResolverPolicyRule(cr)
+	}
 	return cr
+}
+
+func addDNSNameResolverPolicyRule(cr *rbacv1.ClusterRole) {
+	cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"network.openshift.io"},
+		Resources: []string{"dnsnameresolvers"},
+		Verbs:     []string{"list", "watch"},
+	})
+	cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
+		APIGroups: []string{"network.openshift.io"},
+		Resources: []string{"dnsnameresolvers/status"},
+		Verbs:     []string{"update"},
+	})
 }
 
 func (r *reconciler) updateDNSClusterRole(current, desired *rbacv1.ClusterRole) (bool, error) {
