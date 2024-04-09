@@ -3,8 +3,9 @@ package controller
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"net"
+
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -68,12 +69,14 @@ var managedDNSNamespaceLabels = sets.NewString(
 // DNS resources.
 //
 // The controller will be pre-configured to watch for DNS resources.
-func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controller, error) {
+func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	operatorCache := mgr.GetCache()
 	reconciler := &reconciler{
-		Config: config,
-		client: mgr.GetClient(),
-		cache:  operatorCache,
+		Config:                    config.Config,
+		client:                    mgr.GetClient(),
+		cache:                     operatorCache,
+		dnsNameResolverEnabled:    config.DNSNameResolverEnabled,
+		dnsNameResolverNamespaces: config.DNSNameResolverNamespaces,
 	}
 	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
@@ -137,6 +140,19 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 	return c, nil
 }
 
+// Config holds all the configuration that must be provided when creating the
+// controller.
+type Config struct {
+	// DNSNameResolverEnabled indicates that the "DNSNameResolver" featuregate is enabled.
+	DNSNameResolverEnabled bool
+	// DNSNameResolverNamespaces are the namespaces which will be watched for the
+	// DNSNameResolver resources and updated by the CoreDNS pods if the "DNSNameResolver"
+	// featuregate is enabled.
+	DNSNameResolverNamespaces []string
+
+	operatorconfig.Config
+}
+
 // reconciler handles the actual dns reconciliation logic in response to
 // events.
 type reconciler struct {
@@ -144,6 +160,13 @@ type reconciler struct {
 
 	client client.Client
 	cache  cache.Cache
+
+	// dnsNameResolverEnabled indicates that the "DNSNameResolver" featuregate is enabled.
+	dnsNameResolverEnabled bool
+	// dnsNameResolverNamespaces are the namespaces which will be watched for the
+	// DNSNameResolver resources and updated by the CoreDNS pods the "DNSNameResolver"
+	// featuregate is enabled.
+	dnsNameResolverNamespaces []string
 }
 
 // Reconcile expects request to refer to a dns and will do all the work

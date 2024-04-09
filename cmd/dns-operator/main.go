@@ -59,12 +59,13 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("failed to get kube config %v", err)
 	}
+	ctx := signals.SetupSignalHandler()
 	// Set up and start the operator.
-	op, err := operator.New(operatorConfig, kubeConfig)
+	op, err := operator.New(ctx, operatorConfig, kubeConfig)
 	if err != nil {
 		logrus.Fatalf("failed to create operator: %v", err)
 	}
-	if err := op.Start(signals.SetupSignalHandler()); err != nil {
+	if err := op.Start(ctx); err != nil {
 		logrus.Fatalf("failed to start operator: %v", err)
 	}
 }

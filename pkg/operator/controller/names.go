@@ -39,6 +39,9 @@ const (
 
 	// caBundleFileName is the file name used for CA bundle.
 	caBundleFileName = "ca-bundle.crt"
+
+	// DefaultDNSNameResolverNamespace is the namespace which contains all the DNSNameResolver resources.
+	DefaultDNSNameResolverNamespace = "openshift-ovn-kubernetes"
 )
 
 // DNSClusterOperatorName returns the namespaced name of the ClusterOperator
