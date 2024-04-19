@@ -111,3 +111,12 @@ rules:
   - clusteroperators/status
   verbs:
   - update
+
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - featuregates
+  verbs:
+  - get
+  - list
+  - watch
