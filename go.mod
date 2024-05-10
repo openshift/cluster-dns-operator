@@ -8,7 +8,7 @@ require (
 	github.com/apparentlymart/go-cidr v1.0.0
 	github.com/go-logr/logr v1.4.1
 	github.com/google/go-cmp v0.6.0
-	github.com/openshift/api v0.0.0-20231218084706-ecd49d39bae0
+	github.com/openshift/api v0.0.0-20240510053056-88a8afea030c
 	github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d
 	github.com/openshift/client-go v0.0.0-20231024221206-506d798bc61c
 	github.com/openshift/library-go v0.0.0-20231102154438-cfcf2b4fbc87
@@ -74,7 +74,7 @@ require (
 	k8s.io/apiserver v0.29.2 // indirect
 	k8s.io/component-base v0.29.2 // indirect
 	k8s.io/klog/v2 v2.110.1 // indirect
-	k8s.io/kube-aggregator v0.28.3 // indirect
+	k8s.io/kube-aggregator v0.29.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kube-storage-version-migrator v0.0.6-0.20230721195810-5c8923c5ff96 // indirect

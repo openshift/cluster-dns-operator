@@ -11,7 +11,7 @@ import (
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
 	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
 
-	configv1 "github.com/openshift/api/config/v1"
+	features "github.com/openshift/api/features"
 	configclient "github.com/openshift/client-go/config/clientset/versioned"
 	configinformers "github.com/openshift/client-go/config/informers/externalversions"
 	"github.com/openshift/library-go/pkg/operator/configobserver/featuregates"
@@ -84,7 +84,7 @@ func New(ctx context.Context, config operatorconfig.Config, kubeConfig *rest.Con
 		return nil, fmt.Errorf("failed to get current feature gates: %w", err)
 	}
 
-	dnsNameResolverEnabled := featureGates.Enabled(configv1.FeatureGateDNSNameResolver)
+	dnsNameResolverEnabled := featureGates.Enabled(features.FeatureGateDNSNameResolver)
 
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
 		Scheme: operatorclient.GetScheme(),

@@ -106,8 +106,8 @@ github.com/modern-go/reflect2
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
-# github.com/openshift/api v0.0.0-20231218084706-ecd49d39bae0
-## explicit; go 1.20
+# github.com/openshift/api v0.0.0-20240510053056-88a8afea030c
+## explicit; go 1.21
 github.com/openshift/api
 github.com/openshift/api/apiserver
 github.com/openshift/api/apiserver/v1
@@ -125,6 +125,7 @@ github.com/openshift/api/config/v1alpha1
 github.com/openshift/api/console
 github.com/openshift/api/console/v1
 github.com/openshift/api/console/v1alpha1
+github.com/openshift/api/features
 github.com/openshift/api/helm
 github.com/openshift/api/helm/v1beta1
 github.com/openshift/api/image
@@ -141,7 +142,7 @@ github.com/openshift/api/machine/v1
 github.com/openshift/api/machine/v1alpha1
 github.com/openshift/api/machine/v1beta1
 github.com/openshift/api/monitoring
-github.com/openshift/api/monitoring/v1alpha1
+github.com/openshift/api/monitoring/v1
 github.com/openshift/api/network
 github.com/openshift/api/network/v1
 github.com/openshift/api/network/v1alpha1
@@ -153,6 +154,7 @@ github.com/openshift/api/openshiftcontrolplane
 github.com/openshift/api/openshiftcontrolplane/v1
 github.com/openshift/api/operator
 github.com/openshift/api/operator/v1
+github.com/openshift/api/operator/v1/zz_generated.crd-manifests
 github.com/openshift/api/operator/v1alpha1
 github.com/openshift/api/operatorcontrolplane
 github.com/openshift/api/operatorcontrolplane/v1alpha1
@@ -733,8 +735,8 @@ k8s.io/klog/v2/internal/dbg
 k8s.io/klog/v2/internal/serialize
 k8s.io/klog/v2/internal/severity
 k8s.io/klog/v2/internal/sloghandler
-# k8s.io/kube-aggregator v0.28.3
-## explicit; go 1.20
+# k8s.io/kube-aggregator v0.29.2
+## explicit; go 1.21
 k8s.io/kube-aggregator/pkg/apis/apiregistration
 k8s.io/kube-aggregator/pkg/apis/apiregistration/v1
 k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1
