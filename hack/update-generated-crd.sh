@@ -15,3 +15,15 @@ function install_crd {
 install_crd \
   "vendor/github.com/openshift/api/operator/v1/zz_generated.crd-manifests/0000_70_dns_00_dnses.crd.yaml" \
   "manifests/0000_70_dns-operator_00.crd.yaml"
+
+install_crd \
+  "vendor/github.com/openshift/api/network/v1alpha1/zz_generated.crd-manifests/0000_70_dns_00_dnsnameresolvers-TechPreviewNoUpgrade.crd.yaml" \
+  "manifests/0000_70_dns_00_dnsnameresolvers-TechPreviewNoUpgrade.crd.yaml"
+
+install_crd \
+  "vendor/github.com/openshift/api/network/v1alpha1/zz_generated.crd-manifests/0000_70_dns_00_dnsnameresolvers-CustomNoUpgrade.crd.yaml" \
+  "manifests/0000_70_dns_00_dnsnameresolvers-CustomNoUpgrade.crd.yaml"
+
+install_crd \
+  "vendor/github.com/openshift/api/network/v1alpha1/zz_generated.crd-manifests/0000_70_dns_00_dnsnameresolvers-DevPreviewNoUpgrade.crd.yaml" \
+  "manifests/0000_70_dns_00_dnsnameresolvers-DevPreviewNoUpgrade.crd.yaml"

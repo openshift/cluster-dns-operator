@@ -116,6 +116,7 @@ rules:
   - config.openshift.io
   resources:
   - featuregates
+  - clusterversions
   verbs:
   - get
   - list
@@ -126,6 +127,7 @@ rules:
   resources:
   - dnsnameresolvers
   verbs:
+  - get
   - list
   - watch
 
@@ -134,4 +136,6 @@ rules:
   resources:
   - dnsnameresolvers/status
   verbs:
+  - get
   - update
+  - patch
