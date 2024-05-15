@@ -6,12 +6,14 @@ import (
 	"time"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
 	operatorconfig "github.com/openshift/cluster-dns-operator/pkg/operator/config"
 	operatorcontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller"
 	statuscontroller "github.com/openshift/cluster-dns-operator/pkg/operator/controller/status"
+	dnsnameresolver "github.com/openshift/coredns-ocp-dnsnameresolver/operator/controller/dnsnameresolver"
 
-	configv1 "github.com/openshift/api/config/v1"
+	features "github.com/openshift/api/features"
 	configclient "github.com/openshift/client-go/config/clientset/versioned"
 	configinformers "github.com/openshift/client-go/config/informers/externalversions"
 	"github.com/openshift/library-go/pkg/operator/configobserver/featuregates"
@@ -84,7 +86,7 @@ func New(ctx context.Context, config operatorconfig.Config, kubeConfig *rest.Con
 		return nil, fmt.Errorf("failed to get current feature gates: %w", err)
 	}
 
-	dnsNameResolverEnabled := featureGates.Enabled(configv1.FeatureGateDNSNameResolver)
+	dnsNameResolverEnabled := featureGates.Enabled(features.FeatureGateDNSNameResolver)
 
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
 		Scheme: operatorclient.GetScheme(),
@@ -131,6 +133,24 @@ func New(ctx context.Context, config operatorconfig.Config, kubeConfig *rest.Con
 	// Set up the status controller.
 	if _, err := statuscontroller.New(operatorManager, cfg); err != nil {
 		return nil, fmt.Errorf("failed to create status controller: %v", err)
+	}
+
+	// Set up the DNSNameResolver controller if the DNSNameResolver feature gate
+	// is enabled.
+	if dnsNameResolverEnabled {
+		_, err = dnsnameresolver.New(operatorManager, dnsnameresolver.Config{
+			OperandNamespace: operatorcontroller.DefaultOperandNamespace,
+			ServiceName: operatorcontroller.DNSServiceName(&operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: operatorcontroller.DefaultDNSController,
+				},
+			}).Name,
+			DNSPort:                  fmt.Sprint(manifests.DNSDaemonSet().Spec.Template.Spec.Containers[0].Ports[0].ContainerPort),
+			DNSNameResolverNamespace: operatorcontroller.DefaultDNSNameResolverNamespace,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create dnsnameresolver controller: %v", err)
+		}
 	}
 
 	return &Operator{

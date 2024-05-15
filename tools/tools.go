@@ -7,5 +7,7 @@
 package tools
 
 import (
+	_ "github.com/openshift/api/network/v1alpha1/zz_generated.crd-manifests"
+	_ "github.com/openshift/api/operator/v1/zz_generated.crd-manifests"
 	_ "github.com/openshift/build-machinery-go"
 )

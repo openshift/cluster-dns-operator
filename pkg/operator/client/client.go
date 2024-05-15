@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
+	networkv1alpha1 "github.com/openshift/api/network/v1alpha1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	kscheme "k8s.io/client-go/kubernetes/scheme"
@@ -31,6 +32,9 @@ func init() {
 		panic(err)
 	}
 	if err := configv1.Install(scheme); err != nil {
+		panic(err)
+	}
+	if err := networkv1alpha1.Install(scheme); err != nil {
 		panic(err)
 	}
 }
