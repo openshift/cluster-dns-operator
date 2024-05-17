@@ -68,7 +68,7 @@ var (
 				reportProblemsToJiraComponent("Routing").
 				contactPerson("miciah").
 				productScope(ocpSpecific).
-				enableIn(configv1.DevPreviewNoUpgrade, configv1.TechPreviewNoUpgrade).
+				enableIn(configv1.DevPreviewNoUpgrade).
 				mustRegister()
 
 	FeatureGateOpenShiftPodSecurityAdmission = newFeatureGate("OpenShiftPodSecurityAdmission").
@@ -242,7 +242,7 @@ var (
 						reportProblemsToJiraComponent("Networking/cluster-network-operator").
 						contactPerson("kyrtapz").
 						productScope(ocpSpecific).
-						enableIn(configv1.DevPreviewNoUpgrade, configv1.TechPreviewNoUpgrade).
+						enableIn(configv1.Default, configv1.DevPreviewNoUpgrade, configv1.TechPreviewNoUpgrade).
 						mustRegister()
 
 	FeatureGateHardwareSpeed = newFeatureGate("HardwareSpeed").
@@ -303,7 +303,7 @@ var (
 					reportProblemsToJiraComponent("Monitoring").
 					contactPerson("slashpai").
 					productScope(ocpSpecific).
-					enableIn(configv1.DevPreviewNoUpgrade, configv1.TechPreviewNoUpgrade).
+					enableIn(configv1.Default, configv1.DevPreviewNoUpgrade, configv1.TechPreviewNoUpgrade).
 					mustRegister()
 
 	FeatureGateInstallAlternateInfrastructureAWS = newFeatureGate("InstallAlternateInfrastructureAWS").
@@ -492,6 +492,7 @@ var (
 					reportProblemsToJiraComponent("Installer").
 					contactPerson("bfournie").
 					productScope(ocpSpecific).
+					enableIn(configv1.DevPreviewNoUpgrade, configv1.TechPreviewNoUpgrade).
 					mustRegister()
 
 	FeatureGateClusterAPIInstallIBMCloud = newFeatureGate("ClusterAPIInstallIBMCloud").
