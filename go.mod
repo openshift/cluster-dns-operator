@@ -8,7 +8,7 @@ require (
 	github.com/apparentlymart/go-cidr v1.0.0
 	github.com/go-logr/logr v1.4.1
 	github.com/google/go-cmp v0.6.0
-	github.com/openshift/api v0.0.0-20240510053056-88a8afea030c
+	github.com/openshift/api v0.0.0-20240516171940-1dea0237181f
 	github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d
 	github.com/openshift/client-go v0.0.0-20231024221206-506d798bc61c
 	github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20240514135022-c41cdd134379
