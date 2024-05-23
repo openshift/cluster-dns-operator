@@ -2,7 +2,7 @@ module github.com/openshift/cluster-dns-operator
 
 go 1.21
 
-toolchain go1.21.9
+toolchain go1.21.7
 
 require (
 	github.com/apparentlymart/go-cidr v1.0.0
