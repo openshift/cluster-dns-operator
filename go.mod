@@ -88,3 +88,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/openshift/coredns-ocp-dnsnameresolver/operator => github.com/arkadeepsen/coredns-ocp-dnsnameresolver/operator v0.0.0-20240607070011-d29acd82108e

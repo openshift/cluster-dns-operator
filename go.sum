@@ -1,5 +1,7 @@
 github.com/apparentlymart/go-cidr v1.0.0 h1:lGDvXx8Lv9QHjrAVP7jyzleG4F9+FkRhJcEsDFxeb8w=
 github.com/apparentlymart/go-cidr v1.0.0/go.mod h1:EBcsNrHc3zQeuaeCeCtQruQm+n9/YjEn/vI25Lg7Gwc=
+github.com/arkadeepsen/coredns-ocp-dnsnameresolver/operator v0.0.0-20240607070011-d29acd82108e h1:q/yeCqknw7QVrcGeClabYTqism/UQ5r3CXam4RCDiEM=
+github.com/arkadeepsen/coredns-ocp-dnsnameresolver/operator v0.0.0-20240607070011-d29acd82108e/go.mod h1:xr33hQoeI2qcehK9kYPm9V86CTumVN/sdDOGdxw10Xg=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
@@ -92,8 +94,6 @@ github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d h1:RR
 github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/openshift/client-go v0.0.0-20231024221206-506d798bc61c h1:xfag+wccUqc9EdrWsnprD6x5KG2WE+iKGFfFELCwwRA=
 github.com/openshift/client-go v0.0.0-20231024221206-506d798bc61c/go.mod h1:3BkYp+FtKD2TypMD0nTPkVsxUaY4fJPLEMFMlOLtrJM=
-github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20240514135022-c41cdd134379 h1:aJcP4gqTC2vLW6c/ZktcAIjzm31unnCRTNi2VZkLDIU=
-github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20240514135022-c41cdd134379/go.mod h1:k0W4ol96vtJ9XtOU1cLzHci9biisZf0CflX+Pj3F1V8=
 github.com/openshift/library-go v0.0.0-20231102154438-cfcf2b4fbc87 h1:GcaI98ric0Q3WbZsTh8cIE39pgw12v3s3xuiIFO5zQ0=
 github.com/openshift/library-go v0.0.0-20231102154438-cfcf2b4fbc87/go.mod h1:8UzmrBMCn7+GzouL8DVYkL9COBQTB1Ggd13/mHJQCUg=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

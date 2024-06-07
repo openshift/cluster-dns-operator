@@ -63,12 +63,12 @@ func addDNSNameResolverPolicyRule(cr *rbacv1.ClusterRole) {
 	cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
 		APIGroups: []string{"network.openshift.io"},
 		Resources: []string{"dnsnameresolvers"},
-		Verbs:     []string{"list", "watch"},
+		Verbs:     []string{"get", "list", "watch"},
 	})
 	cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
 		APIGroups: []string{"network.openshift.io"},
 		Resources: []string{"dnsnameresolvers/status"},
-		Verbs:     []string{"update"},
+		Verbs:     []string{"get", "update", "patch"},
 	})
 }
 

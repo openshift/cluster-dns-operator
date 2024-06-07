@@ -114,8 +114,9 @@ func (resolver *Resolver) Start() {
 				// after the remaining duration.
 				timeTillNextLookup = remainingDuration
 			} else {
-				// TTL of the DNS name has already expired, so send DNS lookup request as soon as possible.
-				timeTillNextLookup = 1 * time.Millisecond
+				// A DNS lookup request has been sent upon TTL expiration of the DNS name. Reset the timer to wait until twice of default
+				// minimum TTL to perform the next lookup.
+				timeTillNextLookup = 2 * defaultMinTTL
 			}
 			timer.Reset(timeTillNextLookup)
 		}
@@ -303,6 +304,12 @@ func (resolver *Resolver) getNextDNSNameDetails() (string, time.Time, int, bool)
 			minNextLookupTime = resolvedName.minNextLookupTime
 			dns = dnsName
 			numIPs = resolvedName.numIPs
+		}
+		// If there are no IP addresses associated with the DNS name and the next lookup
+		// time of the DNS name is already past the current time, then reset the next
+		// lookup time to the default maximum TTL.
+		if resolvedName.numIPs == 0 && !time.Now().Before(resolvedName.minNextLookupTime) {
+			resolvedName.minNextLookupTime = time.Now().Add(defaultMaxTTL)
 		}
 	}
 	return dns, minNextLookupTime, numIPs, exists
