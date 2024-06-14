@@ -179,9 +179,15 @@ func Test_shouldEnableTopologyAwareHints(t *testing.T) {
 		Type:   "Ready",
 		Status: "False",
 	}}
-	zoneLabel := map[string]string{"topology.kubernetes.io/zone": "z1"}
-	zoneAndControlPlaneLabels := map[string]string{
+	zone1Label := map[string]string{"topology.kubernetes.io/zone": "z1"}
+	zone2Label := map[string]string{"topology.kubernetes.io/zone": "z2"}
+	zone3Label := map[string]string{"topology.kubernetes.io/zone": "z3"}
+	zone1AndControlPlaneLabels := map[string]string{
 		"topology.kubernetes.io/zone":           "z1",
+		"node-role.kubernetes.io/control-plane": "",
+	}
+	zone2AndControlPlaneLabels := map[string]string{
+		"topology.kubernetes.io/zone":           "z2",
 		"node-role.kubernetes.io/control-plane": "",
 	}
 	node := func(name string, labels map[string]string, allocatableResources corev1.ResourceList, conditions []corev1.NodeCondition) *corev1.Node {
@@ -209,7 +215,7 @@ func Test_shouldEnableTopologyAwareHints(t *testing.T) {
 		{
 			name: "1/1 nodes labeled",
 			existingObjects: []runtime.Object{
-				node("n1", zoneLabel, someCPU, readyConditions),
+				node("n1", zone1Label, someCPU, readyConditions),
 			},
 			expect: false,
 		},
@@ -226,7 +232,7 @@ func Test_shouldEnableTopologyAwareHints(t *testing.T) {
 			name: "1/3 nodes labeled",
 			existingObjects: []runtime.Object{
 				node("n1", emptyLabels, someCPU, readyConditions),
-				node("n2", zoneLabel, someCPU, readyConditions),
+				node("n2", zone1Label, someCPU, readyConditions),
 				node("n3", emptyLabels, someCPU, readyConditions),
 			},
 			expect: false,
@@ -234,61 +240,78 @@ func Test_shouldEnableTopologyAwareHints(t *testing.T) {
 		{
 			name: "2/3 nodes labeled",
 			existingObjects: []runtime.Object{
-				node("n1", zoneLabel, someCPU, readyConditions),
-				node("n2", zoneLabel, someCPU, readyConditions),
+				node("n1", zone1Label, someCPU, readyConditions),
+				node("n2", zone2Label, someCPU, readyConditions),
 				node("n3", emptyLabels, someCPU, readyConditions),
 			},
 			expect: false,
 		},
 		{
-			name: "2/2 nodes labeled",
+			name: "2/2 nodes labeled, but they're in the same zone",
 			existingObjects: []runtime.Object{
-				node("n1", zoneLabel, someCPU, readyConditions),
-				node("n2", zoneLabel, someCPU, readyConditions),
+				node("n1", zone1Label, someCPU, readyConditions),
+				node("n2", zone1Label, someCPU, readyConditions),
+			},
+			expect: false,
+		},
+		{
+			name: "2/2 nodes labeled, and they're in different zones",
+			existingObjects: []runtime.Object{
+				node("n1", zone1Label, someCPU, readyConditions),
+				node("n2", zone2Label, someCPU, readyConditions),
 			},
 			expect: true,
 		},
 		{
-			name: "3/3 nodes labeled",
+			name: "3/3 nodes labeled in 2 zones",
 			existingObjects: []runtime.Object{
-				node("n1", zoneLabel, someCPU, readyConditions),
-				node("n2", zoneLabel, someCPU, readyConditions),
-				node("n3", zoneLabel, someCPU, readyConditions),
+				node("n1", zone1Label, someCPU, readyConditions),
+				node("n2", zone2Label, someCPU, readyConditions),
+				node("n3", zone2Label, someCPU, readyConditions),
+			},
+			expect: true,
+		},
+		{
+			name: "3/3 nodes labeled in 3 zones",
+			existingObjects: []runtime.Object{
+				node("n1", zone1Label, someCPU, readyConditions),
+				node("n2", zone2Label, someCPU, readyConditions),
+				node("n3", zone3Label, someCPU, readyConditions),
 			},
 			expect: true,
 		},
 		{
 			name: "3/3 nodes labeled but 1 node has no CPU",
 			existingObjects: []runtime.Object{
-				node("n1", zoneLabel, someCPU, readyConditions),
-				node("n2", zoneLabel, noCPU, readyConditions),
-				node("n3", zoneLabel, someCPU, readyConditions),
+				node("n1", zone1Label, someCPU, readyConditions),
+				node("n2", zone2Label, noCPU, readyConditions),
+				node("n3", zone3Label, someCPU, readyConditions),
 			},
 			expect: false,
 		},
 		{
 			name: "2/2 nodes labeled but 1 node is not ready",
 			existingObjects: []runtime.Object{
-				node("n1", zoneLabel, someCPU, readyConditions),
-				node("n2", zoneLabel, someCPU, notReadyConditions),
+				node("n1", zone1Label, someCPU, readyConditions),
+				node("n2", zone2Label, someCPU, notReadyConditions),
 			},
 			expect: false,
 		},
 		{
 			name: "3/3 nodes labeled but 1 node is not ready",
 			existingObjects: []runtime.Object{
-				node("n1", zoneLabel, someCPU, readyConditions),
-				node("n2", zoneLabel, someCPU, notReadyConditions),
-				node("n3", zoneLabel, someCPU, readyConditions),
+				node("n1", zone1Label, someCPU, readyConditions),
+				node("n2", zone2Label, someCPU, notReadyConditions),
+				node("n3", zone3Label, someCPU, readyConditions),
 			},
 			expect: true,
 		},
 		{
 			name: "3/3 nodes labeled but they are all control-plane nodes",
 			existingObjects: []runtime.Object{
-				node("n1", zoneAndControlPlaneLabels, someCPU, readyConditions),
-				node("n2", zoneAndControlPlaneLabels, someCPU, readyConditions),
-				node("n3", zoneAndControlPlaneLabels, someCPU, readyConditions),
+				node("n1", zone1AndControlPlaneLabels, someCPU, readyConditions),
+				node("n2", zone2AndControlPlaneLabels, someCPU, readyConditions),
+				node("n3", zone2AndControlPlaneLabels, someCPU, readyConditions),
 			},
 			expect: false,
 		},

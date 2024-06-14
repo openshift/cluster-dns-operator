@@ -86,7 +86,7 @@ func (r *reconciler) currentDNSService(dns *operatorv1.DNS) (bool, *corev1.Servi
 // topology-aware hints can be enabled for the DNS service.
 //
 // Topology-aware hints should be enabled if, and only if, there are at least 2
-// ready nodes and they all have allocatable CPU and specify topology zones.
+// topology zones with ready nodes and these nodes all have allocatable CPU.
 //
 // Much of this logic is copied from
 // <https://github.com/openshift/kubernetes/blob/b40493584076fb1ab29f3bed1d05d16cbc5b17f1/pkg/controller/endpointslice/topologycache/topologycache.go#L203-L262>.
@@ -95,7 +95,7 @@ func (r *reconciler) shouldEnableTopologyAwareHints(dns *operatorv1.DNS) (bool, 
 	if err := r.cache.List(context.TODO(), &nodesList); err != nil {
 		return false, err
 	}
-	nodes := 0
+	zones := map[string]struct{}{}
 	for i := range nodesList.Items {
 		if ignoreNodeForTopologyAwareHints(&nodesList.Items[i]) {
 			continue
@@ -103,10 +103,10 @@ func (r *reconciler) shouldEnableTopologyAwareHints(dns *operatorv1.DNS) (bool, 
 		if !nodeIsValidForTopologyAwareHints(&nodesList.Items[i]) {
 			return false, nil
 		}
-		nodes++
+		zones[nodesList.Items[i].Labels[corev1.LabelTopologyZone]] = struct{}{}
 	}
 
-	return nodes >= 2, nil
+	return len(zones) >= 2, nil
 }
 
 // ignoreNodeForTopologyAwareHints returns a Boolean value indicating whether
