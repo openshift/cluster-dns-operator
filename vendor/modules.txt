@@ -212,7 +212,7 @@ github.com/openshift/client-go/config/informers/externalversions/config/v1alpha1
 github.com/openshift/client-go/config/informers/externalversions/internalinterfaces
 github.com/openshift/client-go/config/listers/config/v1
 github.com/openshift/client-go/config/listers/config/v1alpha1
-# github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20240514135022-c41cdd134379
+# github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20240712094134-af651cec05d1
 ## explicit; go 1.21
 github.com/openshift/coredns-ocp-dnsnameresolver/operator/controller/dnsnameresolver
 # github.com/openshift/library-go v0.0.0-20231102154438-cfcf2b4fbc87

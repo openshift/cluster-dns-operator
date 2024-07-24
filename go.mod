@@ -11,7 +11,7 @@ require (
 	github.com/openshift/api v0.0.0-20240510053056-88a8afea030c
 	github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d
 	github.com/openshift/client-go v0.0.0-20231024221206-506d798bc61c
-	github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20240514135022-c41cdd134379
+	github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20240712094134-af651cec05d1
 	github.com/openshift/library-go v0.0.0-20231102154438-cfcf2b4fbc87
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.4
