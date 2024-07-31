@@ -105,21 +105,27 @@ func (resolver *Resolver) Start() {
 				nextDNSName, nextLookupTime, numIPs, exists = resolver.delete(deletedDNSDetails)
 			}
 			remainingDuration := time.Until(nextLookupTime)
-			if !exists || remainingDuration > defaultMaxTTL {
-				// If no DNS name is found OR If the remaining duration is greater than default maximum TTL, then perform DNS lookup
-				// after default maximum TTL.
-				timeTillNextLookup = defaultMaxTTL
-			} else if remainingDuration.Seconds() > 0 {
-				// If the remaining duration is positive and less than default maximum TTL, then perform DNS lookup
-				// after the remaining duration.
-				timeTillNextLookup = remainingDuration
-			} else {
-				// TTL of the DNS name has already expired, so send DNS lookup request as soon as possible.
-				timeTillNextLookup = 1 * time.Millisecond
-			}
+			timeTillNextLookup = getTimeTillNextLookup(exists, remainingDuration)
 			timer.Reset(timeTillNextLookup)
 		}
 	}()
+}
+
+// getTimeTillNextLookup returns the duration after which the next DNS lookup should be performed.
+func getTimeTillNextLookup(exists bool, remainingDuration time.Duration) time.Duration {
+	if !exists || remainingDuration > defaultMaxTTL {
+		// If no DNS name is found OR If the remaining duration is greater than default maximum TTL, then perform DNS lookup
+		// after default maximum TTL.
+		return defaultMaxTTL
+	} else if remainingDuration.Seconds() > 0 {
+		// If the remaining duration is positive and less than default maximum TTL, then perform DNS lookup
+		// after the remaining duration.
+		return remainingDuration
+	} else {
+		// A DNS lookup request has been sent upon TTL expiration of the DNS name. Reset the timer to wait until twice of default
+		// minimum TTL to perform the next lookup.
+		return 2 * defaultMinTTL
+	}
 }
 
 // AddResolvedName is called whenever a DNSNameResolver object is added or updated.
@@ -303,6 +309,12 @@ func (resolver *Resolver) getNextDNSNameDetails() (string, time.Time, int, bool)
 			minNextLookupTime = resolvedName.minNextLookupTime
 			dns = dnsName
 			numIPs = resolvedName.numIPs
+		}
+		// If there are no IP addresses associated with the DNS name and the next lookup
+		// time of the DNS name is already past the current time, then reset the next
+		// lookup time to the default maximum TTL.
+		if resolvedName.numIPs == 0 && !time.Now().Before(resolvedName.minNextLookupTime) {
+			resolvedName.minNextLookupTime = time.Now().Add(defaultMaxTTL)
 		}
 	}
 	return dns, minNextLookupTime, numIPs, exists
