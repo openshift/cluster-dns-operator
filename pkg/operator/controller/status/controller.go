@@ -79,11 +79,11 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 	scheme := mgr.GetClient().Scheme()
 	mapper := mgr.GetClient().RESTMapper()
 
-	if err := c.Watch(source.Kind(operatorCache, &operatorv1.DNS{}), &handler.EnqueueRequestForObject{}); err != nil {
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &operatorv1.DNS{}, &handler.EnqueueRequestForObject{})); err != nil {
 		return nil, err
 	}
 
-	if err := c.Watch(source.Kind(operatorCache, &appsv1.DaemonSet{}), handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{})); err != nil {
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &appsv1.DaemonSet{}, handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{}))); err != nil {
 		return nil, err
 	}
 
@@ -97,11 +97,7 @@ func New(mgr manager.Manager, config operatorconfig.Config) (controller.Controll
 			},
 		}}
 	}
-	if err := c.Watch(
-		source.Kind(operatorCache, &configv1.ClusterOperator{}),
-		handler.EnqueueRequestsFromMapFunc(clusteroperatorToDNS),
-		predicate.NewPredicateFuncs(isDNSClusterOperator),
-	); err != nil {
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &configv1.ClusterOperator{}, handler.EnqueueRequestsFromMapFunc(clusteroperatorToDNS), predicate.NewPredicateFuncs(isDNSClusterOperator))); err != nil {
 		return nil, err
 	}
 

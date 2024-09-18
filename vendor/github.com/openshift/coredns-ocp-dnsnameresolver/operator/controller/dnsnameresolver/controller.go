@@ -92,17 +92,15 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	}
 
 	// Watch for the DNSNameResolver resources using dnsNameResolverCache.
-	if err := c.Watch(source.Kind(dnsNameResolverCache, &ocpnetworkv1alpha1.DNSNameResolver{}),
-		&handler.EnqueueRequestForObject{}); err != nil {
+	if err := c.Watch(source.Kind[client.Object](dnsNameResolverCache, &ocpnetworkv1alpha1.DNSNameResolver{}, &handler.EnqueueRequestForObject{})); err != nil {
 		return nil, err
 	}
 
 	// Watch for the CoreDNS pod EndpointSlices to keep corednsEndpointsSliceCache synced.
 	// No reconcile requests should be generated.
-	if err := c.Watch(source.Kind(corednsEndpointsSliceCache, &discoveryv1.EndpointSlice{}),
-		handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []reconcile.Request {
-			return nil
-		})); err != nil {
+	if err := c.Watch(source.Kind[client.Object](corednsEndpointsSliceCache, &discoveryv1.EndpointSlice{}, handler.EnqueueRequestsFromMapFunc(func(context.Context, client.Object) []reconcile.Request {
+		return nil
+	}))); err != nil {
 		return nil, err
 	}
 
