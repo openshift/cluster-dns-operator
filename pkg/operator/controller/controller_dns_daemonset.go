@@ -201,7 +201,6 @@ func tolerationsForDNS(dns *operatorv1.DNS) []corev1.Toleration {
 		return dns.Spec.NodePlacement.Tolerations
 	}
 	return []corev1.Toleration{{
-		Key:      "node-role.kubernetes.io/master",
 		Operator: corev1.TolerationOpExists,
 	}}
 }

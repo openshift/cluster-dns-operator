@@ -55,7 +55,6 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 		}
 		actualTolerations := ds.Spec.Template.Spec.Tolerations
 		expectedTolerations := []corev1.Toleration{{
-			Key:      "node-role.kubernetes.io/master",
 			Operator: corev1.TolerationOpExists,
 		}}
 		if !reflect.DeepEqual(actualPodAnnotations, expectedPodAnnotations) {
