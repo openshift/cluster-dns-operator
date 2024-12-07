@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	maxUnavailable = intstr.FromInt(1)
+	maxUnavailable                 = intstr.FromInt(1)
+	clock          utilclock.Clock = utilclock.RealClock{}
 )
 
 func TestDNSStatusConditions(t *testing.T) {
@@ -28,7 +29,7 @@ func TestDNSStatusConditions(t *testing.T) {
 		haveDNS                         bool
 		availDNS, desireDNS, updatedDNS int32
 		haveNR                          bool
-		availNR, desireNR               int32
+		availNR, desireNR, updatedNR    int32
 		managementState                 operatorv1.ManagementState
 	}
 	type testOut struct {
@@ -39,42 +40,50 @@ func TestDNSStatusConditions(t *testing.T) {
 		outputs testOut
 	}{
 		// It is always Progressing=true and Degraded=false when cluster ip is missing.
-		{testIn{false, false, 0, 0, 0, false, 0, 0, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 0, 0, 0, true, 0, 0, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 0, 0, 0, true, 0, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 0, 2, 0, true, 0, 0, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 0, 2, 0, true, 0, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 1, 2, 1, true, 0, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 0, 2, 0, true, 1, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 1, 2, 1, true, 1, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 1, 2, 1, true, 2, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 2, 2, 2, true, 1, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{false, true, 2, 2, 2, true, 2, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		// It is Progressing=false and Degraded=true when desireDNS and desireNR are 0.
-		{testIn{true, true, 0, 0, 0, true, 0, 0, operatorv1.Managed}, testOut{true, false, false, true}},
-		// It is Progressing=true and Degraded=false when availNR < desireNR or availDNS < desireDNS, not checking timing here.
-		{testIn{true, true, 0, 0, 0, true, 0, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{true, true, 0, 2, 0, true, 0, 0, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{true, true, 0, 2, 0, true, 0, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{true, true, 0, 2, 0, true, 1, 2, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{true, true, 1, 2, 1, true, 0, 2, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 1, 2, 1, true, 1, 2, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 1, 2, 1, true, 2, 2, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 2, true, 0, 2, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 2, true, 2, 2, operatorv1.Managed}, testOut{false, false, true, true}},
-		{testIn{true, true, 1, 3, 1, true, 3, 3, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 3, 3, 3, true, 0, 3, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 3, 2, true, 3, 3, operatorv1.Managed}, testOut{false, true, true, true}},
-		{testIn{true, true, 0, 1, 0, true, 0, 1, operatorv1.Managed}, testOut{false, true, false, true}},
-		{testIn{true, true, 0, 0, 0, true, 0, 2, operatorv1.Unmanaged}, testOut{false, true, false, false}},
-		{testIn{true, true, 1, 3, 1, true, 3, 3, operatorv1.Unmanaged}, testOut{false, true, true, false}},
-		{testIn{true, true, 2, 2, 2, true, 0, 2, operatorv1.Unmanaged}, testOut{false, true, true, false}},
-		{testIn{true, true, 2, 2, 2, true, 2, 2, operatorv1.Unmanaged}, testOut{false, false, true, false}},
-		{testIn{true, true, 0, 0, 0, true, 0, 2, operatorv1.ManagementState("")}, testOut{false, true, false, true}},
-		{testIn{true, true, 1, 3, 1, true, 3, 3, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 2, true, 0, 2, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 1, true, 2, 2, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
-		{testIn{true, true, 2, 2, 2, true, 2, 2, operatorv1.ManagementState("")}, testOut{false, false, true, true}},
+		{testIn{false, false, 0, 0, 0, false, 0, 0, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 0, 0, 0, true, 0, 0, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 0, 0, 0, true, 0, 2, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 0, 2, 0, true, 0, 0, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 0, 2, 0, true, 0, 2, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 1, 2, 1, true, 0, 2, 1, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 0, 2, 0, true, 1, 2, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 1, 2, 1, true, 1, 2, 1, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 1, 2, 1, true, 2, 2, 1, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 2, 2, 2, true, 1, 2, 2, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{false, true, 2, 2, 2, true, 2, 2, 2, operatorv1.Managed}, testOut{false, true, false, true}},
+		// It is Progressing=false and Degraded=true when desireDNS and/or desireNR are 0, and there are no availDNS.  No checks involving time in this suite.
+		{testIn{true, true, 0, 0, 0, true, 0, 0, 0, operatorv1.Managed}, testOut{true, false, false, true}},
+		{testIn{true, true, 0, 0, 0, true, 2, 2, 2, operatorv1.Managed}, testOut{true, false, false, true}},
+		{testIn{true, true, 0, 2, 2, true, 0, 0, 0, operatorv1.Managed}, testOut{true, false, false, true}},
+		{testIn{true, true, 0, 2, 2, true, 0, 0, 0, operatorv1.Managed}, testOut{true, false, false, true}},
+		// It is Progressing=true and Degraded=false when updatedNR < desireNR or updatedDNS < desireDNS.
+		{testIn{true, true, 0, 0, 0, true, 0, 2, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{true, true, 0, 2, 0, true, 0, 0, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{true, true, 0, 2, 0, true, 0, 2, 3, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{true, true, 0, 2, 3, true, 0, 2, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		{testIn{true, true, 1, 2, 1, true, 0, 2, 0, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 1, 2, 1, true, 1, 2, 1, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 1, 2, 1, true, 2, 2, 2, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 2, 2, true, 0, 2, 0, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 1, 3, 1, true, 3, 3, 3, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 3, 3, 3, true, 0, 3, 0, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 3, 2, true, 3, 3, 3, operatorv1.Managed}, testOut{false, true, true, true}},
+		{testIn{true, true, 0, 1, 0, true, 0, 1, 0, operatorv1.Managed}, testOut{false, true, false, true}},
+		// It is Upgradeable=false whenever managementState=Unmanaged
+		{testIn{true, true, 0, 0, 0, true, 0, 2, 0, operatorv1.Unmanaged}, testOut{false, true, false, false}},
+		{testIn{true, true, 1, 3, 1, true, 3, 3, 3, operatorv1.Unmanaged}, testOut{false, true, true, false}},
+		{testIn{true, true, 2, 2, 2, true, 0, 2, 0, operatorv1.Unmanaged}, testOut{false, true, true, false}},
+		// It is Available=false whenever availDNS=0
+		{testIn{true, true, 0, 0, 0, true, 0, 2, 0, operatorv1.ManagementState("")}, testOut{false, true, false, true}},
+		{testIn{true, true, 1, 1, 0, true, 0, 2, 0, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
+		{testIn{true, true, 0, 5, 1, true, 3, 3, 3, operatorv1.ManagementState("")}, testOut{false, true, false, true}},
+		{testIn{true, true, 2, 2, 2, true, 0, 2, 0, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
+		{testIn{true, true, 2, 2, 1, true, 2, 2, 2, operatorv1.ManagementState("")}, testOut{false, true, true, true}},
+		// It is Degraded=false, Progressing=false whenever avail=desired=updated.
+		{testIn{true, true, 2, 2, 2, true, 2, 2, 2, operatorv1.Managed}, testOut{false, false, true, true}},
+		{testIn{true, true, 2, 2, 2, true, 2, 2, 2, operatorv1.Unmanaged}, testOut{false, false, true, false}},
+		{testIn{true, true, 2, 2, 2, true, 2, 2, 2, operatorv1.ManagementState("")}, testOut{false, false, true, true}},
+		// We should never have a situation where Degraded=true and Progressing=true
 	}
 
 	for i, tc := range testCases {
@@ -123,6 +132,7 @@ func TestDNSStatusConditions(t *testing.T) {
 				Status: appsv1.DaemonSetStatus{
 					DesiredNumberScheduled: tc.inputs.desireNR,
 					NumberAvailable:        tc.inputs.availNR,
+					UpdatedNumberScheduled: tc.inputs.updatedNR,
 				},
 			}
 		}
@@ -201,7 +211,7 @@ func TestDNSStatusConditions(t *testing.T) {
 		case operatorv1.Unmanaged:
 			managementState = "Unmanaged"
 		}
-		description := fmt.Sprintf("%s, %d/%d DNS pods available, %d/%d node-resolver pods available, managementState is %s", haveClusterIP, tc.inputs.availDNS, tc.inputs.desireDNS, tc.inputs.availNR, tc.inputs.desireNR, managementState)
+		description := fmt.Sprintf("%s, %d/%d/%d DNS pods available/updated/desired, %d/%d node-resolver pods available/desired, managementState is %s", haveClusterIP, tc.inputs.availDNS, tc.inputs.updatedDNS, tc.inputs.desireDNS, tc.inputs.availNR, tc.inputs.desireNR, managementState)
 		if !gotExpected {
 			t.Fatalf("%q:\nexpected %#v\ngot %#v", description, expected, actual)
 		}
@@ -585,37 +595,32 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		oldCondition := operatorv1.OperatorCondition{
-			Type:   operatorv1.OperatorStatusTypeProgressing,
-			Status: operatorv1.ConditionUnknown,
-		}
-		dns := &operatorv1.DNS{
-			Spec: operatorv1.DNSSpec{
-				NodePlacement: operatorv1.DNSNodePlacement{
-					NodeSelector: tc.nodeSelector,
-					Tolerations:  tc.tolerations,
+		t.Run(tc.name, func(t *testing.T) {
+			oldCondition := operatorv1.OperatorCondition{
+				Type:   operatorv1.OperatorStatusTypeProgressing,
+				Status: operatorv1.ConditionUnknown,
+			}
+			dns := &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					NodePlacement: operatorv1.DNSNodePlacement{
+						NodeSelector: tc.nodeSelector,
+						Tolerations:  tc.tolerations,
+					},
 				},
-			},
-			Status: operatorv1.DNSStatus{
-				Conditions: []operatorv1.OperatorCondition{oldCondition},
-			},
-		}
-		var reconcileResult reconcile.Result
-		actual := computeDNSProgressingCondition(&oldCondition, dns, tc.clusterIP, true, tc.dnsDaemonset, true, tc.nrDaemonset, 0, time.Time{}, &reconcileResult)
-		if actual.Status != tc.expected {
-			t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
-		}
+				Status: operatorv1.DNSStatus{
+					Conditions: []operatorv1.OperatorCondition{oldCondition},
+				},
+			}
+			var reconcileResult reconcile.Result
+			actual := computeDNSProgressingCondition(&oldCondition, dns, tc.clusterIP, true, tc.dnsDaemonset, true, tc.nrDaemonset, 0, time.Time{}, &reconcileResult)
+			if actual.Status != tc.expected {
+				t.Errorf("%q: expected status to be %s, got %s: %#v", tc.name, tc.expected, actual.Status, actual)
+			}
+		})
 	}
 }
 
 func TestSkippingStatusUpdates(t *testing.T) {
-	// Inject a fake clock and don't forget to reset it
-	fakeClock := utilclocktesting.NewFakeClock(time.Time{})
-	clock = fakeClock
-	defer func() {
-		clock = utilclock.RealClock{}
-	}()
-
 	makeDaemonSet := func(desired, available, updated int) *appsv1.DaemonSet {
 		return &appsv1.DaemonSet{
 			Spec: appsv1.DaemonSetSpec{
@@ -746,20 +751,32 @@ func TestSkippingStatusUpdates(t *testing.T) {
 			dnsDaemonset: makeDaemonSet(6, 1, 6),
 			nrDaemonset:  makeDaemonSet(6, 6, 6),
 			oldCondition: operatorv1.OperatorCondition{
-				Type:   DNSMaxUnavailableDNSPodsExceeded,
-				Status: operatorv1.ConditionFalse,
-				//LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 19, 1, 9, 50, 0, time.UTC)),
-				// 1 minute ago
-				LastTransitionTime: metav1.NewTime(clock.Now().Add(time.Minute * -1)),
+				Type:               operatorv1.OperatorStatusTypeDegraded,
+				Status:             operatorv1.ConditionFalse,
+				LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 19, 1, 9, 50, 0, time.UTC)),
 			},
-			//currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 50, 0, time.UTC),
-			currentTime: metav1.NewTime(clock.Now()).Time,
+			currentTime: time.Date(2022, time.Month(5), 19, 1, 10, 50, 0, time.UTC),
 			// last-curr = 1m, tolerate 2m, so should prevent the flap.
 			toleration: 2 * time.Minute,
 			expected:   operatorv1.ConditionFalse,
+		},
+		{
+			name:         "should return Degraded=ConditionTrue, because Degraded was set to false before the tolerated interval",
+			clusterIP:    "1.2.3.4",
+			dnsDaemonset: makeDaemonSet(6, 1, 6),
+			nrDaemonset:  makeDaemonSet(6, 6, 6),
+			oldCondition: operatorv1.OperatorCondition{
+				Type:               operatorv1.OperatorStatusTypeDegraded,
+				Status:             operatorv1.ConditionFalse,
+				LastTransitionTime: metav1.NewTime(time.Date(2022, time.Month(5), 19, 1, 9, 50, 0, time.UTC)),
+			},
+			currentTime: time.Date(2022, time.Month(5), 19, 1, 11, 50, 0, time.UTC),
+			// last-curr = 2m, so change to Degraded=ConditionTrue is correct.
+			toleration: 1 * time.Minute,
+			expected:   operatorv1.ConditionTrue,
 			reconcileResult: reconcile.Result{
 				Requeue:      true,
-				RequeueAfter: 2 * time.Minute,
+				RequeueAfter: 1 * time.Minute,
 			},
 		},
 	}

@@ -8,21 +8,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	operatorv1 "github.com/openshift/api/operator/v1"
 	cond "github.com/openshift/cluster-dns-operator/pkg/util/conditions"
 	retryable "github.com/openshift/cluster-dns-operator/pkg/util/retryableerror"
 
+	"github.com/sirupsen/logrus"
+
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	utilclock "k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-// clock is to enable requeueing and unit testing
-var clock utilclock.Clock = utilclock.RealClock{}
 
 // syncDNSStatus computes the current status of dns and
 // updates status upon any changes since last sync.
@@ -125,44 +121,9 @@ func computeDNSDegradedCondition(oldDegradedCondition, newProgressingCondition *
 		Type:   operatorv1.OperatorStatusTypeDegraded,
 		Status: operatorv1.ConditionUnknown,
 	}
-	graceCondition := operatorv1.OperatorCondition{
-		Status: operatorv1.ConditionUnknown,
-	}
-	var currentConditions []operatorv1.OperatorCondition
-	var degradedConditions []operatorv1.OperatorCondition
+	var degradedConditions []*operatorv1.OperatorCondition
 
 	transitionTime := metav1.NewTime(currentTime)
-
-	// The list of status conditions we might see when the operator is NOT degraded.
-	expected := []cond.ExpectedCondition{
-		{
-			Condition: DNSNoService,
-			Status:    operatorv1.ConditionFalse,
-		},
-		{
-			Condition: DNSNoDNSDaemonSet,
-			Status:    operatorv1.ConditionFalse,
-		},
-		{
-			Condition: DNSNoDNSPodsDesired,
-			Status:    operatorv1.ConditionFalse,
-		},
-		{
-			Condition: DNSNoDNSPodsAvailable,
-			Status:    operatorv1.ConditionFalse,
-		},
-		{
-			Condition: DNSInvalidDNSMaxUnavailable,
-			Status:    operatorv1.ConditionFalse,
-		},
-		{
-			Condition: DNSMaxUnavailableDNSPodsExceeded,
-			Status:    operatorv1.ConditionFalse,
-			// This grace period is the length of time permitted for a new status before changing a previous status.
-			// In other words, we don't change status from false to true until the grace period has passed.
-			GracePeriod: transitionUnchangedToleration,
-		},
-	}
 
 	if len(clusterIP) == 0 {
 		degradedConditions = append(degradedConditions, generateCondition(DNSNoService, DNSNoService, "No IP address is assigned to the DNS service.", operatorv1.ConditionTrue, transitionTime))
@@ -185,16 +146,12 @@ func computeDNSDegradedCondition(oldDegradedCondition, newProgressingCondition *
 			// This should not happen, but is included just to safeguard against future changes.
 			degradedConditions = append(degradedConditions, generateCondition(DNSInvalidDNSMaxUnavailable, DNSInvalidDNSMaxUnavailable, fmt.Sprintf("The DNS daemonset has an invalid MaxUnavailable value: %v", intstrErr), operatorv1.ConditionTrue, transitionTime))
 		case int(numberUnavailable) > maxUnavailable:
-			graceCondition = generateCondition(DNSMaxUnavailableDNSPodsExceeded, DNSMaxUnavailableDNSPodsExceeded, fmt.Sprintf("Too many DNS pods are unavailable (%d > %d max unavailable).", numberUnavailable, maxUnavailable), operatorv1.ConditionTrue, transitionTime)
-			currentConditions = append(currentConditions, graceCondition)
+			degradedConditions = append(degradedConditions, generateCondition(DNSMaxUnavailableDNSPodsExceeded, DNSMaxUnavailableDNSPodsExceeded, fmt.Sprintf("Too many DNS pods are unavailable (%d > %d max unavailable).", numberUnavailable, maxUnavailable), operatorv1.ConditionTrue, transitionTime))
 		}
 	}
 
 	// Record whether the operator is Progressing.
 	progressing := newProgressingCondition != nil && newProgressingCondition.Status == operatorv1.ConditionTrue
-	if progressing {
-		currentConditions = append(currentConditions, *newProgressingCondition)
-	}
 
 	if len(degradedConditions) != 0 {
 		// if the last status was set to false within the last transitionUnchangedToleration, skip the new update
@@ -202,42 +159,26 @@ func computeDNSDegradedCondition(oldDegradedCondition, newProgressingCondition *
 		if oldDegradedCondition != nil && oldDegradedCondition.Status == operatorv1.ConditionFalse && lastTransitionTimeIsRecent(currentTime, oldDegradedCondition.LastTransitionTime.Time, transitionUnchangedToleration) {
 			return *oldDegradedCondition, nil
 		}
-		currentConditions = append(currentConditions, degradedConditions...)
 	}
 
-	// Now that we have information on the current DNS operator status, check the conditions against what we expect.
-	graceConditions, degraded, requeueAfter := cond.CheckConditions(expected, currentConditions, clock)
+	var err error
 
-	if !progressing && len(degraded) != 0 {
-		// We may want to keep checking conditions while degraded.
-		retryAfter := transitionUnchangedToleration
-
-		degradedMessages := cond.FormatConditions(degraded)
+	if !progressing && len(degradedConditions) != 0 {
+		degradedMessages := cond.FormatConditions(degradedConditions)
 		degradedCondition.Status = operatorv1.ConditionTrue
 		degradedCondition.Reason = "DegradedConditions"
 		degradedCondition.Message = "One or more other status conditions indicate a degraded state: " + degradedMessages
-
-		return degradedCondition, retryable.New(errors.New("DNSController is degraded: "+degradedMessages), retryAfter)
+		err = retryable.New(errors.New("DNS operator is degraded"), transitionUnchangedToleration)
 	} else {
 		degradedCondition.Status = operatorv1.ConditionFalse
 		degradedCondition.Reason = "AsExpected"
 		degradedCondition.Message = "Enough DNS pods are available, and the DNS service has a cluster IP address."
-		var err error
-		if len(graceConditions) != 0 {
-			var grace string
-			for _, gc := range graceConditions {
-				grace = grace + fmt.Sprintf(", %s=%s", gc.Type, gc.Status)
-			}
-			grace = grace[2:]
-
-			err = retryable.New(errors.New("DNSController may become degraded soon: "+grace), requeueAfter)
-		}
-		return setDNSLastTransitionTime(&degradedCondition, oldDegradedCondition), err
 	}
+	return setDNSLastTransitionTime(&degradedCondition, oldDegradedCondition), err
 }
 
-func generateCondition(condtype, reason, message string, status operatorv1.ConditionStatus, transitionTime metav1.Time) operatorv1.OperatorCondition {
-	return operatorv1.OperatorCondition{
+func generateCondition(condtype, reason, message string, status operatorv1.ConditionStatus, transitionTime metav1.Time) *operatorv1.OperatorCondition {
+	return &operatorv1.OperatorCondition{
 		Type:               condtype,
 		Reason:             reason,
 		Status:             status,
@@ -263,8 +204,9 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 	if !haveDNSDaemonset {
 		messages = append(messages, "The DNS daemonset does not exist.")
 	} else {
-		want := dnsDaemonset.Status.DesiredNumberScheduled // num of nodes that should be running the pod
-		have := dnsDaemonset.Status.UpdatedNumberScheduled // num of nodes running the updated pod
+		want := dnsDaemonset.Status.DesiredNumberScheduled // num of nodes that should be running the pod.
+		have := dnsDaemonset.Status.UpdatedNumberScheduled // num of nodes running the updated pod.
+		// It's progressing when have < want.  If have >= want, that's okay.
 		if have < want {
 			messages = append(messages, fmt.Sprintf("Have %d up-to-date DNS pods, want %d.", have, want))
 		}
@@ -284,9 +226,10 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 	if !haveNodeResolverDaemonset {
 		messages = append(messages, "The node-resolver daemonset does not exist.")
 	} else {
-		have := nodeResolverDaemonset.Status.NumberAvailable
-		want := nodeResolverDaemonset.Status.DesiredNumberScheduled
-		// When we check DNS pods we use the less-than comparison, makes sense to do it for node-resolver pods too.
+		want := nodeResolverDaemonset.Status.DesiredNumberScheduled // num of nodes that should be running the pod.
+		have := nodeResolverDaemonset.Status.UpdatedNumberScheduled // num of nodes running the updated pod.
+
+		// It's progressing when have < want.  If have >= want, that's okay.
 		if have < want {
 			messages = append(messages, fmt.Sprintf("Have %d available node-resolver pods, want %d.", have, want))
 		}
@@ -305,7 +248,7 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 	} else {
 		progressingCondition.Status = operatorv1.ConditionFalse
 		progressingCondition.Reason = "AsExpected"
-		progressingCondition.Message = "All DNS and node-resolver pods are available, and the DNS service has a cluster IP address."
+		progressingCondition.Message = "All DNS and node-resolver pods are updated, and the DNS service has a cluster IP address."
 	}
 
 	return setDNSLastTransitionTime(progressingCondition, oldCondition)
