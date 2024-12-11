@@ -39,7 +39,24 @@ rules:
   - configmaps
   - endpoints
   - pods
+  verbs:
+  - "*"
+
+- apiGroups:
+  - ""
+  resources:
   - nodes
+  verbs:
+  - get
+  - list
+  - watch
+
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  resourceNames:
+  - openshift-dns
   verbs:
   - "*"
 
