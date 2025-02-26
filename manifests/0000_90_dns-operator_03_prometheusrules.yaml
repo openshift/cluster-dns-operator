@@ -41,3 +41,4 @@ spec:
         annotations:
           summary: CoreDNS serverfail
           description: "CoreDNS is returning SERVFAIL for {{ $value | humanizePercentage }} of requests."
+          runbook_url: https://github.com/openshift/runbooks/blob/master/alerts/cluster-dns-operator/CoreDNSErrorsHigh.md
