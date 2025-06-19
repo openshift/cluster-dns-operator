@@ -73,6 +73,11 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         namespaces {{range $.DNSNameResolverNamespaces}}{{.}} {{end}}
     }
     {{- end}}
+    {{- if $.IPv6Filter}}
+    template ANY AAAA {
+        rcode NOERROR
+    }
+    {{- end}}
 }
 {{end -}}
 .:5353 {
@@ -111,6 +116,11 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
     {{- if eq true $.OCPDNSNameResolver}}
     ocp_dnsnameresolver {
         namespaces {{range $.DNSNameResolverNamespaces}}{{.}} {{end}}
+    }
+    {{- end}}
+    {{- if .IPv6Filter}}
+    template ANY AAAA {
+        rcode NOERROR
     }
     {{- end}}
 }
@@ -218,6 +228,7 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		NegativeTTL               uint32
 		OCPDNSNameResolver        bool
 		DNSNameResolverNamespaces []string
+		IPv6Filter                bool
 	}{
 		ClusterDomain:             clusterDomain,
 		Servers:                   dns.Spec.Servers,
@@ -231,6 +242,7 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		NegativeTTL:               nTTL,
 		OCPDNSNameResolver:        dnsNameResolverEnabled,
 		DNSNameResolverNamespaces: dnsNameResolverNamespaces,
+		IPv6Filter:                dns.Spec.IPv6Filter,
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {

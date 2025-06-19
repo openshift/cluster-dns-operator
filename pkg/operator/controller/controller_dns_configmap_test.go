@@ -220,6 +220,18 @@ func TestDesiredDNSConfigmap(t *testing.T) {
 			},
 			expectedCoreFile: mustLoadTestFile(t, "default_corefile_cache_with_fractional_values_configured"),
 		},
+		{
+			name: "Check if IPv6Filter adds template block",
+			dns: &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					IPv6Filter: true,
+				},
+			},
+			expectedCoreFile: mustLoadTestFile(t, "ipv6filter_corefile"),
+		},
 	}
 
 	clusterDomain := "cluster.local"

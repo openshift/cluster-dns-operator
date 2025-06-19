@@ -87,6 +87,11 @@ spec:
                     pattern: ^(0|([0-9]+(\.[0-9]+)?(ns|us|µs|μs|ms|s|m|h))+)$
                     type: string
                 type: object
+              ipv6Filter:
+                default: false
+                description: 'IPv6Filter, if true, disables AAAA responses using a
+                  CoreDNS template block.'
+                type: boolean
               logLevel:
                 default: Normal
                 description: 'logLevel describes the desired logging verbosity for
