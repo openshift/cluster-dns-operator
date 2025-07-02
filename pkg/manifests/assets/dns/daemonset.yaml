@@ -22,6 +22,8 @@ spec:
         - name: config-volume
           mountPath: /etc/coredns
           readOnly: true
+        - mountPath: /tmp
+          name: tmp-dir
         ports:
         - containerPort: 5353
           name: dns
@@ -52,6 +54,8 @@ spec:
           requests:
             cpu: 50m
             memory: 70Mi
+        securityContext:
+          readOnlyRootFilesystem: true
       - name: kube-rbac-proxy
         # image is set at runtime
         args:
@@ -73,6 +77,8 @@ spec:
         - mountPath: /etc/tls/private
           name: metrics-tls
           readOnly: true
+        - mountPath: /tmp
+          name: tmp-dir
       dnsPolicy: Default
       # nodeSelector is set at runtime.
       volumes:
@@ -84,6 +90,8 @@ spec:
             path: Corefile
       - name: metrics-tls
         # secretName is set at runtime
+      - name: tmp-dir
+        emptyDir: {}
       # tolerations is set at runtime.
   updateStrategy:
     type: RollingUpdate
