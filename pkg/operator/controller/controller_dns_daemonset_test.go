@@ -242,6 +242,12 @@ func TestDesiredDNSDaemonsetWithCABundleConfigMaps(t *testing.T) {
 					},
 				},
 			},
+			"tmp-dir": {
+				Name: "tmp-dir",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
 		}
 		// Validate the volume mounts
 		expectedVolumeMounts := map[string]corev1.VolumeMount{
@@ -265,10 +271,14 @@ func TestDesiredDNSDaemonsetWithCABundleConfigMaps(t *testing.T) {
 				MountPath: "/etc/pki/example.com-ca-caBundle3-30",
 				ReadOnly:  true,
 			},
+			"tmp-dir": {
+				Name:      "tmp-dir",
+				MountPath: "/tmp",
+			},
 		}
 		actualVolumes := ds.Spec.Template.Spec.Volumes
-		if len(actualVolumes) != 5 {
-			t.Errorf("unexpected number of volumes: expected 5, got %d", len(actualVolumes))
+		if len(actualVolumes) != len(expectedVolumes) {
+			t.Errorf("unexpected number of volumes: expected %d, got %d", len(expectedVolumes), len(actualVolumes))
 		}
 		for _, actualVolume := range actualVolumes {
 			expectedVolume := expectedVolumes[actualVolume.Name]
@@ -278,13 +288,13 @@ func TestDesiredDNSDaemonsetWithCABundleConfigMaps(t *testing.T) {
 		}
 
 		actualVolumeMounts := ds.Spec.Template.Spec.Containers[0].VolumeMounts
-		if len(actualVolumeMounts) != 4 {
-			t.Errorf("unexpected number of volume mounts: expected 4, got %d", len(actualVolumeMounts))
+		if len(actualVolumeMounts) != len(expectedVolumeMounts) {
+			t.Errorf("unexpected number of volume mounts: expected %d, got %d", len(expectedVolumeMounts), len(actualVolumeMounts))
 		}
 		for _, actualVolumeMount := range actualVolumeMounts {
 			expectedVolumeMount := expectedVolumeMounts[actualVolumeMount.Name]
 			if !reflect.DeepEqual(actualVolumeMount, expectedVolumeMount) {
-				t.Errorf("unexpected volume: expected %#v, got %#v", expectedVolumeMount, actualVolumeMount)
+				t.Errorf("unexpected volume mount: expected %#v, got %#v", expectedVolumeMount, actualVolumeMount)
 			}
 		}
 	}
