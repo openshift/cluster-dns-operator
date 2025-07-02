@@ -133,6 +133,7 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 						},
 						SecurityContext: &corev1.SecurityContext{
 							Privileged: &trueVal,
+							ReadOnlyRootFilesystem: &trueVal,
 						},
 						TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 						VolumeMounts: []corev1.VolumeMount{{
