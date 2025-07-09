@@ -52,6 +52,8 @@ spec:
           requests:
             cpu: 50m
             memory: 70Mi
+        securityContext:
+          readOnlyRootFilesystem: true
       - name: kube-rbac-proxy
         # image is set at runtime
         args:

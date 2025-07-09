@@ -132,12 +132,17 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 							},
 						},
 						SecurityContext: &corev1.SecurityContext{
-							Privileged: &trueVal,
+							Privileged:             &trueVal,
+							ReadOnlyRootFilesystem: &trueVal,
 						},
 						TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 						VolumeMounts: []corev1.VolumeMount{{
 							Name:      "hosts-file",
 							MountPath: "/etc/hosts",
+						}, {
+							Name:      "hosts-tmp",
+							MountPath: "/etc/hosts.tmp",
+							SubPath:   "hosts.tmp",
 						}},
 					}},
 					// The node-resolver pods need to run on
@@ -163,6 +168,11 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 								Path: "/etc/hosts",
 								Type: &hostPathFile,
 							},
+						},
+					}, {
+						Name: "hosts-tmp",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					}},
 				},
