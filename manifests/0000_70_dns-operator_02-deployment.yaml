@@ -54,6 +54,10 @@ spec:
           capabilities:
             drop:
             - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-dir
       - name: kube-rbac-proxy
         image: quay.io/openshift/origin-kube-rbac-proxy:latest
         args:
@@ -75,15 +79,20 @@ spec:
           capabilities:
             drop:
             - ALL
+          readOnlyRootFilesystem: true
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /etc/tls/private
           name: metrics-tls
           readOnly: true
+        - mountPath: /tmp
+          name: tmp-dir
       volumes:
       - name: metrics-tls
         secret:
           secretName: metrics-tls
+      - name: tmp-dir
+        emptyDir: {}
       terminationGracePeriodSeconds: 2
       tolerations:
       - key: "node-role.kubernetes.io/master"
