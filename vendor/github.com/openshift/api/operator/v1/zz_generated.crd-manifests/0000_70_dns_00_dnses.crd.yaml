@@ -177,6 +177,35 @@ spec:
                       type: object
                     type: array
                 type: object
+              nodeServices:
+                description: |-
+                  nodeServices specifies K8s services for which entries should be added
+                  to /etc/hosts by the node resolver. These services will be added in addition to
+                  the default "image-registry.openshift-image-registry.svc" service.
+                  For each service reference, entries will be created using the format "<name>.<namespace>.svc"
+                  and an alias with the CLUSTER_DOMAIN suffix will also be added.
+                items:
+                  description: DNSNodeService represents a Kubernetes service by name
+                    and namespace for node services.
+                  properties:
+                    name:
+                      description: name is the name of the service.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                    namespace:
+                      description: namespace is the namespace of the service.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z]([-a-z0-9]*[a-z0-9])?$
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                maxItems: 20
+                type: array
               operatorLogLevel:
                 default: Normal
                 description: 'operatorLogLevel controls the logging level of the DNS
