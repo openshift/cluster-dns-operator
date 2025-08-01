@@ -12,6 +12,81 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+// TestBuildServicesList tests the buildServicesList function with various DNS configurations
+func TestBuildServicesList(t *testing.T) {
+	testCases := []struct {
+		name               string
+		additionalServices []string
+		expected           string
+	}{
+		{
+			name:               "no additional services",
+			additionalServices: nil,
+			expected:           "image-registry.openshift-image-registry.svc",
+		},
+		{
+			name:               "empty additional services slice",
+			additionalServices: []string{},
+			expected:           "image-registry.openshift-image-registry.svc",
+		},
+		{
+			name:               "single additional service",
+			additionalServices: []string{"my-service.my-namespace.svc"},
+			expected:           "image-registry.openshift-image-registry.svc,my-service.my-namespace.svc",
+		},
+		{
+			name:               "multiple additional services",
+			additionalServices: []string{"service1.namespace1.svc", "service2.namespace2.svc", "service3.namespace3.svc"},
+			expected:           "image-registry.openshift-image-registry.svc,service1.namespace1.svc,service2.namespace2.svc,service3.namespace3.svc",
+		},
+		{
+			name:               "service with whitespace gets trimmed",
+			additionalServices: []string{"  my-service.my-namespace.svc  "},
+			expected:           "image-registry.openshift-image-registry.svc,my-service.my-namespace.svc",
+		},
+		{
+			name:               "mixed clean and whitespace services",
+			additionalServices: []string{"service1.namespace1.svc", "  service2.namespace2.svc  ", "service3.namespace3.svc"},
+			expected:           "image-registry.openshift-image-registry.svc,service1.namespace1.svc,service2.namespace2.svc,service3.namespace3.svc",
+		},
+		{
+			name:               "empty string services are filtered out",
+			additionalServices: []string{"service1.namespace1.svc", "", "service2.namespace2.svc"},
+			expected:           "image-registry.openshift-image-registry.svc,service1.namespace1.svc,service2.namespace2.svc",
+		},
+		{
+			name:               "whitespace-only services are filtered out",
+			additionalServices: []string{"service1.namespace1.svc", "   ", "service2.namespace2.svc"},
+			expected:           "image-registry.openshift-image-registry.svc,service1.namespace1.svc,service2.namespace2.svc",
+		},
+		{
+			name:               "all whitespace/empty services filtered out",
+			additionalServices: []string{"", "   ", "\t"},
+			expected:           "image-registry.openshift-image-registry.svc",
+		},
+		{
+			name:               "service without .svc suffix",
+			additionalServices: []string{"my-service.my-namespace"},
+			expected:           "image-registry.openshift-image-registry.svc,my-service.my-namespace",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dns := &operatorv1.DNS{
+				Spec: operatorv1.DNSSpec{
+					AdditionalServices: tc.additionalServices,
+				},
+			}
+
+			result := buildServicesList(dns)
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
+
 // TestDesiredNodeResolverDaemonset verifies that desiredNodeResolverDaemonSet
 // returns the expected daemonset.
 func TestDesiredNodeResolverDaemonset(t *testing.T) {
@@ -53,6 +128,79 @@ func TestDesiredNodeResolverDaemonset(t *testing.T) {
 		} else if clusterDomain != domain {
 			t.Errorf("expected CLUSTER_DOMAIN env for dns node resolver image %q, got %q", clusterDomain, domain)
 		}
+		services, ok := envs["SERVICES"]
+		if !ok {
+			t.Errorf("SERVICES env for dns node resolver image not found")
+		} else if services != "image-registry.openshift-image-registry.svc" {
+			t.Errorf("expected SERVICES env for dns node resolver image %q, got %q", "image-registry.openshift-image-registry.svc", services)
+		}
+	}
+}
+
+// TestDesiredNodeResolverDaemonsetWithAdditionalServices verifies that desiredNodeResolverDaemonSet
+// correctly handles additional services in the SERVICES environment variable.
+func TestDesiredNodeResolverDaemonsetWithAdditionalServices(t *testing.T) {
+	clusterDomain := "cluster.local"
+	clusterIP := "172.30.77.10"
+	openshiftCLIImage := "openshift/origin-cli:test"
+
+	testCases := []struct {
+		name               string
+		additionalServices []string
+		expectedServices   string
+	}{
+		{
+			name:               "with single additional service",
+			additionalServices: []string{"my-api.my-namespace.svc"},
+			expectedServices:   "image-registry.openshift-image-registry.svc,my-api.my-namespace.svc",
+		},
+		{
+			name:               "with multiple additional services",
+			additionalServices: []string{"service1.ns1.svc", "service2.ns2.svc"},
+			expectedServices:   "image-registry.openshift-image-registry.svc,service1.ns1.svc,service2.ns2.svc",
+		},
+		{
+			name:               "with services containing whitespace",
+			additionalServices: []string{"  clean-service.namespace.svc  ", "another-service.ns.svc"},
+			expectedServices:   "image-registry.openshift-image-registry.svc,clean-service.namespace.svc,another-service.ns.svc",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			dns := &operatorv1.DNS{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: DefaultDNSController,
+				},
+				Spec: operatorv1.DNSSpec{
+					AdditionalServices: tc.additionalServices,
+				},
+			}
+
+			if want, ds, err := desiredNodeResolverDaemonSet(dns, clusterIP, clusterDomain, openshiftCLIImage); err != nil {
+				t.Errorf("invalid node resolver daemonset: %v", err)
+			} else if !want {
+				t.Error("expected the node resolver daemonset desired to be true, got false")
+			} else if len(ds.Spec.Template.Spec.Containers) != 1 {
+				t.Errorf("expected number of daemonset containers 1, got %d", len(ds.Spec.Template.Spec.Containers))
+			} else {
+				c := ds.Spec.Template.Spec.Containers[0]
+
+				// Check environment variables
+				envs := map[string]string{}
+				for _, e := range c.Env {
+					envs[e.Name] = e.Value
+				}
+
+				// Verify SERVICES environment variable contains expected services
+				services, ok := envs["SERVICES"]
+				if !ok {
+					t.Errorf("SERVICES env for dns node resolver image not found")
+				} else if services != tc.expectedServices {
+					t.Errorf("expected SERVICES env for dns node resolver image %q, got %q", tc.expectedServices, services)
+				}
+			}
+		})
 	}
 }
 

@@ -188,6 +188,13 @@ spec:
                 - Debug
                 - Trace
                 type: string
+              additionalServices:
+                description: 'additionalServices specifies additional services for which entries should be added to /etc/hosts by the node resolver. These services will be added in addition to the default "image-registry.openshift-image-registry.svc" service. Each service should be a relative name following the format "<service>.<namespace>.svc"; for each relative name, an alias with the CLUSTER_DOMAIN suffix will also be added.'
+                items:
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?\.[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.svc)?$'
+                  type: string
+                maxItems: 20
+                type: array
               servers:
                 description: "servers is a list of DNS resolvers that provide name
                   query delegation for one or more subdomains outside the scope of
