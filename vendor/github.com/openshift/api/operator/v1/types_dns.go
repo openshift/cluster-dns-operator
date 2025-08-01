@@ -95,6 +95,17 @@ type DNSSpec struct {
 	// +kubebuilder:default=Normal
 	OperatorLogLevel DNSLogLevel `json:"operatorLogLevel,omitempty"`
 
+	// additionalServices specifies additional services for which entries should be added
+	// to /etc/hosts by the node resolver. These services will be added in addition to
+	// the default "image-registry.openshift-image-registry.svc" service.
+	// Each service should be a relative name following the format "<service>.<namespace>.svc";
+	// for each relative name, an alias with the CLUSTER_DOMAIN suffix will also be added.
+	//
+	// +optional
+	// +kubebuilder:validation:MaxItems=20
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?\.[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.svc)?$`
+	AdditionalServices []string `json:"additionalServices,omitempty"`
+
 	// logLevel describes the desired logging verbosity for CoreDNS.
 	// Any one of the following values may be specified:
 	// * Normal logs errors from upstream resolvers.
