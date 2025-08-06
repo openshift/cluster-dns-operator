@@ -6,6 +6,7 @@ approvers:
   - rfredette
   - alebedev87
   - gcs278
+  - rikatz
 reviewers:
   - knobunc
   - Miciah
@@ -14,6 +15,7 @@ reviewers:
   - rfredette
   - alebedev87
   - gcs278
+  - rikatz
 emeritus_approvers:
   - ironcladlou
   - pravisankar
