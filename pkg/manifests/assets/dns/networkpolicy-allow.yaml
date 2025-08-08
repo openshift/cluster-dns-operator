@@ -1,0 +1,29 @@
+# DNS Pods
+#  Egress to api server and upstream dns (can be wildcarded, so allow any egress)
+#  Ingress to dns on port 5353 (TCP and UDP) and to metrics (9154)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+# name, namespace,labels and annotations are set at runtime
+spec:
+  podSelector:
+    # matchLabels are set at runtime
+    matchLabels: {}
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 9154
+    - protocol: UDP
+      port: 5353
+    - protocol: TCP
+      port: 5353
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8181
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+  policyTypes:
+  - Ingress
+  - Egress
