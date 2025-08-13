@@ -116,6 +116,9 @@ type DNSSpec struct {
 	// 30 seconds or as noted in the respective Corefile for your version of OpenShift.
 	// +optional
 	Cache DNSCache `json:"cache,omitempty"`
+
+	// IPv6Filter, if true, disables AAAA responses using a CoreDNS template block.
+	IPv6Filter bool `json:"ipv6Filter,omitempty"`
 }
 
 // DNSCache defines the fields for configuring DNS caching.
