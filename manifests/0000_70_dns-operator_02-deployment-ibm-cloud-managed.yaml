@@ -41,7 +41,11 @@ spec:
           capabilities:
             drop:
             - ALL
+          readOnlyRootFilesystem: true
         terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-dir
       - args:
         - --logtostderr
         - --secure-listen-address=:9393
@@ -63,11 +67,14 @@ spec:
           capabilities:
             drop:
             - ALL
+          readOnlyRootFilesystem: true
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
         - mountPath: /etc/tls/private
           name: metrics-tls
           readOnly: true
+        - mountPath: /tmp
+          name: tmp-dir
       dnsPolicy: Default
       nodeSelector:
         kubernetes.io/os: linux
@@ -96,3 +103,5 @@ spec:
       - name: metrics-tls
         secret:
           secretName: metrics-tls
+      - emptyDir: {}
+        name: tmp-dir
