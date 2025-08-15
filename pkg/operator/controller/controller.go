@@ -18,6 +18,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 
 	"github.com/apparentlymart/go-cidr/cidr"
 
@@ -96,9 +97,12 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	if err := c.Watch(source.Kind[client.Object](operatorCache, &corev1.ConfigMap{}, handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{}))); err != nil {
 		return nil, err
 	}
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &networkingv1.NetworkPolicy{}, handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{}))); err != nil {
+		return nil, err
+	}
 
 	objectToDNS := func(context.Context, client.Object) []reconcile.Request {
-		return []reconcile.Request{{DefaultDNSNamespaceName()}}
+		return []reconcile.Request{{NamespacedName: DefaultDNSNamespaceName()}}
 	}
 	isInNS := func(namespace string) func(o client.Object) bool {
 		return func(o client.Object) bool {
@@ -417,6 +421,18 @@ func (r *reconciler) ensureDNSNamespace() error {
 		logrus.Infof("created serviceaccount %s", nodeResolverServiceAccountName)
 	}
 
+	// Ensure the deny all network policy is present for the dns namespace
+	np := manifests.NetworkPolicyDenyAll()
+	if err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: np.Namespace, Name: np.Name}, np); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get network policy deny all: %v", err)
+		}
+		if err := r.client.Create(context.TODO(), np); err != nil {
+			return fmt.Errorf("failed to create dns deny all network policy %s/%s: %v", np.Namespace, np.Name, err)
+		}
+		logrus.Infof("created dns deny all network policy %s/%s", np.Namespace, np.Name)
+	}
+
 	return nil
 }
 
@@ -533,6 +549,9 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.R
 
 		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain, cmMap); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
+		}
+		if _, _, err := r.ensureDNSNetworkPolicy(dns); err != nil {
+			errs = append(errs, fmt.Errorf("failed to ensure networkpolicy for dns %s: %v", dns.Name, err))
 		}
 		if haveSvc, svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
 			// Set clusterIP to an empty string to cause ClusterOperator to report
