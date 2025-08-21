@@ -9,17 +9,31 @@ spec:
     # matchLabels are set at runtime
     matchLabels: {}
   ingress:
+  # Everyone needs to be able to access the dns ports
   - ports:
-    - protocol: TCP
-      port: 9154
     - protocol: UDP
       port: 5353
     - protocol: TCP
       port: 5353
+  # Allow monitoring to hit the metrics port
+  - ports:
+    - protocol: TCP
+      port: 9154
+    from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-monitoring
+  # Allow the dns operator namespaces to hit the healthcheck ports
+  - ports:
     - protocol: TCP
       port: 8080
     - protocol: TCP
       port: 8181
+    from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-dns-operatorXXX
+          kubernetes.io/metadata.name: openshift-dnsXXX
   egress:
   - to:
     - ipBlock:

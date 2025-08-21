@@ -110,9 +110,7 @@ func networkPolicyChanged(current, expected *networkingv1.NetworkPolicy) (bool, 
 
 	updated := current.DeepCopy()
 	updated.Spec = expected.Spec
-	if updated.Labels == nil {
-		updated.Labels = map[string]string{}
-	}
+	updated.Labels = map[string]string{}
 	for k, v := range expectedLabels {
 		updated.Labels[k] = v
 	}

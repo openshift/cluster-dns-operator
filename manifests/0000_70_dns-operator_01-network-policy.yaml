@@ -39,6 +39,10 @@ spec:
     - protocol: UDP
       port: 53
   ingress:
-  - ports:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-monitoring
+    ports:
     - protocol: TCP
       port: 9393
