@@ -1,0 +1,43 @@
+# DNS Pods
+#  Egress to api server and upstream dns (can be wildcarded, so allow any egress)
+#  Ingress to dns on port 5353 (TCP and UDP) and to metrics (9154)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+# name, namespace,labels and annotations are set at runtime
+spec:
+  podSelector:
+    # matchLabels are set at runtime
+    matchLabels: {}
+  ingress:
+  # Everyone needs to be able to access the dns ports
+  - ports:
+    - protocol: UDP
+      port: 5353
+    - protocol: TCP
+      port: 5353
+  # Allow monitoring to hit the metrics port
+  - ports:
+    - protocol: TCP
+      port: 9154
+    from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-monitoring
+  # Allow the dns operator namespaces to hit the healthcheck ports
+  - ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8181
+    from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-dns-operatorXXX
+          kubernetes.io/metadata.name: openshift-dnsXXX
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+  policyTypes:
+  - Ingress
+  - Egress

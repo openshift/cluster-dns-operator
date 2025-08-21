@@ -7,18 +7,22 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 const (
+	NetworkPolicyDenyAllAsset = "assets/networkpolicy-deny-all.yaml"
+
 	DNSNamespaceAsset          = "assets/dns/namespace.yaml"
 	DNSServiceAccountAsset     = "assets/dns/service-account.yaml"
 	DNSClusterRoleAsset        = "assets/dns/cluster-role.yaml"
 	DNSClusterRoleBindingAsset = "assets/dns/cluster-role-binding.yaml"
 	DNSDaemonSetAsset          = "assets/dns/daemonset.yaml"
 	DNSServiceAsset            = "assets/dns/service.yaml"
+	DNSNetworkPolicyAsset      = "assets/dns/networkpolicy-allow.yaml"
 
 	MetricsClusterRoleAsset        = "assets/dns/metrics/cluster-role.yaml"
 	MetricsClusterRoleBindingAsset = "assets/dns/metrics/cluster-role-binding.yaml"
@@ -53,6 +57,14 @@ func MustAssetString(asset string) string {
 
 func MustAssetReader(asset string) io.Reader {
 	return bytes.NewReader(MustAsset(asset))
+}
+
+func NetworkPolicyDenyAll() *networkingv1.NetworkPolicy {
+	np, err := NewNetworkPolicy(MustAssetReader(NetworkPolicyDenyAllAsset))
+	if err != nil {
+		panic(err)
+	}
+	return np
 }
 
 func DNSNamespace() *corev1.Namespace {
@@ -101,6 +113,14 @@ func DNSService() *corev1.Service {
 		panic(err)
 	}
 	return s
+}
+
+func DNSNetworkPolicy() *networkingv1.NetworkPolicy {
+	np, err := NewNetworkPolicy(MustAssetReader(DNSNetworkPolicyAsset))
+	if err != nil {
+		panic(err)
+	}
+	return np
 }
 
 func MetricsClusterRole() *rbacv1.ClusterRole {
@@ -219,4 +239,12 @@ func NewNamespace(manifest io.Reader) (*corev1.Namespace, error) {
 		return nil, err
 	}
 	return &ns, nil
+}
+
+func NewNetworkPolicy(manifest io.Reader) (*networkingv1.NetworkPolicy, error) {
+	np := networkingv1.NetworkPolicy{}
+	if err := yaml.NewYAMLOrJSONDecoder(manifest, 100).Decode(&np); err != nil {
+		return nil, err
+	}
+	return &np, nil
 }
