@@ -79,6 +79,8 @@ spec:
           readOnly: true
         - mountPath: /tmp
           name: tmp-dir
+        securityContext:
+          readOnlyRootFilesystem: true
       dnsPolicy: Default
       # nodeSelector is set at runtime.
       volumes:
