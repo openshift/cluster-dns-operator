@@ -103,6 +103,14 @@ func DNSServiceName(dns *operatorv1.DNS) types.NamespacedName {
 	}
 }
 
+// DNSNetworkPolicyName returns the namespaced name for the dns pods allow network policy.
+func DNSNetworkPolicyName(dns *operatorv1.DNS) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: "openshift-dns",
+		Name:      "dns-" + dns.Name,
+	}
+}
+
 func DNSConfigMapName(dns *operatorv1.DNS) types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: "openshift-dns",

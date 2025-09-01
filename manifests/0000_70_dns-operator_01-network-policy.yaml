@@ -1,0 +1,48 @@
+# We control the namespace, deny anything we do not explicitly allow
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-operator-deny-all
+  namespace: openshift-dns-operator
+  annotations:
+    include.release.openshift.io/self-managed-high-availability: "true"
+    include.release.openshift.io/single-node-developer: "true"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+### Allow the operators to talk to the apiserver and dns
+### Allow access to the metrics ports on the operators
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-operator-allow
+  namespace: openshift-dns-operator
+  annotations:
+    include.release.openshift.io/self-managed-high-availability: "true"
+    include.release.openshift.io/single-node-developer: "true"
+spec:
+  podSelector:
+    matchLabels:
+      name: dns-operator
+  policyTypes:
+  - Egress
+  - Ingress
+  egress:
+  - ports:
+    - protocol: TCP
+      port: 6443
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: openshift-monitoring
+    ports:
+    - protocol: TCP
+      port: 9393
