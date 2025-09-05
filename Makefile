@@ -85,3 +85,18 @@ run-local: build
 clean:
 	$(GO) clean
 	rm -f $(BIN)
+
+LOCALBIN ?= $(shell pwd)/tmp
+GOVULNCHECK = $(LOCALBIN)/govulncheck
+
+.PHONY: vulncheck
+vulncheck: $(GOVULNCHECK)
+	$(GOVULNCHECK) ./...
+
+# Dependencies / Tools specifics
+
+$(LOCALBIN):
+	[ -d $@ ] || mkdir -p $@
+
+$(GOVULNCHECK): $(LOCALBIN)
+	GOBIN=$(LOCALBIN) go install golang.org/x/vuln/cmd/govulncheck@latest
