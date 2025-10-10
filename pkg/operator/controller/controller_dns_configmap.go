@@ -65,8 +65,9 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         {{$.LogLevel}}
     }
     bufsize 1232
-    cache {{ $.PositiveTTL }} {
-        denial 9984 {{ $.NegativeTTL }}
+    cache {
+        success 9984 {{ $.PositiveTTL }} {{ $.PositiveTTL }}
+        denial 9984 {{ $.NegativeTTL }} {{ $.NegativeTTL }}
     }
     {{- if eq true $.OCPDNSNameResolver}}
     ocp_dnsnameresolver {
@@ -104,8 +105,9 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         {{- end}}
     }
     {{- end}}
-    cache {{ .PositiveTTL }} {
-        denial 9984 {{ .NegativeTTL }}
+    cache {
+        success 9984 {{ .PositiveTTL }} {{ .PositiveTTL }}
+        denial 9984 {{ .NegativeTTL }} {{ .NegativeTTL }}
     }
     reload
     {{- if eq true $.OCPDNSNameResolver}}
