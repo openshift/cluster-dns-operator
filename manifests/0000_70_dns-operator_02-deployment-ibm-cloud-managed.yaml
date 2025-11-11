@@ -76,13 +76,16 @@ spec:
         - mountPath: /tmp
           name: tmp-dir
       dnsPolicy: Default
+      hostUsers: false
       nodeSelector:
         kubernetes.io/os: linux
       priorityClassName: system-cluster-critical
       restartPolicy: Always
       securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
         runAsNonRoot: true
-        runAsUser: 65534
+        runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
       serviceAccountName: dns-operator
