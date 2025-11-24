@@ -2,7 +2,7 @@ package controller
 
 import (
 	"errors"
-	"io/ioutil"
+	"os"
 	"path"
 	"testing"
 	"time"
@@ -1215,7 +1215,7 @@ func TestDesiredDNSConfigmapDNSNameResolverEnabled(t *testing.T) {
 // and returns the file contents as a string.
 func mustLoadTestFile(t *testing.T, name string) string {
 	t.Helper()
-	corefile, err := ioutil.ReadFile(path.Join("testdata", name))
+	corefile, err := os.ReadFile(path.Join("testdata", name))
 	if err != nil {
 		t.Fatalf("Failed to read Corefile %s: %v", name, err)
 	}
