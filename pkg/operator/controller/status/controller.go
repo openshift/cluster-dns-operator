@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -135,6 +136,16 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			Group:    operatorv1.GroupName,
 			Resource: "dnses",
 			Name:     "default",
+		},
+		{
+			Group:    rbacv1.GroupName,
+			Resource: "clusterroles",
+			Name:     "openshift-dns-operator",
+		},
+		{
+			Group:    rbacv1.GroupName,
+			Resource: "clusterrolebindings",
+			Name:     "openshift-dns-operator",
 		},
 	}
 	if state.haveNamespace {

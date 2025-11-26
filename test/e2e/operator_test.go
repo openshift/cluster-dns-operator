@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlruntimelog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -122,6 +123,16 @@ func TestClusterOperatorStatusRelatedObjects(t *testing.T) {
 			Group:    operatorv1.GroupName,
 			Resource: "dnses",
 			Name:     "default",
+		},
+		{
+			Group:    rbacv1.GroupName,
+			Resource: "clusterroles",
+			Name:     "openshift-dns-operator",
+		},
+		{
+			Group:    rbacv1.GroupName,
+			Resource: "clusterrolebindings",
+			Name:     "openshift-dns-operator",
 		},
 		{
 			Resource: "namespaces",
