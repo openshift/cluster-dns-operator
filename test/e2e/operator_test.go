@@ -629,7 +629,11 @@ func TestDNSForwarding(t *testing.T) {
 		t.Fatalf("failed to list pods for dns daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
 	}
 	catCmd := []string{"cat", "/etc/coredns/Corefile"}
+	checked := 0
 	for _, pod := range defaultDNSPods.Items {
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
 		if err := lookForStringInPodExec(pod.Namespace, pod.Name, "dns", catCmd, upstreamIP, 2*time.Minute); err != nil {
 			// If we failed to find the expected IP in the pod's corefile, log the pod's status.
 			currPod := &corev1.Pod{}
@@ -638,6 +642,10 @@ func TestDNSForwarding(t *testing.T) {
 			}
 			t.Fatalf("failed to find %s in %s of pod %s/%s: %v, pod status: %v", upstreamIP, catCmd[1], pod.Namespace, pod.Name, err, currPod.Status)
 		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatalf("no running pods found")
 	}
 
 	// Get the openshift-cli image.
