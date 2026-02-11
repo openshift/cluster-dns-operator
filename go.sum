@@ -94,8 +94,8 @@ github.com/openshift/build-machinery-go v0.0.0-20250530140348-dc5b2804eeee h1:+S
 github.com/openshift/build-machinery-go v0.0.0-20250530140348-dc5b2804eeee/go.mod h1:8jcm8UPtg2mCAsxfqKil1xrmRMI3a+XU2TZ9fF8A7TE=
 github.com/openshift/client-go v0.0.0-20251015124057-db0dee36e235 h1:9JBeIXmnHlpXTQPi7LPmu1jdxznBhAE7bb1K+3D8gxY=
 github.com/openshift/client-go v0.0.0-20251015124057-db0dee36e235/go.mod h1:L49W6pfrZkfOE5iC1PqEkuLkXG4W0BX4w8b+L2Bv7fM=
-github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20251118200623-f7b15b30153f h1:aZ3lpGaX9WPr8chrZcgdUK5HXNwKisuUb7u/CMcYcGg=
-github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20251118200623-f7b15b30153f/go.mod h1:EGI25/wvC44wUNhUhCvy+ptPX+Cx5SSHjndh+BF5BQs=
+github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20260211095308-1a5277b4db1c h1:vV/PMeg78DabZg7kaNN0mgoAIQCp5d6UZniC9giMrCM=
+github.com/openshift/coredns-ocp-dnsnameresolver/operator v0.0.0-20260211095308-1a5277b4db1c/go.mod h1:COfvrHtVneLFgj/uyBYVTJi4PhJDYfJaGFgpMyfHrGw=
 github.com/openshift/library-go v0.0.0-20251119174848-88c26bf0df68 h1:urrCRGujwOBjiK5lyNVKeLd36IQra+yQykw4gsfvtkw=
 github.com/openshift/library-go v0.0.0-20251119174848-88c26bf0df68/go.mod h1:ErDfiIrPHH+menTP/B4LKd0nxFDdvCbTamAc6SWMIh8=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
