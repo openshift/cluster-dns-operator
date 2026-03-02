@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
@@ -323,7 +324,7 @@ func tolerationsTolerateTaints(tolerations []corev1.Toleration, taints []corev1.
 	}
 	for _, taint := range taints {
 		for _, toleration := range tolerations {
-			if toleration.ToleratesTaint(&taint) {
+			if toleration.ToleratesTaint(logr.Discard(), &taint, false) {
 				return true
 			}
 		}
