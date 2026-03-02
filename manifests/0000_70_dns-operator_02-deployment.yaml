@@ -19,13 +19,16 @@ spec:
         name: dns-operator
     spec:
       dnsPolicy: Default
+      hostUsers: false
       nodeSelector:
         kubernetes.io/os: linux
         node-role.kubernetes.io/master: ''
       restartPolicy: Always
       securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
         runAsNonRoot: true
-        runAsUser: 65534
+        runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
       priorityClassName: system-cluster-critical
