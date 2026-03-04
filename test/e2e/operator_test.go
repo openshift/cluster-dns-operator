@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -135,8 +136,18 @@ func TestClusterOperatorStatusRelatedObjects(t *testing.T) {
 			Name:     "openshift-dns-operator",
 		},
 		{
+			Group:     networkingv1.GroupName,
+			Resource:  "networkpolicies",
+			Namespace: "openshift-dns-operator",
+		},
+		{
 			Resource: "namespaces",
 			Name:     "openshift-dns",
+		},
+		{
+			Group:     networkingv1.GroupName,
+			Resource:  "networkpolicies",
+			Namespace: "openshift-dns",
 		},
 	}
 	err = wait.PollImmediate(1*time.Second, 5*time.Minute, func() (bool, error) {
@@ -544,6 +555,17 @@ func TestDNSForwarding(t *testing.T) {
 		t.Fatalf("version %s not found for clusteroperator %s", statuscontroller.CoreDNSVersionName, opName)
 	}
 
+	// Create the test pod network policy.
+	testPodNetworkPolicy := buildTestPodNetworkPolicy(types.NamespacedName{Name: "test-upstream-allow", Namespace: upstreamPodNs})
+	if err := cl.Create(context.TODO(), testPodNetworkPolicy); err != nil {
+		t.Fatalf("failed to create network policy %s/%s: %v", testPodNetworkPolicy.Namespace, testPodNetworkPolicy.Name, err)
+	}
+	defer func() {
+		if err := cl.Delete(context.TODO(), testPodNetworkPolicy); err != nil {
+			t.Fatalf("failed to delete network policy %s/%s: %v", testPodNetworkPolicy.Namespace, testPodNetworkPolicy.Name, err)
+		}
+	}()
+
 	// Create the upstream resolver Pod.
 	upstreamResolver := upstreamPod(upstreamPodName, upstreamPodNs, coreImage, upstreamPodName)
 	if err := cl.Create(context.TODO(), upstreamResolver); err != nil {
@@ -814,6 +836,17 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	if !cliImageFound {
 		t.Fatalf("version %s not found for clusteroperator %s", statuscontroller.OpenshiftCLIVersionName, opName)
 	}
+
+	// Create the test pod network policy.
+	testPodNetworkPolicy := buildTestPodNetworkPolicy(types.NamespacedName{Name: "test-upstream-tls-allow", Namespace: upstreamPodNs})
+	if err := cl.Create(context.TODO(), testPodNetworkPolicy); err != nil {
+		t.Fatalf("failed to create network policy %s/%s: %v", testPodNetworkPolicy.Namespace, testPodNetworkPolicy.Name, err)
+	}
+	defer func() {
+		if err := cl.Delete(context.TODO(), testPodNetworkPolicy); err != nil {
+			t.Fatalf("failed to delete network policy %s/%s: %v", testPodNetworkPolicy.Namespace, testPodNetworkPolicy.Name, err)
+		}
+	}()
 
 	// Create the upstream resolver Pods and the client pod
 	upstreamResolver := upstreamTLSPod(tlsUpstreamName, tlsUpstreamNamespace.Name, coreImage, upstreamTLSConfigMap)
