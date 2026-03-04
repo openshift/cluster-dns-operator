@@ -19,6 +19,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 
 	"github.com/apparentlymart/go-cidr/cidr"
 
@@ -97,9 +98,12 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	if err := c.Watch(source.Kind[client.Object](operatorCache, &corev1.ConfigMap{}, handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{}))); err != nil {
 		return nil, err
 	}
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &networkingv1.NetworkPolicy{}, enqueueRequestForOwningDNS())); err != nil {
+		return nil, err
+	}
 
 	objectToDNS := func(context.Context, client.Object) []reconcile.Request {
-		return []reconcile.Request{{DefaultDNSNamespaceName()}}
+		return []reconcile.Request{{NamespacedName: DefaultDNSNamespaceName()}}
 	}
 	isInNS := func(namespace string) func(o client.Object) bool {
 		return func(o client.Object) bool {
@@ -139,6 +143,18 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	}
 
 	return c, nil
+}
+
+func enqueueRequestForOwningDNS() handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(
+		func(ctx context.Context, a client.Object) []reconcile.Request {
+			labels := a.GetLabels()
+			if dnsName, ok := labels[manifests.OwningDNSLabel]; ok {
+				logrus.Infof("queueing dns %s for related object %s/%s", dnsName, a.GetNamespace(), a.GetName())
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: dnsName}}}
+			}
+			return []reconcile.Request{}
+		})
 }
 
 // Config holds all the configuration that must be provided when creating the
@@ -263,7 +279,7 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				errs = append(errs, fmt.Errorf("failed to enforce finalizer for dns %s: %v", dns.Name, err))
 			} else {
 				// Handle everything else.
-				if err := r.ensureDNS(dns, &result); err != nil {
+				if err := r.ensureDNS(ctx, dns, &result); err != nil {
 					switch e := err.(type) {
 					case retryable.Error:
 						logrus.Error(e, "got retryable error; requeueing", "after", e.After())
@@ -500,7 +516,7 @@ func (r *reconciler) ensureMetricsIntegration(dns *operatorv1.DNS, svc *corev1.S
 }
 
 // ensureDNS ensures all necessary dns resources exist for a given dns.
-func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.Result) error {
+func (r *reconciler) ensureDNS(ctx context.Context, dns *operatorv1.DNS, reconcileResult *reconcile.Result) error {
 	// TODO: fetch this from higher level openshift resource when it is exposed
 	clusterDomain := "cluster.local"
 	clusterIP, err := r.getClusterIPFromNetworkConfig()
@@ -539,6 +555,13 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.R
 
 		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain, cmMap); err != nil {
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
+		}
+		if _, _, err := r.ensureDNSNetworkPolicy(ctx, dns); err != nil {
+			errs = append(errs, fmt.Errorf("failed to ensure networkpolicy for dns %s: %v", dns.Name, err))
+		}
+		// Ensure the default deny all network policy is present for the dns namespace.
+		if _, _, err := r.ensureDenyAllNetworkPolicy(ctx); err != nil {
+			return err
 		}
 		if haveSvc, svc, err := r.ensureDNSService(dns, clusterIP, daemonsetRef); err != nil {
 			// Set clusterIP to an empty string to cause ClusterOperator to report

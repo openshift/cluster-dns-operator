@@ -5,12 +5,15 @@ import (
 )
 
 func TestManifests(t *testing.T) {
+	NetworkPolicyDenyAll()
+
 	DNSServiceAccount()
 	DNSClusterRole()
 	DNSClusterRoleBinding()
 	DNSNamespace()
 	DNSDaemonSet()
 	DNSService()
+	DNSNetworkPolicy()
 
 	MetricsClusterRole()
 	MetricsClusterRoleBinding()
