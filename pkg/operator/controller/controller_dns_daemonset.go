@@ -3,12 +3,15 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
+	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
+	"github.com/openshift/library-go/pkg/crypto"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -38,12 +41,12 @@ var (
 )
 
 // ensureDNSDaemonSet ensures the dns daemonset exists for a given dns.
-func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, caBundleRevisionMap map[string]string) (bool, *appsv1.DaemonSet, error) {
+func (r *reconciler) ensureDNSDaemonSet(dns *operatorv1.DNS, caBundleRevisionMap map[string]string, tlsSecurityProfile *configv1.TLSSecurityProfile) (bool, *appsv1.DaemonSet, error) {
 	haveDS, current, err := r.currentDNSDaemonSet(dns)
 	if err != nil {
 		return false, nil, err
 	}
-	desired, err := desiredDNSDaemonSet(dns, r.CoreDNSImage, r.KubeRBACProxyImage, caBundleRevisionMap)
+	desired, err := desiredDNSDaemonSet(dns, r.CoreDNSImage, r.KubeRBACProxyImage, caBundleRevisionMap, tlsSecurityProfile)
 	if err != nil {
 		return haveDS, current, fmt.Errorf("failed to build dns daemonset: %v", err)
 	}
@@ -81,7 +84,7 @@ func (r *reconciler) ensureDNSDaemonSetDeleted(dns *operatorv1.DNS) error {
 }
 
 // desiredDNSDaemonSet returns the desired dns daemonset.
-func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage string, caBundleRevisionMap map[string]string) (*appsv1.DaemonSet, error) {
+func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage string, caBundleRevisionMap map[string]string, tlsSecurityProfile *configv1.TLSSecurityProfile) (*appsv1.DaemonSet, error) {
 	daemonset := manifests.DNSDaemonSet()
 	name := DNSDaemonSetName(dns)
 	daemonset.Name = name.Name
@@ -147,9 +150,94 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 			}
 		case "kube-rbac-proxy":
 			daemonset.Spec.Template.Spec.Containers[i].Image = kubeRBACProxyImage
+			daemonset.Spec.Template.Spec.Containers[i].Args = kubeRBACProxyArgs(tlsSecurityProfile)
 		}
 	}
 	return daemonset, nil
+}
+
+// kubeRBACProxyArgs returns the set of CLI arguments to pass to the
+// kube-rbac-proxy container based on the cluster's TLS security profile.
+// The TLS security profile is read from apiservers.config.openshift.io/cluster
+// and determines the cipher suites and minimum TLS version for the metrics
+// endpoint (port 9154). If the profile is nil, the Intermediate profile is used
+// as the default, which matches the cluster-wide default.
+func kubeRBACProxyArgs(tlsSecurityProfile *configv1.TLSSecurityProfile) []string {
+	// Resolve the profile to a concrete spec. A nil profile means "use the
+	// platform default", which is Intermediate.
+	profileSpec := tlsProfileSpecForProfile(tlsSecurityProfile)
+
+	// The TLSProfiles map contains OpenSSL cipher names. kube-rbac-proxy (and
+	// Go's crypto/tls) expects IANA names, so convert them.
+	ianaCiphers := crypto.OpenSSLToIANACipherSuites(profileSpec.Ciphers)
+
+	// If all ciphers were dropped (unrecognized), fall back to Intermediate.
+	if len(ianaCiphers) == 0 && len(profileSpec.Ciphers) > 0 {
+		logrus.Warningf("kubeRBACProxyArgs: all ciphers unrecognized, falling back to Intermediate profile")
+		profileSpec = configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
+		ianaCiphers = crypto.OpenSSLToIANACipherSuites(profileSpec.Ciphers)
+	}
+
+	// Warn about any ciphers that were dropped (unknown to library-go/Go TLS).
+	if len(ianaCiphers) < len(profileSpec.Ciphers) {
+		dropped := sets.NewString(profileSpec.Ciphers...).Difference(
+			sets.NewString(openSSLNamesFromIANA(ianaCiphers, profileSpec.Ciphers)...),
+		)
+		logrus.Warningf("kubeRBACProxyArgs: dropped %d cipher(s) not supported by Go TLS: %v",
+			len(profileSpec.Ciphers)-len(ianaCiphers), dropped.List())
+	}
+
+	return []string{
+		"--logtostderr",
+		"--secure-listen-address=:9154",
+		"--upstream=http://127.0.0.1:9153/",
+		"--tls-cert-file=/etc/tls/private/tls.crt",
+		"--tls-private-key-file=/etc/tls/private/tls.key",
+		fmt.Sprintf("--tls-cipher-suites=%s", strings.Join(ianaCiphers, ",")),
+		fmt.Sprintf("--tls-min-version=%s", profileSpec.MinTLSVersion),
+	}
+}
+
+// tlsProfileSpecForProfile resolves a TLSSecurityProfile to a TLSProfileSpec
+// containing concrete cipher suite names and a minimum TLS version.
+// A nil profile defaults to the Intermediate profile.
+func tlsProfileSpecForProfile(profile *configv1.TLSSecurityProfile) *configv1.TLSProfileSpec {
+	if profile == nil {
+		return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
+	}
+	switch profile.Type {
+	case configv1.TLSProfileOldType:
+		return configv1.TLSProfiles[configv1.TLSProfileOldType]
+	case configv1.TLSProfileModernType:
+		return configv1.TLSProfiles[configv1.TLSProfileModernType]
+	case configv1.TLSProfileCustomType:
+		if profile.Custom != nil {
+			return &profile.Custom.TLSProfileSpec
+		}
+		// Malformed custom profile, fall back to Intermediate.
+		logrus.Warningf("tlsProfileSpecForProfile: custom TLS profile has nil spec, using Intermediate default")
+		return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
+	default:
+		// Includes TLSProfileIntermediateType and any unknown future type.
+		return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
+	}
+}
+
+// openSSLNamesFromIANA is a helper that returns the subset of OpenSSL cipher
+// names that successfully mapped to the given IANA names. Used only for
+// computing the dropped-cipher warning.
+func openSSLNamesFromIANA(ianaCiphers []string, openSSLCiphers []string) []string {
+	// Build a set of IANA ciphers for fast lookup.
+	ianaSet := sets.NewString(ianaCiphers...)
+	// Re-run the mapping to find which OpenSSL names produced a known IANA name.
+	var matched []string
+	for _, c := range openSSLCiphers {
+		converted := crypto.OpenSSLToIANACipherSuites([]string{c})
+		if len(converted) > 0 && ianaSet.Has(converted[0]) {
+			matched = append(matched, c)
+		}
+	}
+	return matched
 }
 
 // caBundleCMVolAndVolMount takes a CA bundle ConfigMap name and a TLS server name, and returns
@@ -430,6 +518,11 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 		for i, a := range current.Spec.Template.Spec.Containers {
 			b := expected.Spec.Template.Spec.Containers[i]
 			if !cmp.Equal(a.Command, b.Command, cmpopts.EquateEmpty()) {
+				updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
+				changed = true
+				break
+			}
+			if !cmp.Equal(a.Args, b.Args, cmpopts.EquateEmpty()) {
 				updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
 				changed = true
 				break

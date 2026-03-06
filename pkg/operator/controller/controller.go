@@ -108,6 +108,12 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	if err := c.Watch(source.Kind[client.Object](operatorCache, &corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(objectToDNS), predicate.NewPredicateFuncs(isInNS(GlobalUserSpecifiedConfigNamespace)))); err != nil {
 		return nil, err
 	}
+	// Watch apiservers.config.openshift.io/cluster so that changes to the
+	// centralized TLS security profile trigger a reconciliation, causing the
+	// kube-rbac-proxy args in the DNS DaemonSet to be updated.
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &configv1.APIServer{}, handler.EnqueueRequestsFromMapFunc(objectToDNS))); err != nil {
+		return nil, err
+	}
 	// If a node is created or deleted, then the controller may need to
 	// reconcile the DNS service in order to add or remove the
 	// service.kubernetes.io/topology-aware-hints annotation, but only if
@@ -516,7 +522,25 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.R
 	// Also, the operator will not add a volume to daemonset for this configmap.
 	cmMap := r.caBundleRevisionMap(dns)
 
-	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns, cmMap)
+	// Read the centralized TLS security profile from apiservers.config.openshift.io/cluster.
+	// This profile controls the cipher suites and minimum TLS version used by the
+	// kube-rbac-proxy sidecar on the CoreDNS metrics endpoint (port 9154).
+	// A nil profile (e.g. if the resource doesn't exist yet) causes the operator to
+	// use the Intermediate profile as a safe default.
+	apiServer := &configv1.APIServer{}
+	var tlsSecurityProfile *configv1.TLSSecurityProfile
+	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, apiServer); err != nil {
+		if !errors.IsNotFound(err) {
+			errs = append(errs, fmt.Errorf("failed to get apiserver config: %v", err))
+			return utilerrors.NewAggregate(errs)
+		} else {
+			logrus.Warningf("apiserver config 'cluster' not found, using Intermediate TLS profile as default")
+		}
+	} else {
+		tlsSecurityProfile = apiServer.Spec.TLSSecurityProfile
+	}
+
+	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns, cmMap, tlsSecurityProfile)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
 	} else if !haveDNSDaemonset {
