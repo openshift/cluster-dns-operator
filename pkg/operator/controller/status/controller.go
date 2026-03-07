@@ -17,6 +17,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -147,11 +148,20 @@ func (r *reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			Resource: "clusterrolebindings",
 			Name:     "openshift-dns-operator",
 		},
+		{
+			Group:     networkingv1.GroupName,
+			Resource:  "networkpolicies",
+			Namespace: r.Config.OperatorNamespace,
+		},
 	}
 	if state.haveNamespace {
 		related = append(related, configv1.ObjectReference{
 			Resource: "namespaces",
 			Name:     state.namespace.Name,
+		}, configv1.ObjectReference{
+			Group:     networkingv1.GroupName,
+			Resource:  "networkpolicies",
+			Namespace: state.namespace.Name,
 		})
 	}
 	co.Status.RelatedObjects = related
