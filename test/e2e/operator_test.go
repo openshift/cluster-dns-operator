@@ -67,10 +67,17 @@ var (
 	dnsName = types.NamespacedName{Name: operatorcontroller.DefaultDNSName}
 	opName  = types.NamespacedName{Name: operatorcontroller.DefaultOperatorName}
 
+	// The OperatorStatusTypeProgressing condition is no longer considered a measure of availability.
 	defaultAvailableDNSConditions = []operatorv1.OperatorCondition{
 		{Type: operatorv1.OperatorStatusTypeAvailable, Status: operatorv1.ConditionTrue},
-		{Type: operatorv1.OperatorStatusTypeProgressing, Status: operatorv1.ConditionFalse},
 		{Type: operatorv1.OperatorStatusTypeDegraded, Status: operatorv1.ConditionFalse},
+	}
+
+	// The OperatorStatusTypeProgressing=False needs to be there for TLS Forwarding tests.
+	tlsForwardingDoneDNSConditions = []operatorv1.OperatorCondition{
+		{Type: operatorv1.OperatorStatusTypeAvailable, Status: operatorv1.ConditionTrue},
+		{Type: operatorv1.OperatorStatusTypeDegraded, Status: operatorv1.ConditionFalse},
+		{Type: operatorv1.OperatorStatusTypeProgressing, Status: operatorv1.ConditionFalse},
 	}
 )
 
@@ -273,7 +280,12 @@ func TestDNSLogging(t *testing.T) {
 	if len(coreDNSPods.Items) == 0 {
 		t.Fatalf("found zero coredns pods!")
 	}
+	checked := 0
 	for _, corednspod := range coreDNSPods.Items {
+		if corednspod.DeletionTimestamp != nil {
+			t.Logf("could not test, pod skipped due to deletion: %v", corednspod.Name)
+			continue
+		}
 		host := fmt.Sprintf("test-%s-%v.svc.cluster.local", corednspod.Name, time.Now().UnixMicro())
 		digCmd := []string{"dig", "@127.0.0.1", "-p", "5353", host}
 
@@ -315,6 +327,10 @@ func TestDNSLogging(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("%s/%s: DNS logging validation failed: %v", corednspod.Namespace, corednspod.Name, err)
 		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("failed to find any running CoreDNS pods")
 	}
 
 	dns := &operatorv1.DNS{}
@@ -335,11 +351,19 @@ func TestDNSLogging(t *testing.T) {
 	if err := cl.List(context.TODO(), dnsOperatorPods, client.MatchingLabelsSelector{Selector: operatorSelector}, client.InNamespace(dnsOperatorDeployment.Namespace)); err != nil {
 		t.Fatalf("failed to list pods for dns deployment %s/%s: %v", dnsOperatorDeployment.Namespace, dnsOperatorDeployment.Name, err)
 	}
-
+	checked = 0
 	for _, dnsOperatorPod := range dnsOperatorPods.Items {
+		if dnsOperatorPod.DeletionTimestamp != nil {
+			t.Logf("could not test, pod skipped due to deletion: %v", dnsOperatorPod.Name)
+			continue
+		}
 		if err := lookForStringInPodLog(operatorcontroller.DefaultOperatorNamespace, dnsOperatorPod.Name, operatorcontroller.ContainerNameOfDNSOperator, "level=info", 30*time.Second); err != nil {
 			t.Fatal(" failed to set Debug logLevel for operator")
 		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("failed to find any running dns operator pods")
 	}
 }
 
@@ -639,8 +663,13 @@ func TestDNSForwarding(t *testing.T) {
 	if err := cl.List(context.TODO(), defaultDNSPods, client.MatchingLabelsSelector{Selector: selector}, client.InNamespace(dnsDaemonSet.Namespace)); err != nil {
 		t.Fatalf("failed to list pods for dns daemonset %s/%s: %v", dnsDaemonSet.Namespace, dnsDaemonSet.Name, err)
 	}
+	checked := 0
 	catCmd := []string{"cat", "/etc/coredns/Corefile"}
 	for _, pod := range defaultDNSPods.Items {
+		if pod.DeletionTimestamp != nil {
+			t.Logf("could not test, pod skipped due to deletion: %v", pod.Name)
+			continue
+		}
 		if err := lookForStringInPodExec(pod.Namespace, pod.Name, "dns", catCmd, upstreamIP, 2*time.Minute); err != nil {
 			// If we failed to find the expected IP in the pod's corefile, log the pod's status.
 			currPod := &corev1.Pod{}
@@ -649,6 +678,10 @@ func TestDNSForwarding(t *testing.T) {
 			}
 			t.Fatalf("failed to find %s in %s of pod %s/%s: %v, pod status: %v", upstreamIP, catCmd[1], pod.Namespace, pod.Name, err, currPod.Status)
 		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatalf("failed to find any running pods in default dns daemonset %s", defaultDNS.Name)
 	}
 
 	// Get the openshift-cli image.
@@ -701,7 +734,8 @@ func TestDNSForwarding(t *testing.T) {
 	// Dig the example dns forwarding host.
 	digCmd := []string{"dig", "+short", "www.foo.com", "A"}
 	fooHost := "1.2.3.4"
-	if err := lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 30*time.Second); err != nil {
+	// It can take more than 1 minute to make and detect the update.
+	if err := lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 2*time.Minute); err != nil {
 		t.Fatalf("failed to dig %s: %v", upstreamIP, err)
 	}
 	// Scrape the upstream resolver logs for the "NOERROR" message.
@@ -720,7 +754,7 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	}
 
 	// Ensure that DNS is stable before starting the test.
-	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
+	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, tlsForwardingDoneDNSConditions...); err != nil {
 		t.Errorf("expected default DNS pods to be available: %v", err)
 	}
 
@@ -826,40 +860,10 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	}
 
 	// Wait for the upstream resolver Pod to be ready.
-	name := types.NamespacedName{Namespace: upstreamResolver.Namespace, Name: upstreamResolver.Name}
-	err = wait.PollImmediate(1*time.Second, 2*time.Minute, func() (bool, error) {
-		if err := cl.Get(context.TODO(), name, upstreamResolver); err != nil {
-			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
-			return false, nil
-		}
-		for _, cond := range upstreamResolver.Status.Conditions {
-			if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionTrue {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
+	upstreamResolverName := types.NamespacedName{Namespace: upstreamResolver.Namespace, Name: upstreamResolver.Name}
+	err = waitForPodReady(t, cl, upstreamResolverName, 2*time.Minute)
 	if err != nil {
-		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", upstreamResolver.Namespace, upstreamResolver.Name, err)
-	}
-
-	// Wait for the client Pod to be ready.
-	name = types.NamespacedName{Namespace: testClient.Namespace, Name: testClient.Name}
-	err = wait.PollImmediate(1*time.Second, 60*time.Second, func() (bool, error) {
-		if err := cl.Get(context.TODO(), name, testClient); err != nil {
-			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
-			return false, nil
-		}
-		for _, cond := range testClient.Status.Conditions {
-			if cond.Type == corev1.ContainersReady &&
-				cond.Status == corev1.ConditionTrue {
-				return true, nil
-			}
-		}
-		return false, nil
-	})
-	if err != nil {
-		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", testClient.Namespace, testClient.Name, err)
+		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", upstreamResolverName.Namespace, upstreamResolverName.Name, err)
 	}
 
 	// Create the ConfigMap to hold the cert and key data for the operator configuration
@@ -887,6 +891,22 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	defaultDNS := &operatorv1.DNS{}
 	if err := cl.Get(context.TODO(), types.NamespacedName{Name: operatorcontroller.DefaultDNSController}, defaultDNS); err != nil {
 		t.Fatalf("failed to get default dns: %v", err)
+	}
+
+	// Check for a pod ip, we'll need to use it later.
+	err = wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
+		if err := cl.Get(context.TODO(), upstreamResolverName, upstreamResolver); err != nil {
+			t.Logf("failed to get pod %s/%s: %v", upstreamResolverName.Namespace, upstreamResolverName.Name, err)
+			return false, nil
+		}
+		if upstreamResolver.Status.PodIP != "" {
+			return true, nil
+		}
+		t.Logf("pod IP not found for upstream resolver %s/%s, retrying...", upstreamResolver.Namespace, upstreamResolver.Name)
+		return false, nil
+	})
+	if err != nil {
+		t.Fatalf("failed to find pod ip for %s/%s: %v", upstreamResolverName.Namespace, upstreamResolverName.Name, err)
 	}
 
 	upstream := operatorv1.Server{
@@ -921,15 +941,21 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 		}
 	})
 
+	// Wait for the client Pod to be ready.
+	name := types.NamespacedName{Namespace: testClient.Namespace, Name: testClient.Name}
+	err = waitForPodReady(t, cl, name, 60*time.Second)
+	if err != nil {
+		t.Fatalf("failed to observe ContainersReady condition for pod %s/%s: %v", name.Namespace, name.Name, err)
+	}
+
 	// Verify that default DNS pods are all available before inspecting them.
 	if err := waitForDNSConditions(t, cl, 5*time.Minute, dnsName, defaultAvailableDNSConditions...); err != nil {
 		t.Errorf("expected default DNS pods to be available: %v", err)
 	}
-
 	// Dig the Corefile host.
 	digCmd := []string{"dig", "+short", "www.tls.com", "A"}
 	fooHost := "4.3.2.1"
-	if err = lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 60*time.Second); err != nil {
+	if err = lookForStringInPodExec(testClient.Namespace, testClient.Name, testClient.Name, digCmd, fooHost, 2*time.Minute); err != nil {
 		t.Fatalf("failed to forward request to %s: %v", upstreamResolver.Status.PodIP, err)
 	}
 
@@ -938,6 +964,25 @@ func TestDNSOverTLSForwarding(t *testing.T) {
 	if err = lookForStringInPodLog(upstreamResolver.Namespace, upstreamResolver.Name, upstreamResolver.Name, upstreamResolverLogMsg, 30*time.Second); err != nil {
 		t.Fatalf("%s/%s: %v", upstreamResolver.Namespace, upstreamResolver.Name, err)
 	}
+}
+
+// Wait for the pod containers to be ready.  Return error if they don't become
+// ready in the given time period.
+func waitForPodReady(t *testing.T, cl client.Client, name types.NamespacedName, timeout time.Duration) error {
+	pod := &corev1.Pod{}
+	return wait.PollImmediate(1*time.Second, timeout, func() (bool, error) {
+		if err := cl.Get(context.TODO(), name, pod); err != nil {
+			t.Logf("failed to get pod %s/%s: %v", name.Namespace, name.Name, err)
+			return false, nil
+		}
+		for _, cond := range pod.Status.Conditions {
+			if cond.Type == corev1.ContainersReady &&
+				cond.Status == corev1.ConditionTrue {
+				return true, nil
+			}
+		}
+		return false, nil
+	})
 }
 
 func TestDNSOverTLSToleratesMissingSourceCM(t *testing.T) {
@@ -1003,10 +1048,19 @@ func TestDNSOverTLSToleratesMissingSourceCM(t *testing.T) {
 		t.Fatalf("unable to get operator pods: %v", err)
 	}
 
+	checked := 0
 	for _, dnsOperatorPod := range dnsOperatorPods.Items {
+		if dnsOperatorPod.DeletionTimestamp != nil {
+			t.Logf("could not test, pod skipped due to deletion: %v", dnsOperatorPod.Name)
+			continue
+		}
 		if err := lookForStringInPodLog(operatorcontroller.DefaultOperatorNamespace, dnsOperatorPod.Name, operatorcontroller.ContainerNameOfDNSOperator, missingCMLog, 30*time.Second); err != nil {
 			t.Fatalf("could not find pod logs: %v", err)
 		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("failed to find any running dns operator pods")
 	}
 }
 
