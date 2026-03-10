@@ -239,6 +239,9 @@ func serviceChanged(current, expected *corev1.Service) (bool, *corev1.Service) {
 	// Preserve fields that the API, other controllers, or user may have
 	// modified.
 	updated.Spec.ClusterIP = current.Spec.ClusterIP
+	updated.Spec.ClusterIPs = current.Spec.ClusterIPs
+	updated.Spec.IPFamilies = current.Spec.IPFamilies
+	updated.Spec.IPFamilyPolicy = current.Spec.IPFamilyPolicy
 
 	return true, updated
 }
