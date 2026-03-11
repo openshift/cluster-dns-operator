@@ -20,9 +20,11 @@ import (
 
 func TestDNSServiceChanged(t *testing.T) {
 	testCases := []struct {
-		description string
-		mutate      func(*corev1.Service)
-		expect      bool
+		description    string
+		mutateOriginal func(*corev1.Service)
+		mutate         func(*corev1.Service)
+		expect         bool
+		verify         func(*corev1.Service, *corev1.Service, *corev1.Service, *testing.T)
 	}{
 		{
 			description: "if nothing changes",
@@ -140,6 +142,31 @@ func TestDNSServiceChanged(t *testing.T) {
 			},
 			expect: true,
 		},
+		{
+			description: "if dual-stack fields exist in current but not in expected, and an update is triggered",
+			mutateOriginal: func(service *corev1.Service) {
+				ipFamilyPolicy := corev1.IPFamilyPolicyPreferDualStack
+				service.Spec.ClusterIP = "1.2.3.4"
+				service.Spec.IPFamilies = []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol}
+				service.Spec.IPFamilyPolicy = &ipFamilyPolicy
+				service.Spec.ClusterIPs = []string{"1.2.3.4", "fd00::1"}
+			},
+			mutate: func(service *corev1.Service) {
+				service.Spec.IPFamilies = nil
+				service.Spec.IPFamilyPolicy = nil
+				service.Spec.ClusterIPs = nil
+				service.Spec.Selector = map[string]string{"foo": "bar"}
+			},
+			expect: true,
+			verify: func(original, mutated, updated *corev1.Service, t *testing.T) {
+				assert.Equal(t, original.Spec.ClusterIP, updated.Spec.ClusterIP)
+				assert.Equal(t, original.Spec.ClusterIPs, updated.Spec.ClusterIPs)
+				assert.Equal(t, original.Spec.IPFamilies, updated.Spec.IPFamilies)
+				if assert.NotNil(t, updated.Spec.IPFamilyPolicy) {
+					assert.Equal(t, *original.Spec.IPFamilyPolicy, *updated.Spec.IPFamilyPolicy)
+				}
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -151,11 +178,17 @@ func TestDNSServiceChanged(t *testing.T) {
 			},
 			Spec: corev1.ServiceSpec{},
 		}
+		if tc.mutateOriginal != nil {
+			tc.mutateOriginal(&original)
+		}
 		mutated := original.DeepCopy()
 		tc.mutate(mutated)
 		if changed, updated := serviceChanged(&original, mutated); changed != tc.expect {
 			t.Errorf("%s, expect serviceChanged to be %t, got %t", tc.description, tc.expect, changed)
 		} else if changed {
+			if tc.verify != nil {
+				tc.verify(&original, mutated, updated, t)
+			}
 			if changedAgain, _ := serviceChanged(mutated, updated); changedAgain {
 				t.Errorf("%s, serviceChanged does not behave as a fixed point function", tc.description)
 			}
