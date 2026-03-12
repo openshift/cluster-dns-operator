@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"slices"
 	"reflect"
 	"strings"
 	"testing"
@@ -695,14 +696,7 @@ func TestKubeRBACProxyArgs(t *testing.T) {
 				"--tls-cert-file=/etc/tls/private/tls.crt",
 				"--tls-private-key-file=/etc/tls/private/tls.key",
 			} {
-				found := false
-				for _, arg := range args {
-					if arg == required {
-						found = true
-						break
-					}
-				}
-				if !found {
+				if !slices.Contains(args, required) {
 					t.Errorf("missing required arg %q in kube-rbac-proxy args: %v", required, args)
 				}
 			}
@@ -754,6 +748,13 @@ func TestKubeRBACProxyArgs(t *testing.T) {
 	// Custom profile with nil spec → falls back to Intermediate.
 	test("Custom profile with nil spec falls back to Intermediate",
 		&v1.TLSSecurityProfile{Type: v1.TLSProfileCustomType, Custom: nil},
+		"VersionTLS12",
+		[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+	)
+
+	// Custom profile with unknown type → falls back to Intermediate.
+	test("Custom profile with unknown type falls back to Intermediate",
+		&v1.TLSSecurityProfile{Type: "UnknownType"},
 		"VersionTLS12",
 		[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
 	)
