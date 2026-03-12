@@ -2,6 +2,8 @@ package controller
 
 import (
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	v1 "github.com/openshift/api/config/v1"
@@ -23,7 +25,7 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 		},
 	}
 
-	if ds, err := desiredDNSDaemonSet(dns, coreDNSImage, kubeRBACProxyImage, map[string]string{}); err != nil {
+	if ds, err := desiredDNSDaemonSet(dns, coreDNSImage, kubeRBACProxyImage, map[string]string{}, nil); err != nil {
 		t.Errorf("invalid dns daemonset: %v", err)
 	} else {
 		// Validate the daemonset
@@ -165,7 +167,7 @@ func TestDesiredDNSDaemonsetWithCABundleConfigMaps(t *testing.T) {
 	cmMap["caBundle2"] = "ca-caBundle2-20"
 	cmMap["caBundle3"] = "ca-caBundle3-30"
 
-	if ds, err := desiredDNSDaemonSet(dns, coreDNSImage, kubeRBACProxyImage, cmMap); err != nil {
+	if ds, err := desiredDNSDaemonSet(dns, coreDNSImage, kubeRBACProxyImage, cmMap, nil); err != nil {
 		t.Errorf("invalid dns daemonset: %v", err)
 	} else {
 		// Validate the volumes
@@ -323,7 +325,7 @@ func TestDesiredDNSDaemonsetNodePlacement(t *testing.T) {
 			},
 		},
 	}
-	if ds, err := desiredDNSDaemonSet(dns, "", "", map[string]string{}); err != nil {
+	if ds, err := desiredDNSDaemonSet(dns, "", "", map[string]string{}, nil); err != nil {
 		t.Errorf("invalid dns daemonset: %v", err)
 	} else {
 		actualNodeSelector := ds.Spec.Template.Spec.NodeSelector
@@ -414,6 +416,13 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			description: "if a container command contents changed",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				daemonset.Spec.Template.Spec.Containers[0].Command[1] = "c"
+			},
+			expect: true,
+		},
+		{
+			description: "if a container args changed",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[1].Args = append(daemonset.Spec.Template.Spec.Containers[1].Args, "--foo")
 			},
 			expect: true,
 		},
@@ -645,6 +654,171 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 		} else if changed {
 			if changedAgain, _ := daemonsetConfigChanged(mutated, updated); changedAgain {
 				t.Errorf("%s, daemonsetConfigChanged does not behave as a fixed point function", tc.description)
+			}
+		}
+	}
+}
+
+// TestKubeRBACProxyArgs verifies that kubeRBACProxyArgs() produces the correct
+// --tls-cipher-suites and --tls-min-version arguments for each TLS profile type.
+func TestKubeRBACProxyArgs(t *testing.T) {
+	test := func(name string, profile *v1.TLSSecurityProfile, wantMinVersion string, wantCiphersContain []string) {
+		t.Helper()
+		t.Run(name, func(t *testing.T) {
+			args := kubeRBACProxyArgs(profile)
+
+			// Collect actual flags by name.
+			flags := map[string]string{}
+			for _, arg := range args {
+				if idx := strings.IndexByte(arg, '='); idx >= 0 {
+					flags[arg[:idx]] = arg[idx+1:]
+				}
+			}
+
+			// Verify --tls-min-version.
+			if got := flags["--tls-min-version"]; got != wantMinVersion {
+				t.Errorf("--tls-min-version: want %q, got %q", wantMinVersion, got)
+			}
+
+			// Verify all expected ciphers are present.
+			gotCiphers := flags["--tls-cipher-suites"]
+			for _, want := range wantCiphersContain {
+				if !strings.Contains(gotCiphers, want) {
+					t.Errorf("--tls-cipher-suites missing %q, got: %s", want, gotCiphers)
+				}
+			}
+
+			// Verify hardcoded args are always present.
+			for _, required := range []string{
+				"--logtostderr",
+				"--secure-listen-address=:9154",
+				"--upstream=http://127.0.0.1:9153/",
+				"--tls-cert-file=/etc/tls/private/tls.crt",
+				"--tls-private-key-file=/etc/tls/private/tls.key",
+			} {
+				if !slices.Contains(args, required) {
+					t.Errorf("missing required arg %q in kube-rbac-proxy args: %v", required, args)
+				}
+			}
+		})
+	}
+
+	// nil profile → Intermediate (default).
+	test("nil profile defaults to Intermediate", nil,
+		"VersionTLS12",
+		[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+	)
+
+	// Explicit Intermediate.
+	test("Intermediate profile",
+		&v1.TLSSecurityProfile{Type: v1.TLSProfileIntermediateType, Intermediate: &v1.IntermediateTLSProfile{}},
+		"VersionTLS12",
+		[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+	)
+
+	// Modern profile → TLS 1.3 only.
+	test("Modern profile",
+		&v1.TLSSecurityProfile{Type: v1.TLSProfileModernType, Modern: &v1.ModernTLSProfile{}},
+		"VersionTLS13",
+		[]string{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384"},
+	)
+
+	// Old profile → TLS 1.0+.
+	test("Old profile",
+		&v1.TLSSecurityProfile{Type: v1.TLSProfileOldType, Old: &v1.OldTLSProfile{}},
+		"VersionTLS10",
+		[]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+	)
+
+	// Custom profile with explicit ciphers and version.
+	test("Custom profile",
+		&v1.TLSSecurityProfile{
+			Type: v1.TLSProfileCustomType,
+			Custom: &v1.CustomTLSProfile{
+				TLSProfileSpec: v1.TLSProfileSpec{
+					Ciphers:       []string{"ECDHE-RSA-AES256-GCM-SHA384", "ECDHE-ECDSA-AES256-GCM-SHA384"},
+					MinTLSVersion: v1.VersionTLS12,
+				},
+			},
+		},
+		"VersionTLS12",
+		[]string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"},
+	)
+
+	// Custom profile with nil spec → falls back to Intermediate.
+	test("Custom profile with nil spec falls back to Intermediate",
+		&v1.TLSSecurityProfile{Type: v1.TLSProfileCustomType, Custom: nil},
+		"VersionTLS12",
+		[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+	)
+
+	// Custom profile with unknown type → falls back to Intermediate.
+	test("Custom profile with unknown type falls back to Intermediate",
+		&v1.TLSSecurityProfile{Type: "UnknownType"},
+		"VersionTLS12",
+		[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+	)
+
+	// Custom profile with all unsupported ciphers → falls back to Intermediate.
+	test("Custom profile with unsupported ciphers falls back to Intermediate",
+		&v1.TLSSecurityProfile{
+			Type: v1.TLSProfileCustomType,
+			Custom: &v1.CustomTLSProfile{
+				TLSProfileSpec: v1.TLSProfileSpec{
+					Ciphers:       []string{"DHE-RSA-AES128-GCM-SHA256"}, // Not supported by Go
+					MinTLSVersion: v1.VersionTLS12,
+				},
+			},
+		},
+		"VersionTLS12",
+		[]string{"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+	)
+}
+
+// TestDesiredDNSDaemonSetTLSArgs verifies that desiredDNSDaemonSet() sets the
+// correct kube-rbac-proxy args when a TLS profile is specified.
+func TestDesiredDNSDaemonSetTLSArgs(t *testing.T) {
+	coreDNSImage := "quay.io/openshift/coredns:test"
+	kubeRBACProxyImage := "quay.io/openshift/origin-kube-rbac-proxy:test"
+	dns := &operatorv1.DNS{
+		ObjectMeta: metav1.ObjectMeta{Name: DefaultDNSController},
+	}
+
+	modernProfile := &v1.TLSSecurityProfile{
+		Type:   v1.TLSProfileModernType,
+		Modern: &v1.ModernTLSProfile{},
+	}
+
+	ds, err := desiredDNSDaemonSet(dns, coreDNSImage, kubeRBACProxyImage, map[string]string{}, modernProfile)
+	if err != nil {
+		t.Fatalf("desiredDNSDaemonSet() failed: %v", err)
+	}
+
+	var rbacArgs []string
+	for _, c := range ds.Spec.Template.Spec.Containers {
+		if c.Name == "kube-rbac-proxy" {
+			rbacArgs = c.Args
+			break
+		}
+	}
+
+	// Modern profile must produce --tls-min-version=VersionTLS13.
+	found := false
+	for _, arg := range rbacArgs {
+		if arg == "--tls-min-version=VersionTLS13" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected --tls-min-version=VersionTLS13 in kube-rbac-proxy args, got: %v", rbacArgs)
+	}
+
+	// CBC ciphers must NOT appear in Modern profile.
+	for _, arg := range rbacArgs {
+		if strings.HasPrefix(arg, "--tls-cipher-suites=") {
+			if strings.Contains(arg, "CBC") {
+				t.Errorf("Modern profile must not include CBC ciphers, got: %s", arg)
 			}
 		}
 	}
