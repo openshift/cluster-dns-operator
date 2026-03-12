@@ -98,7 +98,11 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	if err := c.Watch(source.Kind[client.Object](operatorCache, &corev1.ConfigMap{}, handler.EnqueueRequestForOwner(scheme, mapper, &operatorv1.DNS{}))); err != nil {
 		return nil, err
 	}
-	if err := c.Watch(source.Kind[client.Object](operatorCache, &networkingv1.NetworkPolicy{}, enqueueRequestForOwningDNS())); err != nil {
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &networkingv1.NetworkPolicy{}, enqueueRequestForOwningDNS(), predicate.NewPredicateFuncs(
+		func(o client.Object) bool {
+			return o.GetNamespace() == DefaultDNSOperandNamespaceName().Name
+		},
+	))); err != nil {
 		return nil, err
 	}
 
