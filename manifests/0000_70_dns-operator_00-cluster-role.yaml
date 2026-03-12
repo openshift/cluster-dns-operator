@@ -97,9 +97,7 @@ rules:
 - apiGroups:
   - config.openshift.io
   resources:
-  - apiservers
   - clusteroperators
-  - networks
   verbs:
   - create
   - get
@@ -116,8 +114,10 @@ rules:
 - apiGroups:
   - config.openshift.io
   resources:
-  - featuregates
+  - apiservers
   - clusterversions
+  - featuregates
+  - networks
   verbs:
   - get
   - list

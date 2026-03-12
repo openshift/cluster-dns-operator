@@ -531,7 +531,7 @@ func (r *reconciler) ensureDNS(dns *operatorv1.DNS, reconcileResult *reconcile.R
 	var tlsSecurityProfile *configv1.TLSSecurityProfile
 	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, apiServer); err != nil {
 		if !errors.IsNotFound(err) {
-			errs = append(errs, fmt.Errorf("failed to get apiserver config: %v", err))
+			errs = append(errs, fmt.Errorf("failed to get apiserver config: %w", err))
 			return utilerrors.NewAggregate(errs)
 		} else {
 			logrus.Warningf("apiserver config 'cluster' not found, using Intermediate TLS profile as default")

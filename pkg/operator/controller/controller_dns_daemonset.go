@@ -202,25 +202,19 @@ func kubeRBACProxyArgs(tlsSecurityProfile *configv1.TLSSecurityProfile) []string
 // containing concrete cipher suite names and a minimum TLS version.
 // A nil profile defaults to the Intermediate profile.
 func tlsProfileSpecForProfile(profile *configv1.TLSSecurityProfile) *configv1.TLSProfileSpec {
-	if profile == nil {
-		return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
-	}
-	switch profile.Type {
-	case configv1.TLSProfileOldType:
-		return configv1.TLSProfiles[configv1.TLSProfileOldType]
-	case configv1.TLSProfileModernType:
-		return configv1.TLSProfiles[configv1.TLSProfileModernType]
-	case configv1.TLSProfileCustomType:
-		if profile.Custom != nil {
-			return &profile.Custom.TLSProfileSpec
+	if profile != nil {
+		switch profile.Type {
+		case configv1.TLSProfileOldType, configv1.TLSProfileModernType:
+			return configv1.TLSProfiles[profile.Type]
+		case configv1.TLSProfileCustomType:
+			if profile.Custom != nil {
+				return &profile.Custom.TLSProfileSpec
+			}
+			// Malformed custom profile, fall back to Intermediate.
+			logrus.Warningf("tlsProfileSpecForProfile: custom TLS profile has nil spec, using Intermediate default")
 		}
-		// Malformed custom profile, fall back to Intermediate.
-		logrus.Warningf("tlsProfileSpecForProfile: custom TLS profile has nil spec, using Intermediate default")
-		return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
-	default:
-		// Includes TLSProfileIntermediateType and any unknown future type.
-		return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
 	}
+	return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
 }
 
 // openSSLNamesFromIANA is a helper that returns the subset of OpenSSL cipher
