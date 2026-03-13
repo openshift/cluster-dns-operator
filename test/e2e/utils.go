@@ -28,6 +28,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -236,7 +237,10 @@ func upstreamPod(name, ns, image, cfgMap string) *corev1.Pod {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
-			Labels:    map[string]string{"test": "upstream"},
+			Labels: map[string]string{
+				"test": "upstream",
+				"type": "test-pod",
+			},
 		},
 		Spec: corev1.PodSpec{
 			Volumes:            []corev1.Volume{cfgVol},
@@ -297,6 +301,7 @@ func buildPod(name, ns, image string, cmd []string) *corev1.Pod {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
+			Labels:    map[string]string{"type": "test-pod"},
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{container},
@@ -433,7 +438,10 @@ func upstreamTLSPod(name, ns, image string, configMap *corev1.ConfigMap) *corev1
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
-			Labels:    map[string]string{"test": "upstream-tls"},
+			Labels: map[string]string{
+				"test": "upstream-tls",
+				"type": "test-pod",
+			},
 		},
 		Spec: corev1.PodSpec{
 			Volumes:    []corev1.Volume{volume},
@@ -584,4 +592,32 @@ func lookForSubStringsInPodLogOneShot(ns, pod, container string, expectedStrings
 	slicedResult := strings.Split(result, "\"")
 	slicedResultToString := strings.Join(slicedResult, " ")
 	return checkSubStrings(slicedResultToString, expectedStrings)
+}
+
+// buildTestPodNetworkPolicy returns a network policy that allows all traffic to
+// and from pods with the label "type: test-pod".
+func buildTestPodNetworkPolicy(name types.NamespacedName) *networkingv1.NetworkPolicy {
+	return &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: name.Namespace,
+			Name:      name.Name,
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{"type": "test-pod"},
+			},
+			Ingress: []networkingv1.NetworkPolicyIngressRule{{
+				From: []networkingv1.NetworkPolicyPeer{
+					{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0"}},
+					{IPBlock: &networkingv1.IPBlock{CIDR: "::/0"}},
+				},
+			}},
+			Egress: []networkingv1.NetworkPolicyEgressRule{{
+				To: []networkingv1.NetworkPolicyPeer{
+					{IPBlock: &networkingv1.IPBlock{CIDR: "0.0.0.0/0"}},
+					{IPBlock: &networkingv1.IPBlock{CIDR: "::/0"}},
+				},
+			}},
+		},
+	}
 }
