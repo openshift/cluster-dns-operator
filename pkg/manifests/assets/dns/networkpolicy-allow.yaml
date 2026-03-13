@@ -23,17 +23,8 @@ spec:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: openshift-monitoring
-  # Allow the dns operator namespaces to hit the healthcheck ports
-  - ports:
-    - protocol: TCP
-      port: 8080
-    - protocol: TCP
-      port: 8181
-    from:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: openshift-dns-operator
   egress:
+  # This rule is required so the DNS instances can reach any upstream resolver
   - to:
     - ipBlock:
         cidr: 0.0.0.0/0
