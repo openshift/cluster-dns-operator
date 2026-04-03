@@ -401,17 +401,19 @@ func (r *reconciler) daemonsetUpdateIsSafe(current, updated *appsv1.DaemonSet) (
 }
 
 func tolerationsTolerateTaints(tolerations []corev1.Toleration, taints []corev1.Taint) bool {
-	if len(taints) == 0 {
-		return true
-	}
 	for _, taint := range taints {
+		tolerated := false
 		for _, toleration := range tolerations {
 			if toleration.ToleratesTaint(logr.Discard(), &taint, false) {
-				return true
+				tolerated = true
+				break
 			}
 		}
+		if !tolerated {
+			return false
+		}
 	}
-	return false
+	return true
 }
 
 // daemonsetConfigChanged checks if current config matches the expected config
