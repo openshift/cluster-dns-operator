@@ -4,9 +4,9 @@ When contributing to this repository, strictly adhere to these OpenShift ecosyst
 
 ## Go Coding Guidelines
 - **Idempotency is King**: Reconciliation loops MUST be idempotent. Do not blindly recreate resources; always fetch, compare, and update only if a diff exists.
-- **Never Hardcode**: Do not hardcode namespaces, secrets, or resource names unless defined as strict API constants. Watch namespaces must be configurable.
+- **Never Hardcode (for new/modified code)**: Avoid hardcoding namespaces, secrets, or resource names unless defined as strict API constants. Prefer shared constants and configurable watch namespaces.
 - **Structural Schemas**: All Custom Resource Definitions (CRDs) must use OpenAPI v3 validation to strictly validate user input.
-- **Principle of Least Privilege**: The operator must run with minimal RBAC permissions using dedicated ServiceAccounts. Do not add broad permissions.
+- **Principle of Least Privilege (for new/modified RBAC)**: Use dedicated ServiceAccounts and avoid introducing broader permissions than required. Existing broad permissions should be tracked as technical debt and tightened incrementally.
 
 ## CI/CD and Prow Caveats
 OpenShift uses **Prow** for CI/CD automation.

@@ -25,7 +25,7 @@ This CR is the single source of truth for how DNS should behave in the cluster. 
 
 ### Data flow:
 1. The `dns-controller` detects a change to the `dns.operator.openshift.io/default` CR.
-2. The Reconciler calls `ensureDNSConfigMap` → `desiredDNSConfigmap` → `desiredCorefile`.
+2. The Reconciler calls `ensureDNSConfigMap` → `desiredDNSConfigMap` → `desiredCorefile`.
 3. `desiredCorefile` populates a Go `text/template` with values from the CR's spec.
 4. The rendered Corefile string is placed into the `Data` field of a ConfigMap named `dns-default` in the `openshift-dns` namespace.
 5. The operator creates or updates this ConfigMap via the API.
