@@ -203,9 +203,7 @@ func TestDesiredDNSServiceInternalTrafficPolicy(t *testing.T) {
 	daemonsetRef := metav1.OwnerReference{}
 	svc := desiredDNSService(dns, "172.30.0.10", false, daemonsetRef)
 
-	if !assert.NotNil(t, svc.Spec.InternalTrafficPolicy, "expected InternalTrafficPolicy to be set") {
-		return
-	}
+	assert.NotNil(t, svc.Spec.InternalTrafficPolicy)
 	assert.Equal(t, corev1.ServiceInternalTrafficPolicyLocal, *svc.Spec.InternalTrafficPolicy,
 		"dns-default service must use InternalTrafficPolicy Local to ensure node-local DNS resolution")
 }
