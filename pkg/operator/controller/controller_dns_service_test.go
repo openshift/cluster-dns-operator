@@ -196,6 +196,17 @@ func TestDNSServiceChanged(t *testing.T) {
 	}
 }
 
+func TestDesiredDNSServiceInternalTrafficPolicy(t *testing.T) {
+	dns := &operatorv1.DNS{
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+	}
+	daemonsetRef := metav1.OwnerReference{}
+	svc := desiredDNSService(dns, "172.30.0.10", false, daemonsetRef)
+
+	assert.NotNil(t, svc.Spec.InternalTrafficPolicy)
+	assert.Equal(t, corev1.ServiceInternalTrafficPolicyLocal, *svc.Spec.InternalTrafficPolicy)
+}
+
 func Test_shouldEnableTopologyAwareHints(t *testing.T) {
 	emptyLabels := map[string]string{}
 	someCPU := map[corev1.ResourceName]resource.Quantity{
