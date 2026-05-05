@@ -204,8 +204,7 @@ func TestDesiredDNSServiceInternalTrafficPolicy(t *testing.T) {
 	svc := desiredDNSService(dns, "172.30.0.10", false, daemonsetRef)
 
 	assert.NotNil(t, svc.Spec.InternalTrafficPolicy)
-	assert.Equal(t, corev1.ServiceInternalTrafficPolicyLocal, *svc.Spec.InternalTrafficPolicy,
-		"dns-default service must use InternalTrafficPolicy Local to ensure node-local DNS resolution")
+	assert.Equal(t, corev1.ServiceInternalTrafficPolicyLocal, *svc.Spec.InternalTrafficPolicy)
 }
 
 func Test_shouldEnableTopologyAwareHints(t *testing.T) {
