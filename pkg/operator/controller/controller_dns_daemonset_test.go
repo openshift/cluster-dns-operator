@@ -78,6 +78,11 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 				if e, a := coreDNSImage, c.Image; e != a {
 					t.Errorf("expected daemonset dns image %q, got %q", e, a)
 				}
+				if c.Lifecycle == nil || c.Lifecycle.PreStop == nil {
+					t.Error("expected dns container to have a preStop lifecycle hook")
+				} else if !reflect.DeepEqual(c.Lifecycle.PreStop.Exec.Command, []string{"sleep", "5"}) {
+					t.Errorf("unexpected preStop command: %v", c.Lifecycle.PreStop.Exec.Command)
+				}
 			case "kube-rbac-proxy":
 				if e, a := kubeRBACProxyImage, c.Image; e != a {
 					t.Errorf("expected daemonset kube rbac proxy image %q, got %q", e, a)
@@ -85,6 +90,11 @@ func TestDesiredDNSDaemonset(t *testing.T) {
 			default:
 				t.Errorf("unexpected daemonset container %q", c.Name)
 			}
+		}
+		if ds.Spec.Template.Spec.TerminationGracePeriodSeconds == nil {
+			t.Error("expected terminationGracePeriodSeconds to be set")
+		} else if *ds.Spec.Template.Spec.TerminationGracePeriodSeconds != 40 {
+			t.Errorf("expected terminationGracePeriodSeconds=40, got %d", *ds.Spec.Template.Spec.TerminationGracePeriodSeconds)
 		}
 	}
 }
@@ -423,6 +433,19 @@ func TestDaemonsetConfigChanged(t *testing.T) {
 			description: "if a container args changed",
 			mutate: func(daemonset *appsv1.DaemonSet) {
 				daemonset.Spec.Template.Spec.Containers[1].Args = append(daemonset.Spec.Template.Spec.Containers[1].Args, "--foo")
+			},
+			expect: true,
+		},
+		{
+			description: "if a container lifecycle is added",
+			mutate: func(daemonset *appsv1.DaemonSet) {
+				daemonset.Spec.Template.Spec.Containers[0].Lifecycle = &corev1.Lifecycle{
+					PreStop: &corev1.LifecycleHandler{
+						Exec: &corev1.ExecAction{
+							Command: []string{"sleep", "5"},
+						},
+					},
+				}
 			},
 			expect: true,
 		},

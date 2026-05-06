@@ -527,6 +527,11 @@ func daemonsetConfigChanged(current, expected *appsv1.DaemonSet) (bool, *appsv1.
 				changed = true
 				break
 			}
+			if !cmp.Equal(a.Lifecycle, b.Lifecycle, cmpopts.EquateEmpty()) {
+				updated.Spec.Template.Spec.Containers = expected.Spec.Template.Spec.Containers
+				changed = true
+				break
+			}
 		}
 	}
 
