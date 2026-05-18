@@ -36,4 +36,5 @@ This CR is the single source of truth for how DNS should behave in the cluster. 
   - `Managed`: The operator actively reconciles and overwrites manual changes.
   - `Unmanaged`: The operator pauses reconciliation, allowing manual intervention or debugging.
   - `Removed`: The operator tears down the managed components.
+  - `Force`: The operator aggressively enforces the desired state, even if it might be destructive or bypass some safety checks.
 - **Idempotency**: All `ensure*` functions (e.g., `ensureDNSDaemonSet`) MUST be idempotent. They must compare the existing state with the desired state and apply changes only if there is a diff.
