@@ -111,6 +111,7 @@ func TestDNSStatusConditions(t *testing.T) {
 					DesiredNumberScheduled: tc.inputs.desireDNS,
 					NumberAvailable:        tc.inputs.availDNS,
 					UpdatedNumberScheduled: tc.inputs.updatedDNS,
+					CurrentNumberScheduled: tc.inputs.desireDNS,
 				},
 			}
 			dnsDaemonset.Spec.Template.Spec.NodeSelector = nodeSelectorForDNS(&operatorv1.DNS{})
@@ -132,6 +133,7 @@ func TestDNSStatusConditions(t *testing.T) {
 					DesiredNumberScheduled: tc.inputs.desireNR,
 					NumberAvailable:        tc.inputs.availNR,
 					UpdatedNumberScheduled: tc.inputs.updatedNR,
+					CurrentNumberScheduled: tc.inputs.desireNR,
 				},
 			}
 		}
@@ -240,6 +242,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: int32(desired),
 				NumberAvailable:        int32(available),
+				CurrentNumberScheduled: int32(desired),
 			},
 		}
 	}
@@ -471,6 +474,7 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: int32(desired),
 				NumberAvailable:        int32(available),
+				CurrentNumberScheduled: int32(desired),
 				UpdatedNumberScheduled: int32(updated),
 			},
 		}
@@ -638,6 +642,7 @@ func TestSkippingStatusUpdates(t *testing.T) {
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: int32(desired),
 				NumberAvailable:        int32(available),
+				CurrentNumberScheduled: int32(desired),
 				UpdatedNumberScheduled: int32(updated),
 			},
 		}

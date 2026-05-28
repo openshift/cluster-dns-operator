@@ -208,7 +208,9 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 		have := dnsDaemonset.Status.UpdatedNumberScheduled // num of nodes running the updated pod.
 		// It's progressing when have < want.  If have >= want, that's okay.
 		if have < want {
-			messages = append(messages, fmt.Sprintf("Have %d up-to-date DNS pods, want %d.", have, want))
+			if isDaemonSetRollingOut(dnsDaemonset) {
+				messages = append(messages, fmt.Sprintf("Have %d up-to-date DNS pods, want %d.", have, want))
+			}
 		}
 
 		haveSelector := dnsDaemonset.Spec.Template.Spec.NodeSelector
@@ -231,7 +233,9 @@ func computeDNSProgressingCondition(oldCondition *operatorv1.OperatorCondition, 
 
 		// It's progressing when have < want.  If have >= want, that's okay.
 		if have < want {
-			messages = append(messages, fmt.Sprintf("Have %d available node-resolver pods, want %d.", have, want))
+			if isDaemonSetRollingOut(nodeResolverDaemonset) {
+				messages = append(messages, fmt.Sprintf("Have %d available node-resolver pods, want %d.", have, want))
+			}
 		}
 	}
 	if len(messages) != 0 {
@@ -349,4 +353,17 @@ func lastTransitionTimeIsRecent(currTime, prevTime time.Time, toleration time.Du
 	default:
 		return elapsed <= toleration
 	}
+}
+
+// isDaemonSetRollingOut determines if the DaemonSet is currently in a rollout state
+// (i.e., actively replacing old pods with new ones or applying a new configuration)
+// versus simply stabilizing (e.g., waiting for pods to start after a node reboot or scale up).
+func isDaemonSetRollingOut(ds *appsv1.DaemonSet) bool {
+	if ds.Generation != ds.Status.ObservedGeneration {
+		return true
+	}
+	if ds.Status.UpdatedNumberScheduled < ds.Status.CurrentNumberScheduled {
+		return true
+	}
+	return false
 }
