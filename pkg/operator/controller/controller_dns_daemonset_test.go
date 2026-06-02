@@ -823,3 +823,88 @@ func TestDesiredDNSDaemonSetTLSArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestTolerationsTolerateTaints(t *testing.T) {
+	tests := []struct {
+		name        string
+		tolerations []corev1.Toleration
+		taints      []corev1.Taint
+		expect      bool
+	}{
+		{
+			name:        "no taints",
+			tolerations: []corev1.Toleration{{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists}},
+			taints:      []corev1.Taint{},
+			expect:      true,
+		},
+		{
+			name: "single taint tolerated",
+			tolerations: []corev1.Toleration{
+				{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists},
+			},
+			taints: []corev1.Taint{
+				{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+			},
+			expect: true,
+		},
+		{
+			name:        "single taint not tolerated",
+			tolerations: []corev1.Toleration{},
+			taints: []corev1.Taint{
+				{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+			},
+			expect: false,
+		},
+		{
+			name: "multiple taints all tolerated",
+			tolerations: []corev1.Toleration{
+				{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists},
+				{Key: "node.kubernetes.io/disk-pressure", Operator: corev1.TolerationOpExists},
+			},
+			taints: []corev1.Taint{
+				{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+				{Key: "node.kubernetes.io/disk-pressure", Effect: corev1.TaintEffectNoSchedule},
+			},
+			expect: true,
+		},
+		{
+			name: "multiple taints only some tolerated",
+			tolerations: []corev1.Toleration{
+				{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists},
+			},
+			taints: []corev1.Taint{
+				{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+				{Key: "node.kubernetes.io/disk-pressure", Effect: corev1.TaintEffectNoSchedule},
+			},
+			expect: false,
+		},
+		{
+			name:        "multiple taints none tolerated",
+			tolerations: []corev1.Toleration{},
+			taints: []corev1.Taint{
+				{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+				{Key: "node.kubernetes.io/disk-pressure", Effect: corev1.TaintEffectNoSchedule},
+			},
+			expect: false,
+		},
+		{
+			name: "wildcard toleration tolerates all taints",
+			tolerations: []corev1.Toleration{
+				{Operator: corev1.TolerationOpExists},
+			},
+			taints: []corev1.Taint{
+				{Key: "node-role.kubernetes.io/infra", Effect: corev1.TaintEffectNoSchedule},
+				{Key: "node.kubernetes.io/not-ready", Effect: corev1.TaintEffectNoExecute},
+			},
+			expect: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tolerationsTolerateTaints(tc.tolerations, tc.taints)
+			if got != tc.expect {
+				t.Errorf("expected %v, got %v", tc.expect, got)
+			}
+		})
+	}
+}
