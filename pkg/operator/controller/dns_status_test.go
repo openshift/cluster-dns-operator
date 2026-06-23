@@ -595,6 +595,32 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
+		{
+			name:      "DNS daemonset scaling up but not rolling out should not be progressing",
+			clusterIP: "172.30.0.10",
+			dnsDaemonset: func() *appsv1.DaemonSet {
+				ds := makeDaemonSet(6, 5, 5, defaultSelector, defaultTolerations)
+				ds.Status.CurrentNumberScheduled = 5
+				return ds
+			}(),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
+			expected:     operatorv1.ConditionFalse,
+		},
+		{
+			name:         "node-resolver daemonset scaling up but not rolling out should not be progressing",
+			clusterIP:    "172.30.0.10",
+			dnsDaemonset: makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
+			nrDaemonset: func() *appsv1.DaemonSet {
+				ds := makeDaemonSet(6, 5, 5, defaultSelector, defaultTolerations)
+				ds.Status.CurrentNumberScheduled = 5
+				return ds
+			}(),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
+			expected:     operatorv1.ConditionFalse,
+		},
 	}
 
 	for _, tc := range testCases {
