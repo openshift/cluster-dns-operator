@@ -1,6 +1,7 @@
 package status
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -799,6 +800,48 @@ func TestComputeOperatorDegradedCondition(t *testing.T) {
 		}
 		if !cmp.Equal(actual, expected, conditionsCmpOpts...) {
 			t.Errorf("%q: expected %#v, got %#v", tc.description, expected, actual)
+		}
+	}
+}
+
+// TestIsUpgradingMessageOrder verifies that isUpgrading returns messages in a
+// stable, sorted order regardless of map iteration order. Non-deterministic
+// message ordering caused a self-sustaining ClusterOperator write loop: each
+// reconcile produced a different Message string, operatorStatusesEqual returned
+// false, the ClusterOperator was written, the CO watch fired, and the cycle
+// repeated indefinitely during upgrades.
+func TestIsUpgradingMessageOrder(t *testing.T) {
+	// Two components upgrading simultaneously — map iteration order is random,
+	// so call isUpgrading many times and confirm the messages slice is always
+	// returned in the same sorted order.
+	curVersions := map[string]string{
+		OperatorVersionName: "v1",
+		CoreDNSVersionName:  "dns-v1",
+		KubeRBACProxyName:   "rbac-v1",
+	}
+	oldVersions := map[string]string{
+		OperatorVersionName: "v0",
+		CoreDNSVersionName:  "dns-v0",
+		KubeRBACProxyName:   "rbac-v0",
+	}
+	newVersions := map[string]string{
+		OperatorVersionName: "v2",
+		CoreDNSVersionName:  "dns-v2",
+		KubeRBACProxyName:   "rbac-v2",
+	}
+
+	var first []string
+	for i := 0; i < 100; i++ {
+		upgrading, messages := isUpgrading(curVersions, oldVersions, newVersions)
+		if !upgrading {
+			t.Fatal("expected upgrading=true")
+		}
+		if i == 0 {
+			first = messages
+			continue
+		}
+		if !reflect.DeepEqual(first, messages) {
+			t.Errorf("iteration %d: messages order changed\n  first:   %v\n  current: %v", i, first, messages)
 		}
 	}
 }
