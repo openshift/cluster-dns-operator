@@ -811,9 +811,6 @@ func TestComputeOperatorDegradedCondition(t *testing.T) {
 // false, the ClusterOperator was written, the CO watch fired, and the cycle
 // repeated indefinitely during upgrades.
 func TestIsUpgradingMessageOrder(t *testing.T) {
-	// Two components upgrading simultaneously — map iteration order is random,
-	// so call isUpgrading many times and confirm the messages slice is always
-	// returned in the same sorted order.
 	curVersions := map[string]string{
 		OperatorVersionName: "v1",
 		CoreDNSVersionName:  "dns-v1",
@@ -830,18 +827,27 @@ func TestIsUpgradingMessageOrder(t *testing.T) {
 		KubeRBACProxyName:   "rbac-v2",
 	}
 
-	var first []string
+	// expectedMessages is the lexicographically sorted set of messages
+	// isUpgrading must produce for the above inputs. "Upgraded" sorts before
+	// "Upgrading" (byte 8: 'd' < 'i'), and within each prefix components are
+	// ordered alphabetically: coredns < kube-rbac-proxy < operator.
+	expectedMessages := []string{
+		`Upgraded coredns to "dns-v1".`,
+		`Upgraded kube-rbac-proxy to "rbac-v1".`,
+		`Upgraded operator to "v1".`,
+		`Upgrading coredns to "dns-v2".`,
+		`Upgrading kube-rbac-proxy to "rbac-v2".`,
+		`Upgrading operator to "v2".`,
+	}
+
+	// Call isUpgrading many times to exercise Go's randomized map iteration.
 	for i := 0; i < 100; i++ {
 		upgrading, messages := isUpgrading(curVersions, oldVersions, newVersions)
 		if !upgrading {
 			t.Fatal("expected upgrading=true")
 		}
-		if i == 0 {
-			first = messages
-			continue
-		}
-		if !reflect.DeepEqual(first, messages) {
-			t.Errorf("iteration %d: messages order changed\n  first:   %v\n  current: %v", i, first, messages)
+		if !reflect.DeepEqual(messages, expectedMessages) {
+			t.Errorf("iteration %d: unexpected messages\n  want: %v\n  got:  %v", i, expectedMessages, messages)
 		}
 	}
 }
