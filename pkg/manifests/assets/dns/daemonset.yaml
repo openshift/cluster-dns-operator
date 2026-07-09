@@ -11,6 +11,13 @@ spec:
     spec:
       serviceAccountName: dns
       priorityClassName: system-node-critical
+      hostUsers: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: dns
         # image is set at runtime
@@ -56,6 +63,10 @@ spec:
             memory: 70Mi
         securityContext:
           readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
       - name: kube-rbac-proxy
         # image and args are set at runtime by the operator based on the
         # centralized TLS security profile from apiservers.config.openshift.io/cluster
