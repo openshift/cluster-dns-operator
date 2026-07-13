@@ -111,6 +111,7 @@ func TestDNSStatusConditions(t *testing.T) {
 					DesiredNumberScheduled: tc.inputs.desireDNS,
 					NumberAvailable:        tc.inputs.availDNS,
 					UpdatedNumberScheduled: tc.inputs.updatedDNS,
+					CurrentNumberScheduled: tc.inputs.desireDNS,
 				},
 			}
 			dnsDaemonset.Spec.Template.Spec.NodeSelector = nodeSelectorForDNS(&operatorv1.DNS{})
@@ -132,6 +133,7 @@ func TestDNSStatusConditions(t *testing.T) {
 					DesiredNumberScheduled: tc.inputs.desireNR,
 					NumberAvailable:        tc.inputs.availNR,
 					UpdatedNumberScheduled: tc.inputs.updatedNR,
+					CurrentNumberScheduled: tc.inputs.desireNR,
 				},
 			}
 		}
@@ -240,6 +242,7 @@ func TestComputeDNSDegradedCondition(t *testing.T) {
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: int32(desired),
 				NumberAvailable:        int32(available),
+				CurrentNumberScheduled: int32(desired),
 			},
 		}
 	}
@@ -471,6 +474,7 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: int32(desired),
 				NumberAvailable:        int32(available),
+				CurrentNumberScheduled: int32(desired),
 				UpdatedNumberScheduled: int32(updated),
 			},
 		}
@@ -591,6 +595,32 @@ func TestComputeDNSProgressingCondition(t *testing.T) {
 			tolerations:  customTolerations,
 			expected:     operatorv1.ConditionTrue,
 		},
+		{
+			name:      "DNS daemonset scaling up but not rolling out should not be progressing",
+			clusterIP: "172.30.0.10",
+			dnsDaemonset: func() *appsv1.DaemonSet {
+				ds := makeDaemonSet(6, 5, 5, defaultSelector, defaultTolerations)
+				ds.Status.CurrentNumberScheduled = 5
+				return ds
+			}(),
+			nrDaemonset:  makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
+			expected:     operatorv1.ConditionFalse,
+		},
+		{
+			name:         "node-resolver daemonset scaling up but not rolling out should not be progressing",
+			clusterIP:    "172.30.0.10",
+			dnsDaemonset: makeDaemonSet(6, 6, 6, defaultSelector, defaultTolerations),
+			nrDaemonset: func() *appsv1.DaemonSet {
+				ds := makeDaemonSet(6, 5, 5, defaultSelector, defaultTolerations)
+				ds.Status.CurrentNumberScheduled = 5
+				return ds
+			}(),
+			nodeSelector: defaultSelector,
+			tolerations:  defaultTolerations,
+			expected:     operatorv1.ConditionFalse,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -638,6 +668,7 @@ func TestSkippingStatusUpdates(t *testing.T) {
 			Status: appsv1.DaemonSetStatus{
 				DesiredNumberScheduled: int32(desired),
 				NumberAvailable:        int32(available),
+				CurrentNumberScheduled: int32(desired),
 				UpdatedNumberScheduled: int32(updated),
 			},
 		}
