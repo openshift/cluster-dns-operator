@@ -56,6 +56,10 @@ spec:
             memory: 70Mi
         securityContext:
           readOnlyRootFilesystem: true
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sleep", "5"]
       - name: kube-rbac-proxy
         # image and args are set at runtime by the operator based on the
         # centralized TLS security profile from apiservers.config.openshift.io/cluster
@@ -75,6 +79,7 @@ spec:
           name: tmp-dir
         securityContext:
           readOnlyRootFilesystem: true
+      terminationGracePeriodSeconds: 40
       dnsPolicy: Default
       # nodeSelector is set at runtime.
       volumes:
