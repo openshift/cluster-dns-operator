@@ -32,6 +32,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 // Operator is the scaffolding for the dns operator. It sets up dependencies
@@ -89,8 +91,19 @@ func New(ctx context.Context, config operatorconfig.Config, kubeConfig *rest.Con
 
 	dnsNameResolverEnabled := featureGates.Enabled(features.FeatureGateDNSNameResolver)
 
+	metricsOpts := metricsserver.Options{
+		BindAddress: config.MetricsBindAddress,
+	}
+	if config.MetricsCertDir != "" {
+		metricsOpts.SecureServing = true
+		metricsOpts.CertDir = config.MetricsCertDir
+		metricsOpts.FilterProvider = filters.WithAuthenticationAndAuthorization
+		metricsOpts.TLSOpts = config.MetricsTLSOpts
+	}
+
 	operatorManager, err := manager.New(kubeConfig, manager.Options{
-		Scheme: operatorclient.GetScheme(),
+		Scheme:  operatorclient.GetScheme(),
+		Metrics: metricsOpts,
 		Cache: cache.Options{
 			DefaultNamespaces: map[string]cache.Config{
 				config.OperatorNamespace:                              {},

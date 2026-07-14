@@ -166,7 +166,7 @@ func desiredDNSDaemonSet(dns *operatorv1.DNS, coreDNSImage, kubeRBACProxyImage s
 func kubeRBACProxyArgs(tlsSecurityProfile *configv1.TLSSecurityProfile) []string {
 	// Resolve the profile to a concrete spec. A nil profile means "use the
 	// platform default", which is Intermediate.
-	profileSpec := tlsProfileSpecForProfile(tlsSecurityProfile)
+	profileSpec := TLSProfileSpecForSecurityProfile(tlsSecurityProfile)
 
 	// The TLSProfiles map contains OpenSSL cipher names. kube-rbac-proxy (and
 	// Go's crypto/tls) expects IANA names, so convert them.
@@ -196,26 +196,9 @@ func kubeRBACProxyArgs(tlsSecurityProfile *configv1.TLSSecurityProfile) []string
 		"--tls-private-key-file=/etc/tls/private/tls.key",
 		fmt.Sprintf("--tls-cipher-suites=%s", strings.Join(ianaCiphers, ",")),
 		fmt.Sprintf("--tls-min-version=%s", profileSpec.MinTLSVersion),
+		// TODO(NE-2743): Pass --tls-curve-preferences once kube-rbac-proxy
+		// supports it (kube-rbac-proxy#414), using profileSpec.Groups.
 	}
-}
-
-// tlsProfileSpecForProfile resolves a TLSSecurityProfile to a TLSProfileSpec
-// containing concrete cipher suite names and a minimum TLS version.
-// A nil profile defaults to the Intermediate profile.
-func tlsProfileSpecForProfile(profile *configv1.TLSSecurityProfile) *configv1.TLSProfileSpec {
-	if profile != nil {
-		switch profile.Type {
-		case configv1.TLSProfileOldType, configv1.TLSProfileModernType:
-			return configv1.TLSProfiles[profile.Type]
-		case configv1.TLSProfileCustomType:
-			if profile.Custom != nil {
-				return &profile.Custom.TLSProfileSpec
-			}
-			// Malformed custom profile, fall back to Intermediate.
-			logrus.Warningf("tlsProfileSpecForProfile: custom TLS profile has nil spec, using Intermediate default")
-		}
-	}
-	return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
 }
 
 // openSSLNamesFromIANA is a helper that returns the subset of OpenSSL cipher
