@@ -27,7 +27,7 @@ func TLSGroupToCurveID(group configv1.TLSGroup) (tls.CurveID, bool) {
 
 // TLSConfigFromProfile builds a *tls.Config from the given TLSProfileSpec.
 // Cipher names in the spec use OpenSSL naming. Groups that cannot be mapped
-// to a Go CurveID are silently skipped.
+// to a Go CurveID are logged and skipped.
 func TLSConfigFromProfile(spec *configv1.TLSProfileSpec) (*tls.Config, error) {
 	if spec == nil {
 		return crypto.SecureTLSConfig(&tls.Config{}), nil
@@ -61,6 +61,8 @@ func TLSConfigFromProfile(spec *configv1.TLSProfileSpec) (*tls.Config, error) {
 		for _, g := range spec.Groups {
 			if id, ok := TLSGroupToCurveID(g); ok {
 				curves = append(curves, id)
+			} else {
+				logrus.Warningf("TLSConfigFromProfile: unsupported TLS group %q (Go runtime may not support it yet), skipping", g)
 			}
 		}
 		if len(curves) > 0 {

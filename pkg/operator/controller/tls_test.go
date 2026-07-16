@@ -91,6 +91,30 @@ func TestTLSConfigFromProfile(t *testing.T) {
 		}
 	})
 
+	t.Run("mix of supported and unsupported groups", func(t *testing.T) {
+		spec := &configv1.TLSProfileSpec{
+			Ciphers:       []string{"ECDHE-RSA-AES256-GCM-SHA384"},
+			MinTLSVersion: configv1.VersionTLS12,
+			Groups: []configv1.TLSGroup{
+				configv1.TLSGroupX25519,
+				configv1.TLSGroupSecP256r1MLKEM768,
+				configv1.TLSGroupSecP384r1MLKEM1024,
+			},
+		}
+		cfg, err := TLSConfigFromProfile(spec)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// SecP256r1MLKEM768 and SecP384r1MLKEM1024 require Go 1.26+;
+		// only X25519 should be mapped on the current Go version.
+		if len(cfg.CurvePreferences) != 1 {
+			t.Errorf("CurvePreferences: got %d entries, want 1", len(cfg.CurvePreferences))
+		}
+		if cfg.CurvePreferences[0] != tls.X25519 {
+			t.Errorf("CurvePreferences[0]: got %v, want X25519", cfg.CurvePreferences[0])
+		}
+	})
+
 	t.Run("invalid TLS version returns error", func(t *testing.T) {
 		spec := &configv1.TLSProfileSpec{
 			MinTLSVersion: "InvalidVersion",
