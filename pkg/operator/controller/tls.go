@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// TODO: replace with library-go CurveIDsForTLSGroups once openshift/library-go#2347 merges.
 var tlsGroupToCurveID = map[configv1.TLSGroup]tls.CurveID{
 	configv1.TLSGroupX25519:         tls.X25519,
 	configv1.TLSGroupSecP256r1:      tls.CurveP256,
@@ -41,6 +42,7 @@ func TLSConfigFromProfile(spec *configv1.TLSProfileSpec) (*tls.Config, error) {
 		for _, name := range ianaNames {
 			id, err := crypto.CipherSuite(name)
 			if err != nil {
+				logrus.Warningf("TLSConfigFromProfile: unsupported cipher suite %q, skipping", name)
 				continue
 			}
 			suites = append(suites, id)
@@ -91,15 +93,4 @@ func TLSProfileSpecForSecurityProfile(profile *configv1.TLSSecurityProfile) *con
 		}
 	}
 	return configv1.TLSProfiles[configv1.TLSProfileIntermediateType]
-}
-
-// copyTLSSpec creates a defensive copy of the given TLSProfileSpec.
-func copyTLSSpec(in *configv1.TLSProfileSpec) *configv1.TLSProfileSpec {
-	if in == nil {
-		return nil
-	}
-	out := *in
-	out.Ciphers = append([]string(nil), in.Ciphers...)
-	out.Groups = append([]configv1.TLSGroup(nil), in.Groups...)
-	return &out
 }

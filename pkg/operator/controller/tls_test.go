@@ -196,30 +196,3 @@ func TestTLSProfileSpecForSecurityProfile(t *testing.T) {
 		}
 	})
 }
-
-func TestCopyTLSSpec(t *testing.T) {
-	t.Run("nil input returns nil", func(t *testing.T) {
-		if got := copyTLSSpec(nil); got != nil {
-			t.Errorf("expected nil, got %v", got)
-		}
-	})
-
-	t.Run("copies ciphers and groups", func(t *testing.T) {
-		in := &configv1.TLSProfileSpec{
-			Ciphers:       []string{"A", "B"},
-			MinTLSVersion: configv1.VersionTLS12,
-			Groups:        []configv1.TLSGroup{configv1.TLSGroupX25519},
-		}
-		out := copyTLSSpec(in)
-		if &out.Ciphers[0] == &in.Ciphers[0] {
-			t.Error("Ciphers slice was not copied")
-		}
-		if &out.Groups[0] == &in.Groups[0] {
-			t.Error("Groups slice was not copied")
-		}
-		out.Ciphers[0] = "CHANGED"
-		if in.Ciphers[0] == "CHANGED" {
-			t.Error("modifying copy changed original")
-		}
-	})
-}

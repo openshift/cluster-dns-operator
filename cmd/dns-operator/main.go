@@ -63,6 +63,8 @@ func main() {
 
 	// Build TLS options for the operator metrics server from the
 	// cluster-wide TLS security profile when secure serving is enabled.
+	// NOTE: the TLS profile is read once at startup; runtime changes to
+	// APIServer.spec.tlsSecurityProfile require an operator restart.
 	var metricsTLSOpts []func(*tls.Config)
 	if *metricsCertDir != "" {
 		cfgClient, err := configclient.NewForConfig(kubeConfig)
