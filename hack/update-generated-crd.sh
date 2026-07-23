@@ -17,13 +17,5 @@ install_crd \
   "manifests/0000_70_dns-operator_00.crd.yaml"
 
 install_crd \
-  "vendor/github.com/openshift/api/network/v1alpha1/zz_generated.crd-manifests/0000_70_dns_00_dnsnameresolvers-TechPreviewNoUpgrade.crd.yaml" \
-  "manifests/0000_70_dns_00_dnsnameresolvers-TechPreviewNoUpgrade.crd.yaml"
-
-install_crd \
-  "vendor/github.com/openshift/api/network/v1alpha1/zz_generated.crd-manifests/0000_70_dns_00_dnsnameresolvers-CustomNoUpgrade.crd.yaml" \
-  "manifests/0000_70_dns_00_dnsnameresolvers-CustomNoUpgrade.crd.yaml"
-
-install_crd \
-  "vendor/github.com/openshift/api/network/v1alpha1/zz_generated.crd-manifests/0000_70_dns_00_dnsnameresolvers-DevPreviewNoUpgrade.crd.yaml" \
-  "manifests/0000_70_dns_00_dnsnameresolvers-DevPreviewNoUpgrade.crd.yaml"
+  "vendor/github.com/openshift/api/network/v1alpha1/zz_generated.crd-manifests/0000_70_dns_00_dnsnameresolvers.crd.yaml" \
+  "manifests/0000_70_dns_00_dnsnameresolvers.crd.yaml"
