@@ -1,6 +1,7 @@
 package status
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -799,6 +800,54 @@ func TestComputeOperatorDegradedCondition(t *testing.T) {
 		}
 		if !cmp.Equal(actual, expected, conditionsCmpOpts...) {
 			t.Errorf("%q: expected %#v, got %#v", tc.description, expected, actual)
+		}
+	}
+}
+
+// TestIsUpgradingMessageOrder verifies that isUpgrading returns messages in a
+// stable, sorted order regardless of map iteration order. Non-deterministic
+// message ordering caused a self-sustaining ClusterOperator write loop: each
+// reconcile produced a different Message string, operatorStatusesEqual returned
+// false, the ClusterOperator was written, the CO watch fired, and the cycle
+// repeated indefinitely during upgrades.
+func TestIsUpgradingMessageOrder(t *testing.T) {
+	curVersions := map[string]string{
+		OperatorVersionName: "v1",
+		CoreDNSVersionName:  "dns-v1",
+		KubeRBACProxyName:   "rbac-v1",
+	}
+	oldVersions := map[string]string{
+		OperatorVersionName: "v0",
+		CoreDNSVersionName:  "dns-v0",
+		KubeRBACProxyName:   "rbac-v0",
+	}
+	newVersions := map[string]string{
+		OperatorVersionName: "v2",
+		CoreDNSVersionName:  "dns-v2",
+		KubeRBACProxyName:   "rbac-v2",
+	}
+
+	// expectedMessages is the lexicographically sorted set of messages
+	// isUpgrading must produce for the above inputs. "Upgraded" sorts before
+	// "Upgrading" (byte 8: 'd' < 'i'), and within each prefix components are
+	// ordered alphabetically: coredns < kube-rbac-proxy < operator.
+	expectedMessages := []string{
+		`Upgraded coredns to "dns-v1".`,
+		`Upgraded kube-rbac-proxy to "rbac-v1".`,
+		`Upgraded operator to "v1".`,
+		`Upgrading coredns to "dns-v2".`,
+		`Upgrading kube-rbac-proxy to "rbac-v2".`,
+		`Upgrading operator to "v2".`,
+	}
+
+	// Call isUpgrading many times to exercise Go's randomized map iteration.
+	for i := 0; i < 100; i++ {
+		upgrading, messages := isUpgrading(curVersions, oldVersions, newVersions)
+		if !upgrading {
+			t.Fatal("expected upgrading=true")
+		}
+		if !reflect.DeepEqual(messages, expectedMessages) {
+			t.Errorf("iteration %d: unexpected messages\n  want: %v\n  got:  %v", i, expectedMessages, messages)
 		}
 	}
 }
