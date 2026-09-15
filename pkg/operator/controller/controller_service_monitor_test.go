@@ -32,6 +32,14 @@ func TestDNSServiceMonitorChanged(t *testing.T) {
 			expect: true,
 		},
 		{
+			description: "if serviceDiscoveryRole changes",
+			mutate: func(serviceMonitor *unstructured.Unstructured) {
+				spec := serviceMonitor.Object["spec"].(map[string]interface{})
+				spec["serviceDiscoveryRole"] = "EndpointSlice"
+			},
+			expect: true,
+		},
+		{
 			description: "if labels change",
 			mutate: func(serviceMonitor *unstructured.Unstructured) {
 				serviceMonitor.SetLabels(map[string]string{

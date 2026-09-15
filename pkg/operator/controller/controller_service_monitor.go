@@ -57,7 +57,8 @@ func desiredServiceMonitor(dns *operatorv1.DNS, svc *corev1.Service, daemonsetRe
 						"openshift-dns",
 					},
 				},
-				"selector": map[string]interface{}{},
+				"selector":             map[string]interface{}{},
+				"serviceDiscoveryRole": "EndpointSlice",
 				"endpoints": []interface{}{
 					map[string]interface{}{
 						"bearerTokenFile": "/var/run/secrets/kubernetes.io/serviceaccount/token",
