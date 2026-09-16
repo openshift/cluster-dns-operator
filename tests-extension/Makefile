@@ -3,7 +3,6 @@ BINARY := bin/cluster-dns-operator-tests-ext
 .PHONY: build
 build:
 	@echo "Building extension binary..."
-	@cd test/e2e && $(MAKE) -f bindata.mk update-bindata
 	@mkdir -p bin
 	GOTOOLCHAIN=auto GOSUMDB=sum.golang.org go build -o $(BINARY) ./cmd
 	@echo "✅ Binary built: $(BINARY)"
