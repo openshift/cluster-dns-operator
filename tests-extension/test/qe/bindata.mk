@@ -11,19 +11,19 @@ update-bindata: $(GO_BINDATA)
 	@echo "Generating bindata..."
 	@mkdir -p $(TESTDATA_PATH)
 	$(GO_BINDATA) -nocompress -nometadata \
-		-pkg testdata -o $(TESTDATA_PATH)/bindata.go -prefix "testdata" -ignore '\.go$$' $(TESTDATA_PATH)/...
-	@gofmt -s -w $(TESTDATA_PATH)/bindata.go
-	@echo "✅ Bindata generated successfully"
+		-pkg router -o bindata.go -prefix "testdata" -ignore '\.go$$' $(TESTDATA_PATH)/...
+	@gofmt -s -w bindata.go
+	@echo "Bindata generated successfully"
 
 .PHONY: verify-bindata
 verify-bindata: update-bindata
 	@echo "Verifying bindata is up to date..."
-	git diff --exit-code $(TESTDATA_PATH)/bindata.go || (echo "❌ Bindata is out of date" && exit 1)
-	@echo "✅ Bindata is up to date"
+	git diff --exit-code bindata.go || (echo "Bindata is out of date" && exit 1)
+	@echo "Bindata is up to date"
 
 .PHONY: bindata
 bindata: clean-bindata update-bindata
 
 .PHONY: clean-bindata
 clean-bindata:
-	@rm -f $(TESTDATA_PATH)/bindata.go
+	@rm -f bindata.go
