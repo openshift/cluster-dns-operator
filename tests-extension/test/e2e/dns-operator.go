@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	g "github.com/onsi/ginkgo/v2"
 	o "github.com/onsi/gomega"
@@ -204,6 +205,39 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 		patchGlobalResourceAsAdmin(oc, resourceName, "[{\"op\":\"replace\", \"path\":\"/spec/servers/0/forwardPlugin/policy\", \"value\":\"Sequential\"}]")
 		policy = pollReadDnsCorefile(oc, oneDnsPod, "8.8.8.8", "-A2", "policy sequential")
 		o.Expect(policy).To(o.ContainSubstring(`policy sequential`))
+	})
+
+	g.It("Author:davidsalerno-High-122810-CoreDNS forward health check alerts fire correctly [Disruptive] [Serial] [Skipped:MicroShift]", func() {
+		const (
+			resourceName = "dns.operator.openshift.io/default"
+			testZone     = "healthcheck-alerts.test"
+		)
+
+		compat_otp.By("1. Prepare a single DNS pod and deterministic in-cluster upstream services")
+		// Register cleanup first so it runs even if the restore helper reports a
+		// failure while unwinding this test. Deferred functions run in LIFO order.
+		defer cleanupForwardHealthCheckAlertResources(oc)
+		defer deleteDnsOperatorToRestore(oc)
+		oneDNSPod := forceOnlyOneDnsPodExist(oc)
+		coreDNSImage := getDNSContainerImage(oc)
+		healthyUpstream, unreachableUpstreamOne, unreachableUpstreamTwo := createForwardHealthCheckAlertResources(oc, coreDNSImage)
+
+		monitor, err := compat_otp.NewPrometheusMonitor(oc)
+		o.Expect(err).NotTo(o.HaveOccurred())
+
+		compat_otp.By("2. Configure one healthy and one unreachable upstream and verify the per-upstream alert")
+		patchForwardHealthCheckAlertServer(oc, resourceName, testZone, []string{healthyUpstream, unreachableUpstreamOne}, "add")
+		waitForForwardHealthCheckCorefile(oc, oneDNSPod, unreachableUpstreamOne)
+		ensureClusterOperatorNormal(oc, "dns", 2, 120)
+		waitForFiringAlertForUpstream(monitor, oc, oneDNSPod, testZone, "CoreDNSForwardHealthCheckFailure", unreachableUpstreamOne, 8*time.Minute)
+		assertNoFiringAlert(monitor, "CoreDNSForwardHealthCheckBroken")
+
+		compat_otp.By("3. Configure two unreachable upstreams and verify the complete-outage alert suppresses per-upstream alerts")
+		patchForwardHealthCheckAlertServer(oc, resourceName, testZone, []string{unreachableUpstreamOne, unreachableUpstreamTwo}, "replace")
+		waitForForwardHealthCheckCorefile(oc, oneDNSPod, unreachableUpstreamTwo)
+		ensureClusterOperatorNormal(oc, "dns", 2, 120)
+		waitForFiringAlert(monitor, oc, oneDNSPod, testZone, "CoreDNSForwardHealthCheckBroken", 8*time.Minute)
+		assertNoFiringAlertForUpstreams(monitor, "CoreDNSForwardHealthCheckFailure", unreachableUpstreamOne, unreachableUpstreamTwo)
 	})
 
 	// No dns operator namespace on HyperShift guest cluster so this case is not available

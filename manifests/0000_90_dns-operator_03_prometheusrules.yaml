@@ -29,6 +29,25 @@ spec:
         annotations:
           summary: CoreDNS health checks
           description: "CoreDNS Health Checks are slowing down (instance {{ $labels.instance }})"
+      - alert: CoreDNSForwardHealthCheckBroken
+        expr: sum by(namespace, instance) (rate(coredns_forward_healthcheck_broken_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: CoreDNS forward health checks are broken
+          description: "CoreDNS forward health checks are failing for all upstreams on {{ $labels.instance }} in namespace {{ $labels.namespace }}. The underlying counter only advances when a query arrives, so this alert can clear during a traffic lull even though the outage persists; the per-upstream CoreDNSForwardHealthCheckFailure alerts keep firing in that case."
+      - alert: CoreDNSForwardHealthCheckFailure
+        expr: |
+          (sum by(namespace, instance, to) (rate(coredns_proxy_healthcheck_failures_total{proxy_name="forward"}[5m])) > 0)
+          unless on(namespace, instance)
+          (ALERTS{alertname="CoreDNSForwardHealthCheckBroken",alertstate="firing"} == 1)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: CoreDNS forward health check failure
+          description: "CoreDNS forward health checks are failing for upstream {{ $labels.to }} on {{ $labels.instance }} in namespace {{ $labels.namespace }}."
       - alert: CoreDNSErrorsHigh
         expr: |
           (sum by(namespace) (rate(coredns_dns_responses_total{rcode="SERVFAIL"}[5m]))
