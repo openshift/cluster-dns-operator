@@ -24,9 +24,9 @@ const (
 	// a certificate/key pair from the serving cert signer.
 	servingCertAnnotationKey = "service.beta.openshift.io/serving-cert-secret-name"
 
-	// topologyAwareHintsAnnotationKey is the annotation key to enable topology aware hints
-	// on a service to prefer keeping traffic within a zone.
-	// For docs see: https://kubernetes.io/docs/concepts/services-networking/topology-aware-hints/
+	// topologyAwareHintsAnnotationKey is retained as a managed annotation so that
+	// the operator removes it from Services created by previous versions. The
+	// Service's trafficDistribution field now controls topology-aware routing.
 	topologyAwareHintsAnnotationKey = "service.kubernetes.io/topology-aware-hints"
 )
 
@@ -46,12 +46,7 @@ func (r *reconciler) ensureDNSService(dns *operatorv1.DNS, clusterIP string, dae
 		return false, nil, err
 	}
 
-	enableTopologyAwareHints, err := r.shouldEnableTopologyAwareHints(dns)
-	if err != nil {
-		return false, nil, err
-	}
-
-	desired := desiredDNSService(dns, clusterIP, enableTopologyAwareHints, daemonsetRef)
+	desired := desiredDNSService(dns, clusterIP, daemonsetRef)
 
 	switch {
 	case !haveService:
@@ -82,72 +77,7 @@ func (r *reconciler) currentDNSService(dns *operatorv1.DNS) (bool, *corev1.Servi
 	return true, current, nil
 }
 
-// shouldEnableTopologyAwareHints returns a Boolean value indicating whether
-// topology-aware hints can be enabled for the DNS service.
-//
-// Topology-aware hints should be enabled if, and only if, there are at least 2
-// topology zones with ready nodes and these nodes all have allocatable CPU.
-//
-// Much of this logic is copied from
-// <https://github.com/openshift/kubernetes/blob/b40493584076fb1ab29f3bed1d05d16cbc5b17f1/pkg/controller/endpointslice/topologycache/topologycache.go#L203-L262>.
-func (r *reconciler) shouldEnableTopologyAwareHints(dns *operatorv1.DNS) (bool, error) {
-	var nodesList corev1.NodeList
-	if err := r.cache.List(context.TODO(), &nodesList); err != nil {
-		return false, err
-	}
-	zones := map[string]struct{}{}
-	for i := range nodesList.Items {
-		if ignoreNodeForTopologyAwareHints(&nodesList.Items[i]) {
-			continue
-		}
-		if !nodeIsValidForTopologyAwareHints(&nodesList.Items[i]) {
-			return false, nil
-		}
-		zones[nodesList.Items[i].Labels[corev1.LabelTopologyZone]] = struct{}{}
-	}
-
-	return len(zones) >= 2, nil
-}
-
-// ignoreNodeForTopologyAwareHints returns a Boolean value indicating whether
-// the given node should be ignored for the purpose of determining whether
-// topology-aware hints can be enabled.
-func ignoreNodeForTopologyAwareHints(node *corev1.Node) bool {
-	return nodeHasExcludedLabels(node.Labels) || !nodeIsReady(node.Status)
-}
-
-// nodeIsValidForTopologyAwareHints returns a Boolean value indicating whether
-// the given node meets the requirements for enabling topology-aware hints.
-func nodeIsValidForTopologyAwareHints(node *corev1.Node) bool {
-	return !node.Status.Allocatable.Cpu().IsZero() && node.Labels[corev1.LabelTopologyZone] != ""
-}
-
-// nodeHasExcludedLabels is copied from
-// <https://github.com/openshift/kubernetes/blob/b40493584076fb1ab29f3bed1d05d16cbc5b17f1/pkg/controller/endpointslice/topologycache/topologycache.go#L329-L342>.
-func nodeHasExcludedLabels(labels map[string]string) bool {
-	if len(labels) == 0 {
-		return false
-	}
-	if _, ok := labels["node-role.kubernetes.io/control-plane"]; ok {
-		return true
-	}
-	if _, ok := labels["node-role.kubernetes.io/master"]; ok {
-		return true
-	}
-	return false
-}
-
-// nodeIsReady is copied from <https://github.com/openshift/kubernetes/blob/b40493584076fb1ab29f3bed1d05d16cbc5b17f1/pkg/controller/endpointslice/topologycache/utils.go#L255-L264>.
-func nodeIsReady(nodeStatus corev1.NodeStatus) bool {
-	for _, cond := range nodeStatus.Conditions {
-		if cond.Type == corev1.NodeReady {
-			return cond.Status == corev1.ConditionTrue
-		}
-	}
-	return false
-}
-
-func desiredDNSService(dns *operatorv1.DNS, clusterIP string, enableTopologyAwareHints bool, daemonsetRef metav1.OwnerReference) *corev1.Service {
+func desiredDNSService(dns *operatorv1.DNS, clusterIP string, daemonsetRef metav1.OwnerReference) *corev1.Service {
 	s := manifests.DNSService()
 
 	name := DNSServiceName(dns)
@@ -158,10 +88,6 @@ func desiredDNSService(dns *operatorv1.DNS, clusterIP string, enableTopologyAwar
 	s.Annotations = map[string]string{
 		MetricsServingCertAnnotation: DNSMetricsSecretName(dns),
 	}
-	if enableTopologyAwareHints {
-		s.Annotations[topologyAwareHintsAnnotationKey] = "auto"
-	}
-
 	s.Labels = map[string]string{
 		manifests.OwningDNSLabel: DNSDaemonSetLabel(dns),
 	}
