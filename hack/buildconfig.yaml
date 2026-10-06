@@ -33,4 +33,4 @@ parameters:
   value: https://github.com/openshift/cluster-dns-operator
 - description: 'Git branch'
   name: GIT_BRANCH
-  value: master
+  value: main
