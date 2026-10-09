@@ -1,8 +1,9 @@
 package controller
 
 import (
-	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	"testing"
+
+	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 
 	corev1 "k8s.io/api/core/v1"
 )
