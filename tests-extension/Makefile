@@ -10,7 +10,7 @@ build:
 .PHONY: clean
 clean:
 	@rm -f $(BINARY)
-	@cd test/e2e && $(MAKE) -f bindata.mk clean-bindata
+	@cd test/qe && $(MAKE) -f bindata.mk clean-bindata
 
 .PHONY: help
 help:

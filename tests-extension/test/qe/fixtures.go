@@ -1,4 +1,4 @@
-package testdata
+package router
 
 import (
 	"fmt"
@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	fixtureDir  string
-	fixtureMu   sync.Mutex
-	fixtureInit bool
+	fixtureDir   string
+	fixtureMu    sync.Mutex
+	fixtureInit  bool
+	allExtracted bool
 )
 
 func ensureFixtureDir() string {
@@ -33,12 +34,43 @@ func ensureFixtureDir() string {
 	return fixtureDir
 }
 
+func extractAllFixtures(dir string) {
+	fixtureMu.Lock()
+	defer fixtureMu.Unlock()
+	if allExtracted {
+		return
+	}
+	for _, name := range AssetNames() {
+		targetPath := filepath.Join(dir, name)
+		if _, err := os.Stat(targetPath); err == nil {
+			continue
+		}
+		data, err := Asset(name)
+		if err != nil {
+			panic(fmt.Sprintf("failed to get asset %s: %v", name, err))
+		}
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			panic(fmt.Sprintf("failed to create directory for %s: %v", name, err))
+		}
+		if err := os.WriteFile(targetPath, data, 0644); err != nil {
+			panic(fmt.Sprintf("failed to write fixture %s: %v", name, err))
+		}
+	}
+	allExtracted = true
+}
+
 func FixturePath(elem ...string) string {
 	dir := ensureFixtureDir()
 	relativePath := filepath.Join(elem...)
 	if filepath.IsAbs(relativePath) || strings.Contains(relativePath, "..") {
 		panic(fmt.Sprintf("invalid fixture path: %s", relativePath))
 	}
+
+	if relativePath == "" {
+		extractAllFixtures(dir)
+		return dir
+	}
+
 	targetPath := filepath.Join(dir, relativePath)
 
 	if _, err := os.Stat(targetPath); err == nil {
@@ -106,6 +138,7 @@ func CleanupFixtures() error {
 		err := os.RemoveAll(fixtureDir)
 		fixtureDir = ""
 		fixtureInit = false
+		allExtracted = false
 		return err
 	}
 	return nil
@@ -140,12 +173,6 @@ func FixtureExists(elem ...string) bool {
 
 func ListFixtures() []string {
 	names := AssetNames()
-	fixtures := make([]string, 0, len(names))
-	for _, name := range names {
-		if strings.HasPrefix(name, "testdata/") {
-			fixtures = append(fixtures, strings.TrimPrefix(name, "testdata/"))
-		}
-	}
-	sort.Strings(fixtures)
-	return fixtures
+	sort.Strings(names)
+	return names
 }
