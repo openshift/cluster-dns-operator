@@ -496,15 +496,8 @@ func (r *reconciler) ensureMetricsIntegration(dns *operatorv1.DNS, svc *corev1.S
 		logrus.Infof("created dns metrics cluster role binding %s", crb.Name)
 	}
 
-	mr := manifests.MetricsRole()
-	if err := r.client.Get(context.TODO(), types.NamespacedName{Namespace: mr.Namespace, Name: mr.Name}, mr); err != nil {
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to get dns metrics role %s/%s: %v", mr.Namespace, mr.Name, err)
-		}
-		if err := r.client.Create(context.TODO(), mr); err != nil {
-			return fmt.Errorf("failed to create dns metrics role %s/%s: %v", mr.Namespace, mr.Name, err)
-		}
-		logrus.Infof("created dns metrics role %s/%s", mr.Namespace, mr.Name)
+	if _, _, err := r.ensureDNSMetricsRole(); err != nil {
+		return fmt.Errorf("failed to ensure dns metrics role for %s: %v", dns.Name, err)
 	}
 
 	mrb := manifests.MetricsRoleBinding()
