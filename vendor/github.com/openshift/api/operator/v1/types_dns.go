@@ -95,6 +95,16 @@ type DNSSpec struct {
 	// +kubebuilder:default=Normal
 	OperatorLogLevel DNSLogLevel `json:"operatorLogLevel,omitempty"`
 
+	// nodeServices specifies K8s services for which entries should be added
+	// to /etc/hosts by the node resolver. These services will be added in addition to
+	// the default "image-registry.openshift-image-registry.svc" service.
+	// For each service reference, entries will be created using the format "<name>.<namespace>.svc"
+	// and an alias with the CLUSTER_DOMAIN suffix will also be added.
+	//
+	// +optional
+	// +kubebuilder:validation:MaxItems=20
+	NodeServices []DNSNodeService `json:"nodeServices,omitempty"`
+
 	// logLevel describes the desired logging verbosity for CoreDNS.
 	// Any one of the following values may be specified:
 	// * Normal logs errors from upstream resolvers.
@@ -162,6 +172,26 @@ var (
 	// Trace is used when something went really badly and even more verbose logs are needed.  Logging every function call as part of a common operation, to tracing execution of a query.  In kube, this is probably glog=6.
 	DNSLogLevelTrace DNSLogLevel = "Trace"
 )
+
+
+// DNSNodeService represents a Kubernetes service by name and namespace for node services.
+type DNSNodeService struct {
+	// name is the name of the service.
+	// +required
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z]([-a-z0-9]*[a-z0-9])?$`
+	Name string `json:"name"`
+
+	// namespace is the namespace of the service.
+	// +required
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z]([-a-z0-9]*[a-z0-9])?$`
+	Namespace string `json:"namespace"`
+}
 
 // Server defines the schema for a server that runs per instance of CoreDNS.
 type Server struct {
