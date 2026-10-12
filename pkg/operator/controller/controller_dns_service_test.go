@@ -8,15 +8,18 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestDesiredDNSServiceUsesTrafficDistribution(t *testing.T) {
+	dns := &operatorv1.DNS{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+	service := desiredDNSService(dns, "", metav1.OwnerReference{})
+
+	if assert.NotNil(t, service.Spec.TrafficDistribution) {
+		assert.Equal(t, corev1.ServiceTrafficDistributionPreferSameNode, *service.Spec.TrafficDistribution)
+	}
+	assert.NotContains(t, service.Annotations, topologyAwareHintsAnnotationKey)
+}
 
 func TestDNSServiceChanged(t *testing.T) {
 	testCases := []struct {
@@ -134,13 +137,19 @@ func TestDNSServiceChanged(t *testing.T) {
 			expect: false,
 		},
 		{
-			description: "if service.kubernetes.io/topology-aware-hints annotation is set",
-			mutate: func(service *corev1.Service) {
+			description: "if the legacy service.kubernetes.io/topology-aware-hints annotation is set",
+			mutateOriginal: func(service *corev1.Service) {
 				service.ObjectMeta.Annotations = map[string]string{
 					"service.kubernetes.io/topology-aware-hints": "auto",
 				}
 			},
+			mutate: func(service *corev1.Service) {
+				delete(service.ObjectMeta.Annotations, "service.kubernetes.io/topology-aware-hints")
+			},
 			expect: true,
+			verify: func(_, _ *corev1.Service, updated *corev1.Service, t *testing.T) {
+				assert.NotContains(t, updated.Annotations, "service.kubernetes.io/topology-aware-hints")
+			},
 		},
 		{
 			description: "if dual-stack fields exist in current but not in expected, and an update is triggered",
@@ -194,185 +203,4 @@ func TestDNSServiceChanged(t *testing.T) {
 			}
 		}
 	}
-}
-
-func Test_shouldEnableTopologyAwareHints(t *testing.T) {
-	emptyLabels := map[string]string{}
-	someCPU := map[corev1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("1m"),
-	}
-	noCPU := map[corev1.ResourceName]resource.Quantity{
-		"cpu": resource.MustParse("0"),
-	}
-	readyConditions := []corev1.NodeCondition{{
-		Type:   "Ready",
-		Status: "True",
-	}}
-	notReadyConditions := []corev1.NodeCondition{{
-		Type:   "Ready",
-		Status: "False",
-	}}
-	zone1Label := map[string]string{"topology.kubernetes.io/zone": "z1"}
-	zone2Label := map[string]string{"topology.kubernetes.io/zone": "z2"}
-	zone3Label := map[string]string{"topology.kubernetes.io/zone": "z3"}
-	zone1AndControlPlaneLabels := map[string]string{
-		"topology.kubernetes.io/zone":           "z1",
-		"node-role.kubernetes.io/control-plane": "",
-	}
-	zone2AndControlPlaneLabels := map[string]string{
-		"topology.kubernetes.io/zone":           "z2",
-		"node-role.kubernetes.io/control-plane": "",
-	}
-	node := func(name string, labels map[string]string, allocatableResources corev1.ResourceList, conditions []corev1.NodeCondition) *corev1.Node {
-		return &corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: labels,
-				Name:   name,
-			},
-			Status: corev1.NodeStatus{
-				Allocatable: allocatableResources,
-				Conditions:  conditions,
-			},
-		}
-	}
-	tests := []struct {
-		name            string
-		existingObjects []runtime.Object
-		expect          bool
-	}{
-		{
-			name:            "no nodes",
-			existingObjects: []runtime.Object{},
-			expect:          false,
-		},
-		{
-			name: "1/1 nodes labeled",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-			},
-			expect: false,
-		},
-		{
-			name: "0/3 nodes labeled",
-			existingObjects: []runtime.Object{
-				node("n1", emptyLabels, someCPU, readyConditions),
-				node("n2", emptyLabels, someCPU, readyConditions),
-				node("n3", emptyLabels, someCPU, readyConditions),
-			},
-			expect: false,
-		},
-		{
-			name: "1/3 nodes labeled",
-			existingObjects: []runtime.Object{
-				node("n1", emptyLabels, someCPU, readyConditions),
-				node("n2", zone1Label, someCPU, readyConditions),
-				node("n3", emptyLabels, someCPU, readyConditions),
-			},
-			expect: false,
-		},
-		{
-			name: "2/3 nodes labeled",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-				node("n2", zone2Label, someCPU, readyConditions),
-				node("n3", emptyLabels, someCPU, readyConditions),
-			},
-			expect: false,
-		},
-		{
-			name: "2/2 nodes labeled, but they're in the same zone",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-				node("n2", zone1Label, someCPU, readyConditions),
-			},
-			expect: false,
-		},
-		{
-			name: "2/2 nodes labeled, and they're in different zones",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-				node("n2", zone2Label, someCPU, readyConditions),
-			},
-			expect: true,
-		},
-		{
-			name: "3/3 nodes labeled in 2 zones",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-				node("n2", zone2Label, someCPU, readyConditions),
-				node("n3", zone2Label, someCPU, readyConditions),
-			},
-			expect: true,
-		},
-		{
-			name: "3/3 nodes labeled in 3 zones",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-				node("n2", zone2Label, someCPU, readyConditions),
-				node("n3", zone3Label, someCPU, readyConditions),
-			},
-			expect: true,
-		},
-		{
-			name: "3/3 nodes labeled but 1 node has no CPU",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-				node("n2", zone2Label, noCPU, readyConditions),
-				node("n3", zone3Label, someCPU, readyConditions),
-			},
-			expect: false,
-		},
-		{
-			name: "2/2 nodes labeled but 1 node is not ready",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-				node("n2", zone2Label, someCPU, notReadyConditions),
-			},
-			expect: false,
-		},
-		{
-			name: "3/3 nodes labeled but 1 node is not ready",
-			existingObjects: []runtime.Object{
-				node("n1", zone1Label, someCPU, readyConditions),
-				node("n2", zone2Label, someCPU, notReadyConditions),
-				node("n3", zone3Label, someCPU, readyConditions),
-			},
-			expect: true,
-		},
-		{
-			name: "3/3 nodes labeled but they are all control-plane nodes",
-			existingObjects: []runtime.Object{
-				node("n1", zone1AndControlPlaneLabels, someCPU, readyConditions),
-				node("n2", zone2AndControlPlaneLabels, someCPU, readyConditions),
-				node("n3", zone2AndControlPlaneLabels, someCPU, readyConditions),
-			},
-			expect: false,
-		},
-	}
-
-	scheme := runtime.NewScheme()
-	corev1.AddToScheme(scheme)
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			fakeClient := fake.NewClientBuilder().
-				WithScheme(scheme).
-				WithRuntimeObjects(tc.existingObjects...).
-				Build()
-			informer := informertest.FakeInformers{Scheme: scheme}
-			cache := fakeCache{Informers: &informer, Reader: fakeClient}
-			reconciler := &reconciler{cache: cache}
-			dns := operatorv1.DNS{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			}
-			result, err := reconciler.shouldEnableTopologyAwareHints(&dns)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.expect, result)
-		})
-	}
-}
-
-type fakeCache struct {
-	cache.Informers
-	client.Reader
 }
