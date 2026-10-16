@@ -10,13 +10,12 @@ COPY tests-extension/ tests-extension/
 RUN cd tests-extension && \
     GOFLAGS=-mod=vendor make build && \
     cd bin && \
-    tar -czvf cluster-dns-operator-test-extension.tar.gz cluster-dns-operator-tests-ext && \
-    rm -f cluster-dns-operator-tests-ext
+    gzip -n cluster-dns-operator-tests-ext
 
 FROM registry.ci.openshift.org/ocp/5.0:base-rhel9
 COPY --from=builder /dns-operator/dns-operator /usr/bin/
-# Copy test extension binary (added by ote-migration)
-COPY --from=test-extension-builder /build/cluster-dns-operator/tests-extension/bin/cluster-dns-operator-test-extension.tar.gz /usr/bin/
+# Copy test extension binary (raw gzip per OTE convention)
+COPY --from=test-extension-builder /build/cluster-dns-operator/tests-extension/bin/cluster-dns-operator-tests-ext.gz /usr/bin/
 COPY manifests /manifests
 RUN useradd dns-operator
 USER dns-operator
