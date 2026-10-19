@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -23,11 +24,9 @@ import (
 )
 
 const (
-	// services is a comma- or space-delimited list of services for which
-	// entries should be added to /etc/hosts.  NOTE: For now, ensure these
-	// are relative names; for each relative name, an alias with the
-	// CLUSTER_DOMAIN suffix will also be added.
-	services = "image-registry.openshift-image-registry.svc"
+	// defaultService is the default service that should always be included
+	// in the services list for the node resolver
+	defaultService = "image-registry.openshift-image-registry.svc"
 
 	// workloadPartitioningManagement contains the management workload annotation
 	workloadPartitioningManagement = "target.workload.openshift.io/management"
@@ -37,6 +36,27 @@ var (
 	// nodeResolverScript is a shell script that updates /etc/hosts.
 	nodeResolverScript = manifests.NodeResolverScript()
 )
+
+// buildServicesList combines the default service with additional services from the DNS spec.
+// The default service is always included first, followed by any additional services.
+func buildServicesList(dns *operatorv1.DNS) string {
+	// Start with the default service
+	services := []string{defaultService}
+
+	// Add any additional services from the spec
+	if len(dns.Spec.NodeServices) > 0 {
+		for _, service := range dns.Spec.NodeServices {
+			// Build service name in format: name.namespace.svc
+			if service.Name != "" && service.Namespace != "" {
+				serviceName := service.Name + "." + service.Namespace + ".svc"
+				services = append(services, serviceName)
+			}
+		}
+	}
+
+	// Join all services with commas for the environment variable
+	return strings.Join(services, ",")
+}
 
 // ensureNodeResolverDaemonset ensures the node resolver daemonset exists if it
 // should or does not exist if it should not exist.  Returns a Boolean
@@ -82,7 +102,7 @@ func desiredNodeResolverDaemonSet(dns *operatorv1.DNS, clusterIP, clusterDomain,
 	maxUnavailable := intstr.FromString("33%")
 	envs := []corev1.EnvVar{{
 		Name:  "SERVICES",
-		Value: services,
+		Value: buildServicesList(dns),
 	}}
 	if len(clusterIP) > 0 {
 		envs = append(envs, corev1.EnvVar{
