@@ -3,6 +3,7 @@ package status
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -532,6 +533,7 @@ func isUpgrading(curVersions, oldVersions, newVersions map[string]string) (bool,
 			messages = append(messages, fmt.Sprintf("Upgrading %s to %q.", name, newVersion))
 		}
 	}
+	sort.Strings(messages)
 	return upgrading, messages
 }
 
