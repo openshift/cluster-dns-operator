@@ -1,3 +1,8 @@
+# The image is replaced at runtime by util.ReplacePayloadImage() with the pull spec of the
+# release payload's "tools" imagestream tag, so this fixture is pullable in disconnected
+# lanes (see OCPBUGS-132070, pattern 2).
+#
+# The test creates this pod as the namespace user; restricted-v2 assigns a non-root UID.
 apiVersion: v1
 kind: Pod 
 metadata:
@@ -7,13 +12,13 @@ metadata:
 spec:
   automountServiceAccountToken: false
   securityContext:
-    runAsNonRoot: true
     seccompProfile:
       type: RuntimeDefault
   containers:
   - name: testpod-60350
-    image: quay.io/openshifttest/busybox@sha256:c5439d7db88ab5423999530349d327b04279ad3161d7596d2126dfb5b02bfd1f
+    image: PAYLOAD_TOOLS_IMAGE
     securityContext:
+      runAsNonRoot: true
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
       capabilities:

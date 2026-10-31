@@ -1,22 +1,174 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net/netip"
+	"os"
 	"os/exec"
 	"reflect"
 	"regexp"
 	"strings"
 	"time"
 
+	g "github.com/onsi/ginkgo/v2"
 	o "github.com/onsi/gomega"
+	operatorv1 "github.com/openshift/api/operator/v1"
+	operatorclient "github.com/openshift/client-go/operator/clientset/versioned/typed/operator/v1"
 	exutil "github.com/openshift/origin/test/extended/util"
 	compat_otp "github.com/openshift/origin/test/extended/util/compat_otp"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
+	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/util/retry"
 	e2e "k8s.io/kubernetes/test/e2e/framework"
 	e2eoutput "k8s.io/kubernetes/test/e2e/framework/pod/output"
 )
+
+// Timeout budgets for the DNS tests. The OTE migration guidelines ask for bounded,
+// operation-specific timeouts rather than ad-hoc literals; these are the reference values
+// recorded in OCPBUGS-132070.
+const (
+	// DefaultTimeout bounds a single API-driven operation that should settle quickly.
+	DefaultTimeout = 3 * time.Minute
+	// LongTimeout bounds an operation that waits on a DaemonSet or Deployment rollout.
+	LongTimeout = 5 * time.Minute
+	// ClusterOperatorTimeout bounds a wait for a ClusterOperator to report a stable status.
+	ClusterOperatorTimeout = 2 * time.Minute
+	// microShiftCheckTimeout bounds the single configmap read SkipOnMicroShift makes. A
+	// skip guard runs before every spec, so it must not stall the suite when the API is
+	// down; on timeout the test runs and fails on its own terms.
+	microShiftCheckTimeout = 30 * time.Second
+)
+
+// payloadImagePlaceholder is the token fixtures carry in place of a hard-coded pull spec.
+// ReplacePayloadImage swaps it for an image resolved from the cluster's own release
+// payload, which is mirrored into disconnected lanes; fixtures must not reference an
+// external registry directly (OCPBUGS-132070, pattern 2).
+const (
+	payloadImagePlaceholder = "PAYLOAD_TOOLS_IMAGE"
+	payloadImageNamespace   = "openshift"
+)
+
+// SkipOnMicroShift skips the calling test when it runs against a MicroShift cluster.
+//
+// MicroShift does not serve the dns.operator.openshift.io API these tests drive. The
+// runtime check is authoritative because MicroShift and platform-agnostic single-node
+// OpenShift share environment selector values. MicroShift reports a clean skip instead
+// of the setup failure seen in OCPBUGS-132070, pattern 1.
+//
+// It deliberately builds its own clientset instead of taking an *exutil.CLI. exutil.NewCLI
+// registers a BeforeEach that creates a project, and Ginkgo runs BeforeEach blocks in
+// declaration order, so a guard that depended on that CLI would run *after* project
+// creation had already failed on MicroShift. Callers must register this as the first
+// BeforeEach in the Describe body, before exutil.NewCLI is called.
+//
+// It also deliberately does not call exutil.IsMicroShiftCluster, which fails open to
+// "MicroShift" when the cluster is unreachable. That helper polls for the configmap for
+// five minutes and, on a persistent network error, leaves cm pointing at the empty
+// &ConfigMap{} the typed client returns alongside the error rather than nil; its `if cm ==
+// nil` guard therefore misses and it returns true, contradicting the "assuming not
+// MicroShift" line it just logged. A real cluster with a five-minute API outage would skip
+// all 28 tests as "MicroShift" and the suite would report green.
+//
+// Only a configmap we actually read counts as MicroShift. Any error - unreachable API,
+// RBAC, timeout - falls through to running the test, so a broken cluster fails loudly in
+// setup instead of disappearing into a silent skip.
+func SkipOnMicroShift() {
+	kubeClient, err := e2e.LoadClientset()
+	if err != nil {
+		e2e.Logf("could not build a client to check for MicroShift, continuing")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), microShiftCheckTimeout)
+	defer cancel()
+
+	cm, err := kubeClient.CoreV1().ConfigMaps("kube-public").
+		Get(ctx, "microshift-version", metav1.GetOptions{})
+	switch {
+	case apierrors.IsNotFound(err):
+		e2e.Logf("microshift-version configmap not found, not MicroShift")
+		return
+	case err != nil:
+		e2e.Logf("could not read the MicroShift marker configmap, continuing")
+		return
+	case cm == nil:
+		e2e.Logf("microshift-version configmap read returned no object, continuing")
+		return
+	}
+
+	g.Skip("Skipping on MicroShift: the dns.operator.openshift.io API is not served there")
+}
+
+// GetPayloadImage returns the pull spec of the named tag of an imagestream in the
+// "openshift" namespace. The payload imagestreams (tools, cli, network-tools, ...) are
+// managed by the CVO and their spec tags point at the release registry, which is mirrored
+// on disconnected clusters. This resolves without the internal image registry, which some
+// of these tests disable.
+func GetPayloadImage(oc *exutil.CLI, imageStream, tag string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	defer cancel()
+
+	// The CLI logs command output on errors. Read through the typed client and
+	// report a fixed diagnostic so pull specs and API endpoints stay out of logs.
+	stream, err := oc.AdminImageClient().ImageV1().ImageStreams(payloadImageNamespace).Get(ctx, imageStream, metav1.GetOptions{})
+	o.Expect(err == nil).To(o.BeTrue(),
+		fmt.Sprintf("failed to read release payload imagestream %s/%s", payloadImageNamespace, imageStream))
+	var image string
+	for _, specTag := range stream.Spec.Tags {
+		if specTag.Name == tag && specTag.From != nil {
+			image = specTag.From.Name
+			break
+		}
+	}
+	o.Expect(image).NotTo(o.BeEmpty(),
+		fmt.Sprintf("imagestream %s/%s has no %q tag pull spec", payloadImageNamespace, imageStream, tag))
+	e2e.Logf("Resolved payload image for %s/%s:%s", payloadImageNamespace, imageStream, tag)
+	return image
+}
+
+// ExpectResolvedAddressesForCluster checks that DNSNameResolver returned valid IPs
+// for every address family supported by the cluster, including both on dual stack.
+func ExpectResolvedAddressesForCluster(oc *exutil.CLI, addresses string) {
+	ips := strings.Fields(addresses)
+	o.Expect(ips).NotTo(o.BeEmpty(), "DNSNameResolver must return resolved IP addresses")
+	var hasIPv4, hasIPv6 bool
+	for _, value := range ips {
+		ip, err := netip.ParseAddr(value)
+		o.Expect(err).NotTo(o.HaveOccurred(), "DNSNameResolver must return valid IP addresses")
+		hasIPv4 = hasIPv4 || ip.Is4()
+		hasIPv6 = hasIPv6 || ip.Is6()
+	}
+	stackType := compat_otp.GetIPVersionStackType(oc)
+	o.Expect(stackType).To(o.BeElementOf("ipv4single", "ipv6single", "dualstack"), "cluster network stack must be known")
+	if stackType != "ipv6single" {
+		o.Expect(hasIPv4).To(o.BeTrue(), "DNSNameResolver must return an IPv4 address on IPv4 and dual-stack clusters")
+	}
+	if stackType != "ipv4single" {
+		o.Expect(hasIPv6).To(o.BeTrue(), "DNSNameResolver must return an IPv6 address on IPv6 and dual-stack clusters")
+	}
+}
+
+// ReplacePayloadImage rewrites the payload image placeholder in an extracted fixture with
+// the release payload's "tools" image. Fixtures are extracted to a per-run temp directory
+// by FixturePath, so rewriting in place is safe. Calling it twice on the same file is a
+// no-op.
+func ReplacePayloadImage(oc *exutil.CLI, file string) {
+	data, err := os.ReadFile(file)
+	o.Expect(err).NotTo(o.HaveOccurred(), fmt.Sprintf("failed to read fixture %s", file))
+	if !strings.Contains(string(data), payloadImagePlaceholder) {
+		e2e.Logf("fixture %s already has its image resolved, continuing", file)
+		return
+	}
+	image := GetPayloadImage(oc, "tools", "latest")
+	updated := strings.ReplaceAll(string(data), payloadImagePlaceholder, image)
+	o.Expect(os.WriteFile(file, []byte(updated), 0644)).NotTo(o.HaveOccurred(),
+		fmt.Sprintf("failed to write fixture %s", file))
+}
 
 func GetRandomString() string {
 	chars := "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -136,8 +288,9 @@ func GetDNSPodName(oc *exutil.CLI) string {
 func PollReadDnsCorefile(oc *exutil.CLI, dnsPodName, searchString1, grepOption, searchString2 string) string {
 	e2e.Logf("Polling and search dns Corefile")
 	ns := "openshift-dns"
-	cmd1 := fmt.Sprintf("grep \"%s\" /etc/coredns/Corefile %s | grep \"%s\"", searchString1, grepOption, searchString2)
-	cmd2 := fmt.Sprintf("grep \"%s\" /etc/coredns/Corefile %s", searchString1, grepOption)
+	// Search literal Corefile fragments; brackets in IPv6 endpoints are not regex classes.
+	cmd1 := fmt.Sprintf("grep -F \"%s\" /etc/coredns/Corefile %s | grep -F \"%s\"", searchString1, grepOption, searchString2)
+	cmd2 := fmt.Sprintf("grep -F \"%s\" /etc/coredns/Corefile %s", searchString1, grepOption)
 
 	waitErr := wait.PollImmediate(5*time.Second, 120*time.Second, func() (bool, error) {
 		HackAnnotatePod(oc, ns, dnsPodName)
@@ -248,12 +401,101 @@ func ForceOnlyOneDnsPodExist(oc *exutil.CLI) string {
 	return GetDNSPodName(oc)
 }
 
-func DeleteDnsOperatorToRestore(oc *exutil.CLI) {
-	_, err := oc.AsAdmin().WithoutNamespace().Run("delete").Args("dnses.operator.openshift.io/default").Output()
-	o.Expect(err).NotTo(o.HaveOccurred())
-	EnsureClusterOperatorNormal(oc, "dns", 2, 120)
-	err = oc.AsAdmin().WithoutNamespace().Run("label").Args("node", "-l", "nid-dns-testing=true", "nid-dns-testing-").Execute()
-	o.Expect(err).NotTo(o.HaveOccurred(), "failed to remove nid-dns-testing label from nodes")
+const (
+	defaultDNSName   = "default"
+	dnsTestNodeLabel = "nid-dns-testing"
+)
+
+type nodeLabelState struct {
+	value   string
+	present bool
+}
+
+type dnsConfigSnapshot struct {
+	spec       operatorv1.DNSSpec
+	nodeLabels map[string]nodeLabelState
+}
+
+// PreserveDNSConfig captures the DNS spec and test node labels before a mutation.
+// Call the returned cleanup function after restoring any stopped operators. It restores
+// the original values without deleting the DNS CR or overwriting unrelated node labels.
+func PreserveDNSConfig(oc *exutil.CLI) func() {
+	dnsClient := oc.AdminOperatorClient().OperatorV1().DNSes()
+	nodeClient := oc.AdminKubeClient().CoreV1().Nodes()
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+	snapshot, err := captureDNSConfig(ctx, dnsClient, nodeClient)
+	cancel()
+	o.Expect(err).NotTo(o.HaveOccurred(), "failed to capture DNS configuration before changing it")
+
+	return func() {
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
+		defer cancel()
+		err := snapshot.restore(ctx, dnsClient, nodeClient)
+		o.Expect(err).NotTo(o.HaveOccurred(), "failed to restore the original DNS configuration")
+		EnsureClusterOperatorNormal(oc, "dns", 2, 120)
+	}
+}
+
+func captureDNSConfig(ctx context.Context, dnsClient operatorclient.DNSInterface, nodeClient coreclient.NodeInterface) (*dnsConfigSnapshot, error) {
+	dns, err := dnsClient.Get(ctx, defaultDNSName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("read DNS configuration: %w", err)
+	}
+	nodes, err := nodeClient.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("read DNS test node labels: %w", err)
+	}
+	snapshot := &dnsConfigSnapshot{
+		spec:       *dns.Spec.DeepCopy(),
+		nodeLabels: make(map[string]nodeLabelState, len(nodes.Items)),
+	}
+	for _, node := range nodes.Items {
+		value, present := node.Labels[dnsTestNodeLabel]
+		snapshot.nodeLabels[node.Name] = nodeLabelState{value: value, present: present}
+	}
+	return snapshot, nil
+}
+
+func (snapshot *dnsConfigSnapshot) restore(ctx context.Context, dnsClient operatorclient.DNSInterface, nodeClient coreclient.NodeInterface) error {
+	var restoreErrors []error
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		dns, err := dnsClient.Get(ctx, defaultDNSName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		dns.Spec = *snapshot.spec.DeepCopy()
+		_, err = dnsClient.Update(ctx, dns, metav1.UpdateOptions{})
+		return err
+	}); err != nil {
+		restoreErrors = append(restoreErrors, fmt.Errorf("restore DNS spec: %w", err))
+	}
+	// Attempt every restoration even if one resource fails. Update the latest node
+	// object so unrelated labels and other concurrent node changes are retained.
+	for name, original := range snapshot.nodeLabels {
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			node, err := nodeClient.Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			value, present := node.Labels[dnsTestNodeLabel]
+			if present == original.present && value == original.value {
+				return nil
+			}
+			if original.present {
+				if node.Labels == nil {
+					node.Labels = make(map[string]string)
+				}
+				node.Labels[dnsTestNodeLabel] = original.value
+			} else {
+				delete(node.Labels, dnsTestNodeLabel)
+			}
+			_, err = nodeClient.Update(ctx, node, metav1.UpdateOptions{})
+			return err
+		}); err != nil {
+			restoreErrors = append(restoreErrors, fmt.Errorf("restore DNS test label on node %s: %w", name, err))
+		}
+	}
+	return errors.NewAggregate(restoreErrors)
 }
 
 func GetAllDNSPodsNames(oc *exutil.CLI) []string {

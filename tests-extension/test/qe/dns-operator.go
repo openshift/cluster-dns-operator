@@ -11,14 +11,22 @@ import (
 	compat_otp "github.com/openshift/origin/test/extended/util/compat_otp"
 )
 
-var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() {
+var _ = g.Describe("[sig-network-edge][OTP][Level0] Network_Edge Component_DNS", func() {
 	defer g.GinkgoRecover()
+
+	// Registered before exutil.NewCLIWithoutNamespace so the skip happens before any
+	// framework setup. See the matching comment in dns.go.
+	g.BeforeEach(func() {
+		util.SkipOnMicroShift()
+	})
+
 	oc := exutil.NewCLIWithoutNamespace("dns-operator")
 
 	// Incorporate OCP-26151 and OCP-23278 into one
 	// Test case creater: hongli@redhat.com - OCP-26151-Integrate DNS operator metrics with Prometheus
 	// Test case creater: hongli@redhat.com - OCP-23278-Integrate coredns metrics with monitoring component
-	g.It("Author:mjoseph-Critical-26151-Integrate DNS operator metrics with Prometheus [Skipped:MicroShift]", func() {
+	//Author:mjoseph
+	g.It("Integrate DNS operator metrics with Prometheus", g.Label("OCP-26151"), func() {
 		var (
 			ons        = "openshift-dns-operator"
 			dns        = "openshift-dns"
@@ -54,21 +62,24 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 	})
 
 	// Test case creater: hongli@redhat.com
-	// No dns operator namespace on HyperShift guest cluster so this case is not available
-	g.It("Author:mjoseph-NonHyperShiftHOST-High-37912-DNS operator should show clear error message when DNS service IP already allocated [Disruptive] [Serial] [Skipped:MicroShift]", func() {
+	// No dns operator namespace on HyperShift guest cluster, so cmd/main.go excludes this
+	// case on the External topology.
+	//Author:mjoseph
+	g.It("DNS operator should show clear error message when DNS service IP already allocated [Disruptive] [Serial]", g.Label("OCP-37912"), func() {
 		// Bug: 1813062, OCPBUGS-14346
 		// Store the clusterip from the cluster
 		clusterIp := util.GetByJsonPath(oc, "openshift-dns", "service/dns-default", "{.spec.clusterIP}")
 
 		compat_otp.By("1. Scale the CVO and DNS operator pod to zero and delete the default DNS service")
 		dnsOperatorPodName := util.GetPodListByLabel(oc, "openshift-dns-operator", "name=dns-operator")[0]
+		restoreDNS := util.PreserveDNSConfig(oc)
 		defer func() {
 			compat_otp.By("Recover the CVO and DNS")
 			_, errCVO := oc.AsAdmin().WithoutNamespace().Run("scale").Args("deployment/cluster-version-operator", "--replicas=1", "-n", "openshift-cluster-version").Output()
 			o.Expect(errCVO).NotTo(o.HaveOccurred())
 			_, errDNS := oc.AsAdmin().WithoutNamespace().Run("scale").Args("deployment/dns-operator", "--replicas=1", "-n", "openshift-dns-operator").Output()
 			o.Expect(errDNS).NotTo(o.HaveOccurred())
-			util.DeleteDnsOperatorToRestore(oc)
+			restoreDNS()
 		}()
 		_, err := oc.AsAdmin().WithoutNamespace().Run("scale").Args("deployment/cluster-version-operator", "--replicas=0", "-n", "openshift-cluster-version").Output()
 		o.Expect(err).NotTo(o.HaveOccurred())
@@ -111,7 +122,8 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 		o.Expect(outputOpcfg).To(o.ContainSubstring("No IP address is assigned to the DNS service"))
 	})
 
-	g.It("Author:mjoseph-Critical-41049-DNS controls pod placement by node selector [Disruptive] [Serial]", func() {
+	//Author:mjoseph
+	g.It("DNS controls pod placement by node selector [Disruptive] [Serial]", g.Label("OCP-41049"), func() {
 		podList := util.GetAllDNSPodsNames(oc)
 		if len(podList) == 1 {
 			g.Skip("Skipping on SNO cluster (just has one dns pod)")
@@ -130,7 +142,8 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 		// Since func util.ForceOnlyOneDnsPodExist() has implemented DNS nodeSelector
 		// just ensure the pod is running on the node with label "nid-dns-testing=true"
 		compat_otp.By("2. Check the nodeSelector can be updated")
-		defer util.DeleteDnsOperatorToRestore(oc)
+		restoreDNS := util.PreserveDNSConfig(oc)
+		defer restoreDNS()
 		oneDnsPod := util.ForceOnlyOneDnsPodExist(oc)
 		nodePlacement = util.GetByJsonPath(oc, ns, "ds/dns-default", "{.spec.template.spec.nodeSelector}")
 		o.Expect(nodePlacement).To(o.ContainSubstring(labelKey))
@@ -141,7 +154,8 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 		o.Expect(nodeByPod).To(o.BeEquivalentTo(nodeByLabel))
 	})
 
-	g.It("Author:mjoseph-Critical-41050-DNS controller pod placement by tolerations [Disruptive] [Serial]", func() {
+	//Author:mjoseph
+	g.It("DNS controller pod placement by tolerations [Disruptive] [Serial]", g.Label("OCP-41050"), func() {
 		// the case needs at least one worker node since dns pods will be removed from master
 		// so skip on SNO and Compact cluster that no dedicated worker node
 		output, err := oc.AsAdmin().WithoutNamespace().Run("get").Args("nodes", "-l node-role.kubernetes.io/worker=,node-role.kubernetes.io/master!=", `-ojsonpath={.items[*].status.conditions[?(@.type=="Ready")].status}`).Output()
@@ -162,7 +176,8 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 		compat_otp.By("2. Patch dns operator config with custom tolerations of dns pod, not to tolerate master node taints")
 		dnsPodsList := util.GetAllDNSPodsNames(oc)
 		jsonPath := `{.status.conditions[?(@.type=="Available")].status}{.status.conditions[?(@.type=="Progressing")].status}{.status.conditions[?(@.type=="Degraded")].status}`
-		defer util.DeleteDnsOperatorToRestore(oc)
+		restoreDNS := util.PreserveDNSConfig(oc)
+		defer restoreDNS()
 		util.PatchGlobalResourceAsAdmin(oc, "dns.operator.openshift.io/default", dnsCustomToleration)
 		util.WaitForRangeOfPodsToDisappear(oc, ns, dnsPodsList)
 		util.WaitForOutputEquals(oc, "default", "co/dns", jsonPath, "TrueFalseFalse")
@@ -183,12 +198,14 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 		o.Expect(status).NotTo(o.ContainSubstring("error"))
 	})
 
-	g.It("Author:hongli-High-46183-DNS operator supports Random, RoundRobin and Sequential policy for servers.forwardPlugin [Disruptive] [Serial]", func() {
+	//Author:hongli
+	g.It("DNS operator supports Random, RoundRobin and Sequential policy for servers.forwardPlugin [Disruptive] [Serial]", g.Label("OCP-46183"), func() {
 		resourceName := "dns.operator.openshift.io/default"
 		jsonPatch := "[{\"op\":\"add\", \"path\":\"/spec/servers\", \"value\":[{\"forwardPlugin\":{\"policy\":\"Random\",\"upstreams\":[\"8.8.8.8\"]},\"name\":\"test\",\"zones\":[\"mytest.ocp\"]}]}]"
 
 		compat_otp.By("1. Prepare the dns testing node and pod")
-		defer util.DeleteDnsOperatorToRestore(oc)
+		restoreDNS := util.PreserveDNSConfig(oc)
+		defer restoreDNS()
 		oneDnsPod := util.ForceOnlyOneDnsPodExist(oc)
 
 		compat_otp.By("2. Patch the dns.operator/default and add custom zones config, check Corefile and ensure the policy is Random")
@@ -207,15 +224,18 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 		o.Expect(policy).To(o.ContainSubstring(`policy sequential`))
 	})
 
-	// No dns operator namespace on HyperShift guest cluster so this case is not available
-	g.It("Author:shudili-NonHyperShiftHOST-Medium-46873-Configure operatorLogLevel under the default dns operator and check the logs flag [Disruptive] [Serial]", func() {
+	// No dns operator namespace on HyperShift guest cluster, so cmd/main.go excludes this
+	// case on the External topology.
+	//Author:shudili
+	g.It("Configure operatorLogLevel under the default dns operator and check the logs flag [Disruptive] [Serial]", g.Label("OCP-46873"), func() {
 		var (
 			resourceName        = "dns.operator.openshift.io/default"
 			cfgOploglevelDebug  = "[{\"op\":\"replace\", \"path\":\"/spec/operatorLogLevel\", \"value\":\"Debug\"}]"
 			cfgOploglevelTrace  = "[{\"op\":\"replace\", \"path\":\"/spec/operatorLogLevel\", \"value\":\"Trace\"}]"
 			cfgOploglevelNormal = "[{\"op\":\"replace\", \"path\":\"/spec/operatorLogLevel\", \"value\":\"Normal\"}]"
 		)
-		defer util.DeleteDnsOperatorToRestore(oc)
+		restoreDNS := util.PreserveDNSConfig(oc)
+		defer restoreDNS()
 
 		compat_otp.By("1. Check default log level of dns operator")
 		outputOpcfg, errOpcfg := oc.AsAdmin().WithoutNamespace().Run("get").Args("dns.operator", "default", "-o=jsonpath={.spec.operatorLogLevel}").Output()
@@ -259,7 +279,8 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 	})
 
 	// Bug: OCPBUGS-6829
-	g.It("Author:mjoseph-High-63512-Enbaling force_tcp for protocolStrategy field to allow DNS queries to send on TCP to upstream server [Disruptive] [Serial]", func() {
+	//Author:mjoseph
+	g.It("Enabling force_tcp for protocolStrategy field to allow DNS queries to send on TCP to upstream server [Disruptive] [Serial]", g.Label("OCP-63512"), func() {
 		var (
 			resourceName                = "dns.operator.openshift.io/default"
 			upstreamResolverPatch       = "[{\"op\":\"add\", \"path\":\"/spec/upstreamResolvers/protocolStrategy\", \"value\":\"TCP\"}]"
@@ -273,7 +294,8 @@ var _ = g.Describe("[OTP][sig-network-edge] Network_Edge Component_DNS", func() 
 		o.Expect(strings.Contains(output, "force_tcp")).NotTo(o.BeTrue())
 
 		compat_otp.By("2. Prepare the dns testing node and pod")
-		defer util.DeleteDnsOperatorToRestore(oc)
+		restoreDNS := util.PreserveDNSConfig(oc)
+		defer restoreDNS()
 		oneDnsPod := util.ForceOnlyOneDnsPodExist(oc)
 
 		compat_otp.By("3. Patch dns operator with 'TCP' as protocol strategy for upstreamresolver")

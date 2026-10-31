@@ -1,3 +1,14 @@
+# The image is replaced at runtime by util.ReplacePayloadImage() with the pull spec of the
+# release payload's "tools" imagestream tag, so this fixture is pullable in disconnected
+# lanes (see OCPBUGS-132070, pattern 2).
+#
+# OCP-39842 only asserts that the two dual-stack Services get v4+v6 clusterIPs and that
+# their names resolve to those addresses via getent from inside the pod. Nothing ever
+# connects to the container, so the probes are exec probes rather than httpGet and no HTTP
+# server is required. The Services keep their ports so the dual-stack allocation is
+# exercised unchanged.
+#
+# The workload's service account uses restricted-v2, which assigns a non-root UID.
 apiVersion: v1
 kind: List
 items:
@@ -19,12 +30,12 @@ items:
       spec:
         automountServiceAccountToken: false
         securityContext:
-          runAsNonRoot: true
           seccompProfile:
             type: RuntimeDefault
         containers:
-        - image: quay.io/openshifttest/nginx-alpine@sha256:cee6930776b92dc1e93b73f9e5965925d49cff3d2e91e1d071c2f0ff72cbca29
-          name: nginx
+        - image: PAYLOAD_TOOLS_IMAGE
+          name: web-server
+          command: ["/bin/sh", "-c", "trap 'exit 0' TERM; sleep infinity & wait"]
           resources:
             requests:
               cpu: 50m
@@ -33,19 +44,19 @@ items:
               cpu: 100m
               memory: 128Mi
           readinessProbe:
-            httpGet:
-              port: 8080
-              path: /
+            exec:
+              command: ['sh', '-c', 'true']
             initialDelaySeconds: 3
             periodSeconds: 5
           livenessProbe:
-            httpGet:
-              port: 8080
-              path: /
+            exec:
+              command: ['sh', '-c', 'true']
             initialDelaySeconds: 5
             periodSeconds: 10
           securityContext:
+            runAsNonRoot: true
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
               - ALL
