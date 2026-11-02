@@ -83,6 +83,32 @@ Example -
 
 ## Tests
 
+### Formatting Verification
+
+Run `hack/verify-gofmt.sh` from the repository root to check regular Go source
+files without modifying them. The same check runs as part of `make verify`.
+Directories named `vendor` or `_output` are excluded at any depth. First-party
+code under `tests-extension`, including generated Go code, remains checked.
+
+The check uses `gofmt` from `PATH` by default. To use the formatter from the
+Go toolchain selected for this module, run:
+
+```bash
+GOFMT="$(go env GOROOT)/bin/gofmt" hack/verify-gofmt.sh
+```
+
+`GOFMT` must name a single executable, not a command with arguments. Both
+formatting differences and formatter execution errors fail verification.
+Inspect reported files with `gofmt -s -d` and quote their paths; do not pipe
+the output back into a command that splits filenames on whitespace.
+
+Generated-file findings must be addressed through their generation workflow,
+not by excluding or hand-editing the generated file. Bindata generation is
+defined in `tests-extension/test/qe/bindata.mk`; verification does not regenerate
+it automatically.
+
+### Unit And End-To-End Tests
+
 Run unit tests:
 
 ```
