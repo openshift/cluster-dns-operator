@@ -1,0 +1,611 @@
+[
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Integrate DNS operator metrics with Prometheus",
+    "labels": {
+      "OCP-26151": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:14",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:19",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:29"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS DNS operator should show clear error message when DNS service IP already allocated [Disruptive] [Serial]",
+    "labels": {
+      "OCP-37912": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:14",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:19",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:68"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "(topology==\"microshift\") || (topology==\"External\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS DNS controls pod placement by node selector [Disruptive] [Serial]",
+    "labels": {
+      "OCP-41049": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:14",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:19",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:126"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS DNS controller pod placement by tolerations [Disruptive] [Serial]",
+    "labels": {
+      "OCP-41050": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:14",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:19",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:158"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS DNS operator supports Random, RoundRobin and Sequential policy for servers.forwardPlugin [Disruptive] [Serial]",
+    "labels": {
+      "OCP-46183": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:14",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:19",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:202"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Configure operatorLogLevel under the default dns operator and check the logs flag [Disruptive] [Serial]",
+    "labels": {
+      "OCP-46873": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:14",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:19",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:230"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "(topology==\"microshift\") || (topology==\"External\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Enabling force_tcp for protocolStrategy field to allow DNS queries to send on TCP to upstream server [Disruptive] [Serial]",
+    "labels": {
+      "OCP-63512": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:14",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:19",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns-operator.go:283"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS CoreDNS supports dual stack ClusterIP Services for OCP4.8 or higher",
+    "labels": {
+      "OCP-39842": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:36"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS CoreDNS cache should use 900s for positive responses and 30s for negative responses [Disruptive] [Serial]",
+    "labels": {
+      "OCP-40718": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:83"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Deleting the internal registry should not corrupt /etc/hosts [Disruptive] [Serial]",
+    "labels": {
+      "OCP-40867": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:111"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Configure upstream resolvers for CoreDNS flag [Disruptive] [Serial]",
+    "labels": {
+      "OCP-46867": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:156"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Negative test of configuring upstream resolvers and policy flag [Disruptive] [Serial]",
+    "labels": {
+      "OCP-46869": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:235"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Configure logLevel for CoreDNS under DNS operator flag [Disruptive] [Serial]",
+    "labels": {
+      "OCP-46872": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:294"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Negative test for configuring logLevel and operatorLogLevel flag [Disruptive] [Serial]",
+    "labels": {
+      "OCP-46874": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:321"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Different LogLevel logging function of CoreDNS flag [Disruptive] [Serial]",
+    "labels": {
+      "OCP-46875": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:362"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Support CoreDNS forwarding DNS requests over TLS using UpstreamResolvers [Disruptive] [Serial]",
+    "labels": {
+      "OCP-51946": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:440"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "(topology==\"microshift\") || (topology==\"External\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS CoreDNS forwarding DNS requests over TLS with CLEAR TEXT [Disruptive] [Serial]",
+    "labels": {
+      "OCP-52077": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:520"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "(topology==\"microshift\") || (topology==\"External\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Support CoreDNS forwarding DNS requests over TLS - using system CA [Disruptive] [Serial]",
+    "labels": {
+      "OCP-52497": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:586"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "(topology==\"microshift\") || (topology==\"External\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Configuring CoreDNS caching and TTL parameters [Disruptive] [Serial]",
+    "labels": {
+      "OCP-54042": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:658"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Check CoreDNS default bufsize, readinessProbe path and policy",
+    "labels": {
+      "OCP-55821": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:699"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "(topology==\"microshift\") || (topology==\"External\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS DNS pod should not work on nodes with taint configured [Disruptive] [Serial]",
+    "labels": {
+      "OCP-56325": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:772"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "((topology==\"microshift\") || (topology==\"External\")) || (topology==\"SingleReplica\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Disabling the internal registry should not corrupt /etc/hosts [Disruptive] [Serial]",
+    "labels": {
+      "OCP-56539": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:816"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "(topology==\"microshift\") || (topology==\"External\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Confirm the coreDNS version and Kubernetes version of the oc client",
+    "labels": {
+      "OCP-56884": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:865"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Check the max number of domains in the search path list of any pod",
+    "labels": {
+      "OCP-60350": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:886"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Check the max number of characters in the search path of any pod",
+    "labels": {
+      "OCP-60492": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:911"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS Annotation 'TopologyAwareHints' presents should not cause any pathological events",
+    "labels": {
+      "OCP-63553": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:937"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "topology==\"microshift\""
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS DNSNameResolver CR get updated with IP addresses and TTL of the DNS name [Serial]",
+    "labels": {
+      "OCP-73379": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:965"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "((topology==\"microshift\") || (topology==\"External\")) || (externalConnectivity==\"Disconnected\")"
+    }
+  },
+  {
+    "name": "[sig-network-edge][OTP][Level0] Network_Edge Component_DNS DNSNameResolver CR should resolve multiple DNS names [Serial]",
+    "labels": {
+      "OCP-75426": {}
+    },
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-dns-operator",
+    "codeLocations": [
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:22",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:29",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:186",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:195",
+      "github.com/openshift/origin@v1.5.0-alpha.3.0.20260630051315-550265f58e8a/test/extended/util/client.go:161",
+      "github.com/openshift/cluster-dns-operator-tests-extension/test/qe/dns.go:1009"
+    ],
+    "lifecycle": "informing",
+    "environmentSelector": {
+      "exclude": "((topology==\"microshift\") || (topology==\"External\")) || (externalConnectivity==\"Disconnected\")"
+    }
+  }
+]
