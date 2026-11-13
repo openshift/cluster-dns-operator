@@ -11,14 +11,17 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
+	"github.com/openshift/cluster-dns-operator/pkg/operator/responsevalidation"
 	"github.com/sirupsen/logrus"
 
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -40,6 +43,31 @@ var errInvalidNetworkUpstream = fmt.Errorf("The address field is mandatory for u
 var errTransportTLSConfiguredWithoutServerName = fmt.Errorf("The ServerName field is mandatory when configuring TLS as the DNS Transport")
 var errTransportTLSConfiguredForNonIP = fmt.Errorf("Only IP addresses are allowed when configuring TLS as the DNS Transport")
 var errTransportTLSConfiguredForSysResConf = fmt.Errorf("Using system resolv config is not allowed when configuring TLS as the DNS Transport")
+
+// validateAllResponseRuleStanzas validates the complete set of rendered
+// response rule stanzas. It is a variable so tests can inject a failure
+// that does not map back to any single rule.
+var validateAllResponseRuleStanzas = responsevalidation.ValidateRenderedStanzas
+
+type responseRuleValidationError struct {
+	message string
+	// reason is the ResponseRulesValid condition reason; empty means
+	// InvalidResponseRules.
+	reason string
+}
+
+// responseRulesUnsupportedReason is the ResponseRulesValid condition reason
+// used when the cluster topology does not support response rules yet.
+const responseRulesUnsupportedReason = "UnsupportedTopology"
+
+func (e *responseRuleValidationError) Error() string { return e.message }
+
+type dnsTemplateValidationError struct{ cause error }
+
+func (e *dnsTemplateValidationError) Error() string {
+	return fmt.Sprintf("failed to render DNS template: %v", e.cause)
+}
+
 var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.FuncMap{
 	"CoreDNSForwardingPolicy": coreDNSPolicy, "UpstreamResolver": coreDNSResolver,
 }).Parse(`{{range .Servers -}}
@@ -73,6 +101,8 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         namespaces {{range $.DNSNameResolverNamespaces}}{{.}} {{end}}
     }
     {{- end}}
+    {{- if $.TemplateStanzas}}
+{{$.TemplateStanzas}}    {{- end}}
 }
 {{end -}}
 .:5353 {
@@ -90,6 +120,10 @@ var corefileTemplate = template.Must(template.New("Corefile").Funcs(template.Fun
         fallthrough in-addr.arpa ip6.arpa
     }
     prometheus 127.0.0.1:9153
+    {{- if .ResponseRuleStanzas}}
+{{.ResponseRuleStanzas}}    {{- end}}
+    {{- if .TemplateStanzas}}
+{{.TemplateStanzas}}    {{- end}}
     {{- with .UpstreamResolvers }}
     forward .{{range .Upstreams}} {{if eq "TLS" $.UpstreamResolvers.TransportConfig.Transport}}tls://{{end}}{{UpstreamResolver .}}{{end}} {
         {{- with $tls := .TransportConfig.TLS }}
@@ -125,9 +159,106 @@ func (r *reconciler) ensureDNSConfigMap(dns *operatorv1.DNS, clusterDomain strin
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to get configmap: %v", err)
 	}
-	desired, err := desiredDNSConfigMap(dns, clusterDomain, caBundleRevisionMap, r.dnsNameResolverEnabled, r.dnsNameResolverNamespaces)
+	candidate := dns
+	if r.responseWebhookManaged && !r.responseRulesEnabled && (len(dns.Spec.ResponseRules) != 0 || len(dns.Spec.Template.Zones) != 0) {
+		candidate = dns.DeepCopy()
+		candidate.Spec.ResponseRules = nil
+		candidate.Spec.Template = operatorv1.DNSTemplate{}
+	}
+	var rejected []string
+	excludeImmediately := false
+	unsupported := false
+	if len(candidate.Spec.ResponseRules) != 0 {
+		ingress := &configv1.Ingress{}
+		var contextErr error
+		if err := r.client.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, ingress); err != nil {
+			contextErr = fmt.Errorf("failed to get cluster ingress for response rule validation: %w", err)
+		}
+		infrastructure := &configv1.Infrastructure{}
+		if contextErr == nil {
+			if err := r.client.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, infrastructure); err != nil {
+				contextErr = fmt.Errorf("failed to get cluster infrastructure for response rule validation: %w", err)
+			}
+		}
+		if contextErr != nil {
+			if haveCM {
+				return true, current, &responseRuleValidationError{message: contextErr.Error()}
+			}
+			rejected = append(rejected, contextErr.Error())
+			candidate = dns.DeepCopy()
+			candidate.Spec.ResponseRules = nil
+		} else if responseRulesUnsupported(infrastructure) {
+			// On a hosted control plane the webhook cannot be deployed
+			// yet, so rules are never served without admission checks.
+			unsupported = true
+			candidate = candidate.DeepCopy()
+			candidate.Spec.ResponseRules = nil
+		}
+		if len(candidate.Spec.ResponseRules) != 0 {
+			remaining, violations, err := selectValidResponseRules(candidate, ingress, infrastructure)
+			if err != nil {
+				message := fmt.Sprintf("failed to validate response rules: %v", err)
+				if haveCM {
+					return true, current, &responseRuleValidationError{message: message}
+				}
+				rejected = append(rejected, message)
+				candidate = dns.DeepCopy()
+				candidate.Spec.ResponseRules = nil
+			} else if len(violations) != 0 {
+				for _, violation := range violations {
+					rejected = append(rejected, violation.Error())
+					if violation.Kind == responsevalidation.ViolationProtected {
+						excludeImmediately = true
+					}
+				}
+				// Keep serving the last applied Corefile for an invalid
+				// rule, unless a rule covers a protected API or ingress
+				// name: keeping that Corefile would keep serving the
+				// prohibited override, so exclude the offending rules and
+				// apply the remaining configuration now.
+				if haveCM && !excludeImmediately {
+					return true, current, &responseRuleValidationError{message: fmt.Sprintf("invalid response rules: %s", strings.Join(rejected, "; "))}
+				}
+				if candidate == dns {
+					candidate = dns.DeepCopy()
+				}
+				candidate.Spec.ResponseRules = remaining
+			}
+		}
+	}
+	desired, err := desiredDNSConfigMap(candidate, clusterDomain, caBundleRevisionMap, r.dnsNameResolverEnabled, r.dnsNameResolverNamespaces)
 	if err != nil {
-		return haveCM, current, fmt.Errorf("failed to build configmap: %v", err)
+		if _, isTemplateError := err.(*dnsTemplateValidationError); isTemplateError {
+			return haveCM, current, err
+		}
+		if len(candidate.Spec.ResponseRules) == 0 {
+			return haveCM, current, fmt.Errorf("failed to build configmap: %w", err)
+		}
+		if haveCM && !excludeImmediately {
+			return true, current, &responseRuleValidationError{message: fmt.Sprintf("failed to validate rendered response rules: %v", err)}
+		}
+		fallback := candidate.DeepCopy()
+		fallback.Spec.ResponseRules = nil
+		fallbackDesired, fallbackErr := desiredDNSConfigMap(fallback, clusterDomain, caBundleRevisionMap, r.dnsNameResolverEnabled, r.dnsNameResolverNamespaces)
+		if fallbackErr != nil {
+			return false, nil, fmt.Errorf("failed to build configmap with and without response rules: %v; %w", err, fallbackErr)
+		}
+		desired = fallbackDesired
+		rejected = append(rejected, fmt.Sprintf("rendered response rules failed validation: %v", err))
+	}
+
+	// rulesError reports response rules that were not applied, if any.
+	rulesError := func(prefix string) error {
+		if unsupported {
+			return &responseRuleValidationError{
+				message: "response rules are not supported yet when the control plane topology is External; no rules are served",
+				reason:  responseRulesUnsupportedReason,
+			}
+		}
+		if len(rejected) != 0 {
+			return &responseRuleValidationError{message: fmt.Sprintf("%s: %s", prefix, strings.Join(rejected, "; "))}
+		}
+		return nil
 	}
 
 	switch {
@@ -136,15 +267,73 @@ func (r *reconciler) ensureDNSConfigMap(dns *operatorv1.DNS, clusterDomain strin
 			return false, nil, fmt.Errorf("failed to create configmap: %v", err)
 		}
 		logrus.Infof("created configmap: %s", desired.Name)
-		return r.currentDNSConfigMap(dns)
+		have, created, err := r.currentDNSConfigMap(dns)
+		if err == nil {
+			err = rulesError("excluded invalid response rules from initial configmap")
+		}
+		return have, created, err
 	case haveCM:
 		if updated, err := r.updateDNSConfigMap(current, desired); err != nil {
 			return true, current, err
 		} else if updated {
-			return r.currentDNSConfigMap(dns)
+			have, updatedCM, err := r.currentDNSConfigMap(dns)
+			if err == nil {
+				err = rulesError("excluded response rules")
+			}
+			return have, updatedCM, err
 		}
 	}
-	return true, current, nil
+	return true, current, rulesError("excluded response rules")
+}
+
+// responseRulesUnsupported reports whether response rules must not be
+// served on this cluster's topology yet. On a hosted control plane
+// (External topology) the admission webhook cannot be deployed until
+// HyperShift passes the webhook image to the operator.
+func responseRulesUnsupported(infrastructure *configv1.Infrastructure) bool {
+	return infrastructure != nil && infrastructure.Status.ControlPlaneTopology == configv1.ExternalTopologyMode
+}
+
+// selectValidResponseRules returns the subset of the DNS's response rules
+// that pass reconcile-time validation and per-rule render validation, and
+// the violations of the excluded rules. Excluding a rule can change the
+// outcome for the others (for example, a CNAME chain), so the remaining
+// rules are validated again until no violations remain.
+func selectValidResponseRules(dns *operatorv1.DNS, ingress *configv1.Ingress, infrastructure *configv1.Infrastructure) ([]operatorv1.DNSResponseRule, []responsevalidation.Violation, error) {
+	candidate := dns.DeepCopy()
+	var all []responsevalidation.Violation
+	for len(candidate.Spec.ResponseRules) != 0 {
+		violations, err := responsevalidation.Validate(candidate, ingress, infrastructure)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, rule := range candidate.Spec.ResponseRules {
+			if err := validateResponseRule(rule); err != nil {
+				violations = append(violations, responsevalidation.Violation{
+					Rule: string(rule.Name), Kind: responsevalidation.ViolationInvalid, Reason: fmt.Sprintf("rendered stanza is invalid: %v", err),
+				})
+			}
+		}
+		if len(violations) == 0 {
+			break
+		}
+		all = append(all, violations...)
+		invalid := make(map[operatorv1.DNSResponseRuleName]bool, len(violations))
+		for _, violation := range violations {
+			invalid[operatorv1.DNSResponseRuleName(violation.Rule)] = true
+		}
+		remaining := make([]operatorv1.DNSResponseRule, 0, len(candidate.Spec.ResponseRules))
+		for _, rule := range candidate.Spec.ResponseRules {
+			if !invalid[rule.Name] {
+				remaining = append(remaining, rule)
+			}
+		}
+		if len(remaining) == len(candidate.Spec.ResponseRules) {
+			return nil, nil, fmt.Errorf("cannot identify invalid response rules: %v", violations)
+		}
+		candidate.Spec.ResponseRules = remaining
+	}
+	return candidate.Spec.ResponseRules, all, nil
 }
 
 func (r *reconciler) currentDNSConfigMap(dns *operatorv1.DNS) (bool, *corev1.ConfigMap, error) {
@@ -205,6 +394,20 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 	// Calculate the caching values (in seconds) for use in the Corefile
 	pTTL, nTTL := coreDNSCache(dns)
 
+	responseRuleStanzas, err := renderResponseRuleStanzas(dns.Spec.ResponseRules)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render response rules: %w", err)
+	}
+	if err := validateAllResponseRuleStanzas(responseRuleStanzas); err != nil {
+		return nil, err
+	}
+	responseRuleStanzas = strings.TrimSuffix(responseRuleStanzas, "\n")
+	templateStanzas, err := renderDNSTemplateStanzas(dns.Spec.Template)
+	if err != nil {
+		return nil, &dnsTemplateValidationError{cause: err}
+	}
+	templateStanzas = strings.TrimSuffix(templateStanzas, "\n")
+
 	corefileParameters := struct {
 		ClusterDomain             string
 		Servers                   interface{}
@@ -218,6 +421,8 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		NegativeTTL               uint32
 		OCPDNSNameResolver        bool
 		DNSNameResolverNamespaces []string
+		ResponseRuleStanzas       string
+		TemplateStanzas           string
 	}{
 		ClusterDomain:             clusterDomain,
 		Servers:                   dns.Spec.Servers,
@@ -231,6 +436,8 @@ func desiredDNSConfigMap(dns *operatorv1.DNS, clusterDomain string, caBundleRevi
 		NegativeTTL:               nTTL,
 		OCPDNSNameResolver:        dnsNameResolverEnabled,
 		DNSNameResolverNamespaces: dnsNameResolverNamespaces,
+		ResponseRuleStanzas:       responseRuleStanzas,
+		TemplateStanzas:           templateStanzas,
 	}
 	corefile := new(bytes.Buffer)
 	if err := corefileTemplate.Execute(corefile, corefileParameters); err != nil {
