@@ -1,7 +1,12 @@
 #!/bin/bash
 
-go_files=$( find . -name '*.go' -not -path './vendor/*' -print )
-bad_files=$(gofmt -s -l ${go_files})
+set -euo pipefail
+
+bad_files=$(
+    find . -type d \( -name vendor -o -name _output \) -prune -o \
+        -type f -name '*.go' -print0 |
+        xargs -0 -r -n 100 "${GOFMT:-gofmt}" -s -l
+)
 if [[ -n "${bad_files}" ]]; then
     (>&2 echo "!!! gofmt needs to be run on the listed files")
 	echo "${bad_files}"
