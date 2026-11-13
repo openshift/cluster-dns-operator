@@ -48,6 +48,7 @@ rules:
   resources:
   - endpointslices
   verbs:
+  - get
   - list
   - watch
 
@@ -91,6 +92,7 @@ rules:
   - rbac.authorization.k8s.io
   resources:
   - clusterroles
+  - roles
   verbs:
   - update
 
