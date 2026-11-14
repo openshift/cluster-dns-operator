@@ -27,6 +27,10 @@ import (
 // for progressing and degraded then consider oldCondition to be recent
 // and return oldCondition to prevent frequent updates.
 func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration, reconcileResult *reconcile.Result) error {
+	return r.syncDNSStatusWithResponseRules(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, transitionUnchangedToleration, reconcileResult, nil, false)
+}
+
+func (r *reconciler) syncDNSStatusWithResponseRules(dns *operatorv1.DNS, clusterIP, clusterDomain string, haveDNSDaemonset bool, dnsDaemonset *appsv1.DaemonSet, haveNodeResolverDaemonset bool, nodeResolverDaemonset *appsv1.DaemonSet, transitionUnchangedToleration time.Duration, reconcileResult *reconcile.Result, responseRulesError *responseRuleValidationError, responseRulesApplied bool) error {
 	var errs []error
 	updated := dns.DeepCopy()
 	updated.Status.ClusterIP = clusterIP
@@ -36,7 +40,33 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 	if err != nil {
 		logrus.Infof("error computing DNS %s status: %v got %v", dns.ObjectMeta.Name, statusConds, err)
 		errs = append(errs, err)
-		return retryable.NewMaybeRetryableAggregate(errs)
+		if responseRulesError == nil && !responseRulesApplied {
+			return retryable.NewMaybeRetryableAggregate(errs)
+		}
+	}
+	if responseRulesError != nil || (responseRulesApplied && r.responseRulesEnabled && len(dns.Spec.ResponseRules) != 0) {
+		condition := operatorv1.OperatorCondition{
+			Type:               "ResponseRulesValid",
+			Status:             operatorv1.ConditionTrue,
+			Reason:             "ResponseRulesApplied",
+			Message:            "Response rules were applied to the DNS Corefile",
+			LastTransitionTime: metav1.Now(),
+		}
+		if responseRulesError != nil {
+			condition.Status = operatorv1.ConditionFalse
+			condition.Reason = "InvalidResponseRules"
+			if responseRulesError.reason != "" {
+				condition.Reason = responseRulesError.reason
+			}
+			condition.Message = responseRulesError.Error()
+		}
+		for _, old := range dns.Status.Conditions {
+			if old.Type == condition.Type && old.Status == condition.Status {
+				condition.LastTransitionTime = old.LastTransitionTime
+				break
+			}
+		}
+		statusConds = append(statusConds, condition)
 	}
 
 	updated.Status.Conditions = statusConds
@@ -47,6 +77,9 @@ func (r *reconciler) syncDNSStatus(dns *operatorv1.DNS, clusterIP, clusterDomain
 		logrus.Infof("updated DNS %s status: old: %#v, new: %#v", dns.ObjectMeta.Name, dns.Status, updated.Status)
 	}
 
+	if len(errs) != 0 {
+		return retryable.NewMaybeRetryableAggregate(errs)
+	}
 	return nil
 }
 

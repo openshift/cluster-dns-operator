@@ -62,6 +62,12 @@ verify:
 	hack/verify-generated-crd.sh
 	hack/verify-deps.sh
 
+# Not yet part of verify: the vendored CoreDNS must first be bumped to the
+# version openshift/coredns ships.
+.PHONY: verify-coredns-version
+verify-coredns-version:
+	hack/verify-coredns-version.sh
+
 .PHONY: local-image
 local-image:
 ifeq ($(CONTAINER_ENGINE), USE_BUILDAH)

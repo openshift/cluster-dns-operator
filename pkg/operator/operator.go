@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/cluster-dns-operator/pkg/manifests"
 	operatorclient "github.com/openshift/cluster-dns-operator/pkg/operator/client"
@@ -90,6 +91,7 @@ func New(ctx context.Context, config operatorconfig.Config, kubeConfig *rest.Con
 	}
 
 	dnsNameResolverEnabled := featureGates.Enabled(features.FeatureGateDNSNameResolver)
+	responseRulesEnabled := featureGates.Enabled(configv1.FeatureGateName("DNSTemplatePlugin"))
 
 	metricsOpts := metricsserver.Options{
 		BindAddress: config.MetricsBindAddress,
@@ -140,6 +142,8 @@ func New(ctx context.Context, config operatorconfig.Config, kubeConfig *rest.Con
 		Config:                    cfg,
 		DNSNameResolverEnabled:    dnsNameResolverEnabled,
 		DNSNameResolverNamespaces: []string{operatorcontroller.DefaultDNSNameResolverNamespace},
+		ResponseRulesEnabled:      responseRulesEnabled,
+		ResponseWebhookManaged:    true,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to create operator controller: %v", err)
 	}

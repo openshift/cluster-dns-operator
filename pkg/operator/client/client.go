@@ -7,6 +7,7 @@ import (
 	networkv1alpha1 "github.com/openshift/api/network/v1alpha1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 
@@ -35,6 +36,9 @@ func init() {
 		panic(err)
 	}
 	if err := networkv1alpha1.Install(scheme); err != nil {
+		panic(err)
+	}
+	if err := apiextensionsv1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
 }

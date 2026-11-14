@@ -31,6 +31,42 @@ rules:
   - "*"
 
 - apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - create
+  - update
+  - delete
+
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - create
+  - update
+  - delete
+
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  resourceNames:
+  - dnses.operator.openshift.io
+  verbs:
+  - get
+
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+
+- apiGroups:
   - ""
   resources:
   - namespaces
@@ -118,6 +154,8 @@ rules:
   - clusterversions
   - featuregates
   - networks
+  - ingresses
+  - infrastructures
   verbs:
   - get
   - list
