@@ -17,6 +17,10 @@ type Config struct {
 	// OpenshiftCLIImage is the openshift client image to manage.
 	OpenshiftCLIImage string
 
+	// ResponseWebhookImage is the image of the DNS response rule
+	// admission webhook, which is the operator's own image.
+	ResponseWebhookImage string
+
 	// KubeRBACProxyImage is the kube-rbac-proxy image used by the
 	// CoreDNS DaemonSet operand to secure its metrics endpoint.
 	KubeRBACProxyImage string

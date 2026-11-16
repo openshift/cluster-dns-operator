@@ -78,6 +78,8 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 		cache:                     operatorCache,
 		dnsNameResolverEnabled:    config.DNSNameResolverEnabled,
 		dnsNameResolverNamespaces: config.DNSNameResolverNamespaces,
+		responseRulesEnabled:      config.ResponseRulesEnabled,
+		responseWebhookManaged:    config.ResponseWebhookManaged,
 	}
 	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
@@ -122,6 +124,12 @@ func New(mgr manager.Manager, config Config) (controller.Controller, error) {
 	if err := c.Watch(source.Kind[client.Object](operatorCache, &configv1.APIServer{}, handler.EnqueueRequestsFromMapFunc(objectToDNS))); err != nil {
 		return nil, err
 	}
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &configv1.Ingress{}, handler.EnqueueRequestsFromMapFunc(objectToDNS))); err != nil {
+		return nil, err
+	}
+	if err := c.Watch(source.Kind[client.Object](operatorCache, &configv1.Infrastructure{}, handler.EnqueueRequestsFromMapFunc(objectToDNS))); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -140,6 +148,8 @@ func enqueueRequestForOwningDNS() handler.EventHandler {
 // Config holds all the configuration that must be provided when creating the
 // controller.
 type Config struct {
+	ResponseRulesEnabled   bool
+	ResponseWebhookManaged bool
 	// DNSNameResolverEnabled indicates that the "DNSNameResolver" featuregate is enabled.
 	DNSNameResolverEnabled bool
 	// DNSNameResolverNamespaces are the namespaces which will be watched for the
@@ -164,6 +174,8 @@ type reconciler struct {
 	// DNSNameResolver resources and updated by the CoreDNS pods the "DNSNameResolver"
 	// featuregate is enabled.
 	dnsNameResolverNamespaces []string
+	responseRulesEnabled      bool
+	responseWebhookManaged    bool
 }
 
 // Reconcile expects request to refer to a dns and will do all the work
@@ -505,6 +517,15 @@ func (r *reconciler) ensureDNS(ctx context.Context, dns *operatorv1.DNS, reconci
 	}
 
 	errs := []error{}
+	if r.responseWebhookManaged {
+		if r.responseRulesEnabled {
+			if err := r.ensureResponseWebhook(ctx); err != nil {
+				errs = append(errs, fmt.Errorf("failed to ensure response rule webhook: %w", err))
+			}
+		} else if err := r.removeResponseWebhook(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove response rule webhook: %w", err))
+		}
+	}
 
 	if err := r.ensureCABundleConfigMaps(dns); err != nil {
 		errs = append(errs, fmt.Errorf("failed to create ca bundle configmaps for dns %s: %w", dns.Name, err))
@@ -536,6 +557,8 @@ func (r *reconciler) ensureDNS(ctx context.Context, dns *operatorv1.DNS, reconci
 		tlsSecurityProfile = apiServer.Spec.TLSSecurityProfile
 	}
 
+	var responseRulesError *responseRuleValidationError
+	responseRulesApplied := false
 	haveDNSDaemonset, dnsDaemonset, err := r.ensureDNSDaemonSet(dns, cmMap, tlsSecurityProfile)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to ensure daemonset for dns %s: %v", dns.Name, err))
@@ -552,7 +575,10 @@ func (r *reconciler) ensureDNS(ctx context.Context, dns *operatorv1.DNS, reconci
 		}
 
 		if _, _, err := r.ensureDNSConfigMap(dns, clusterDomain, cmMap); err != nil {
+			responseRulesError, _ = err.(*responseRuleValidationError)
 			errs = append(errs, fmt.Errorf("failed to create configmap for dns %s: %v", dns.Name, err))
+		} else {
+			responseRulesApplied = true
 		}
 		if _, _, err := r.ensureDNSNetworkPolicy(ctx, dns); err != nil {
 			errs = append(errs, fmt.Errorf("failed to ensure networkpolicy for dns %s: %v", dns.Name, err))
@@ -580,7 +606,7 @@ func (r *reconciler) ensureDNS(ctx context.Context, dns *operatorv1.DNS, reconci
 
 	// 2*lameDuckDuration is used for transitionUnchangedToleration to add some room to cover lameDuckDuration when CoreDNS reports unavailable.
 	// This is eventually used to prevent frequent updates.
-	if err := r.syncDNSStatus(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration, reconcileResult); err != nil {
+	if err := r.syncDNSStatusWithResponseRules(dns, clusterIP, clusterDomain, haveDNSDaemonset, dnsDaemonset, haveNodeResolverDaemonset, nodeResolverDaemonset, 2*lameDuckDuration, reconcileResult, responseRulesError, responseRulesApplied); err != nil {
 		// If syncDNSStatus returns a retryable error, don't wrap it.  If it were wrapped, it wouldn't be recognized as a retryable error.
 		if _, ok := err.(retryable.Error); ok {
 			errs = append(errs, err)

@@ -35,6 +35,8 @@ spec:
           value: openshift/origin-cli:v4.0
         - name: KUBE_RBAC_PROXY_IMAGE
           value: quay.io/openshift/origin-kube-rbac-proxy:latest
+        - name: RESPONSE_WEBHOOK_IMAGE
+          value: openshift/origin-cluster-dns-operator:latest
         image: openshift/origin-cluster-dns-operator:latest
         name: dns-operator
         ports:
