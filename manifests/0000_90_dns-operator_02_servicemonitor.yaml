@@ -20,3 +20,4 @@ spec:
   selector:
     matchLabels:
       name: dns-operator
+  serviceDiscoveryRole: EndpointSlice
