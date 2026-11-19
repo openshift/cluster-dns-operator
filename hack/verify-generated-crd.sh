@@ -6,15 +6,19 @@ set -euo pipefail
 # out of this component's manifests to avoid applying two independently
 # ordered copies of the same CRD.
 #
-# Any manifest that names either CRD is rejected.  No other manifest in this
-# repository uses these names, so matching on the name alone is sufficient, and
-# it also catches flow-style YAML, JSON, and List-wrapped manifests.
+# Any manifest that contains either CRD name as a standalone token, that is,
+# not adjacent to an alphanumeric character, "_", "." or "-", is rejected
+# wherever the name appears: after "name:" on the same line or on the next
+# line, in a block scalar, in flow-style YAML, in JSON, in a List, or in a
+# comment.  Names obscured by escape sequences or line continuations inside
+# quoted scalars are not detected.  No other manifest in this repository uses
+# these names, so matching on the name alone is safe.
 #
 # Usage: hack/verify-generated-crd.sh [MANIFEST_DIRECTORY]
 
 MANIFESTS_DIR="${1:-manifests}"
 CRD_NAMES='dnses\.operator\.openshift\.io|dnsnameresolvers\.network\.openshift\.io'
-NAME_PATTERN="(^|[[:space:]{,])[\"']?name[\"']?[[:space:]]*:[[:space:]]*[\"']?(${CRD_NAMES})[\"']?([[:space:],}#]|\$)"
+NAME_PATTERN="(^|[^[:alnum:]_.-])(${CRD_NAMES})([^[:alnum:]_.-]|\$)"
 
 if [[ ! -d "$MANIFESTS_DIR" ]]; then
   echo "manifest directory not found: $MANIFESTS_DIR" >&2
