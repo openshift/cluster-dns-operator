@@ -1,21 +1,42 @@
 package verifygeneratedcrd
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
-const script = "../verify-generated-crd.sh"
+const (
+	script = "../verify-generated-crd.sh"
+
+	// guardTimeout bounds each run of the script.  A run normally takes
+	// milliseconds; the generous limit only stops a hung run on a busy CI
+	// node from stalling the test binary.
+	guardTimeout = 2 * time.Minute
+
+	// guardWaitDelay limits how long to wait for the output pipe to close after
+	// the script exits or is killed, in case a child process such as grep keeps
+	// it open.
+	guardWaitDelay = 10 * time.Second
+)
 
 // runGuard runs hack/verify-generated-crd.sh against dir and returns its exit
 // code and combined output.
 func runGuard(t *testing.T, dir string) (int, string) {
 	t.Helper()
-	out, err := exec.Command("bash", script, dir).CombinedOutput()
+	ctx, cancel := context.WithTimeout(t.Context(), guardTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "bash", script, dir)
+	cmd.WaitDelay = guardWaitDelay
+	out, err := cmd.CombinedOutput()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		t.Fatalf("%s did not finish within %s: %v\n%s", script, guardTimeout, ctxErr, out)
+	}
 	if err == nil {
 		return 0, string(out)
 	}
@@ -254,7 +275,11 @@ func TestVerifyGeneratedCRDUnreadableFile(t *testing.T) {
 	if err := os.Chmod(path, 0); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
+	t.Cleanup(func() {
+		if err := os.Chmod(path, 0o644); err != nil {
+			t.Errorf("failed to restore permissions on %s: %v", path, err)
+		}
+	})
 	if got, _ := runGuard(t, dir); got != 2 {
 		t.Errorf("exit code = %d, want 2", got)
 	}
