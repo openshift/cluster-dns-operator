@@ -38,11 +38,7 @@ cluster-build:
 	hack/start-build.sh
 
 .PHONY: generate
-generate: crd update
-
-.PHONY: crd
-crd:
-	hack/update-generated-crd.sh
+generate: update
 
 .PHONY: test
 test:
